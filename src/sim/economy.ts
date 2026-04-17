@@ -1,5 +1,5 @@
 import type { Entity, EntityKind, GameState, Vec2 } from '../types';
-import { GATHER_TICKS, GATHER_AMOUNT, MAP_W, MAP_H, isUnitKind } from '../types';
+import { GATHER_TICKS, GATHER_AMOUNT, MAP_W, MAP_H, isUnitKind, isWorkerKind } from '../types';
 import { STATS, ticksPerStep } from '../data/units';
 import { getEntity, spawnEntity, isTileBlockedByEntity } from './entities';
 import { findPath } from './pathfinding';
@@ -110,8 +110,9 @@ export function processGather(state: GameState, entity: Entity): void {
 export function issueTrainCommand(
   state: GameState,
   building: Entity,
-  unit: 'worker' | 'footman' | 'archer',
+  unit: EntityKind,
 ): boolean {
+  if (!isUnitKind(unit)) return false; // only unit kinds can be trained
   const cost = STATS[unit]?.cost ?? 0;
   if (state.gold[building.owner as 0 | 1] < cost) return false;
   if (state.pop[building.owner as 0 | 1] >= state.popCap[building.owner as 0 | 1]) return false;

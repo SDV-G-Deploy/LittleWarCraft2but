@@ -14,15 +14,23 @@ export interface SpriteCache {
   water:    HTMLCanvasElement[];   // 4 animation frames
   rock:     HTMLCanvasElement;
   goldtile: HTMLCanvasElement;     // tile under the mine
-  // Units  [0]=player(blue) [1]=AI(red)
+  // Human units  [0]=player(blue) [1]=AI(red)
   worker:   [HTMLCanvasElement, HTMLCanvasElement];
   footman:  [HTMLCanvasElement, HTMLCanvasElement];
   archer:   [HTMLCanvasElement, HTMLCanvasElement];
-  // Buildings  [0]=player  [1]=AI
+  // Orc units
+  peon:     [HTMLCanvasElement, HTMLCanvasElement];
+  grunt:    [HTMLCanvasElement, HTMLCanvasElement];
+  troll:    [HTMLCanvasElement, HTMLCanvasElement];
+  // Human buildings  [0]=player  [1]=AI
   townhall: [HTMLCanvasElement, HTMLCanvasElement];
   barracks: [HTMLCanvasElement, HTMLCanvasElement];
   farm:     [HTMLCanvasElement, HTMLCanvasElement];
   wall:     [HTMLCanvasElement, HTMLCanvasElement];
+  // Orc buildings (same slot sizes as human counterparts)
+  greathall: [HTMLCanvasElement, HTMLCanvasElement];
+  warmill:   [HTMLCanvasElement, HTMLCanvasElement];
+  pigsty:    [HTMLCanvasElement, HTMLCanvasElement];
   // Neutral
   goldmine: HTMLCanvasElement;
   // FX
@@ -880,6 +888,551 @@ function makeCorpse(T: number): HTMLCanvasElement {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ORC UNITS  (all 32×32)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Orc skin / earth tones
+const ORC_SKIN_D  = '#3a5c18';
+const ORC_SKIN_M  = '#4e7820';
+const ORC_SKIN_L  = '#64961e';
+const ORC_TUSK    = '#d4c890';
+const ORC_LEATHER = '#5a3010';
+const ORC_LEATHER_L = '#7a4820';
+// Troll skin
+const TRL_SKIN_D = '#3a4870';
+const TRL_SKIN_M = '#4a5c90';
+const TRL_SKIN_L = '#5c70aa';
+
+function makePeon(T: number, owner: 0 | 1): HTMLCanvasElement {
+  const [c, ctx] = oc(T, T);
+  const cx = T / 2;
+
+  unitShadow(ctx, T);
+
+  // ── Legs (bare, orc-green) ──
+  ctx.fillStyle = ORC_SKIN_M;
+  ctx.fillRect(cx - 5, 20, 4, 7);
+  ctx.fillRect(cx + 1, 20, 4, 7);
+  // Crude foot wraps
+  ctx.fillStyle = ORC_LEATHER;
+  ctx.fillRect(cx - 6, 26, 6, 3);
+  ctx.fillRect(cx,     26, 6, 3);
+
+  // ── Ragged tunic ──
+  ctx.fillStyle = ORC_LEATHER;
+  ctx.beginPath();
+  ctx.moveTo(cx - 7, 13);
+  ctx.lineTo(cx + 7, 13);
+  ctx.lineTo(cx + 6, 22);
+  ctx.lineTo(cx - 6, 22);
+  ctx.closePath();
+  ctx.fill();
+  // Team-color crude belt
+  ctx.fillStyle = TC_M[owner];
+  ctx.fillRect(cx - 6, 19, 12, 3);
+
+  // ── Left arm (bare skin) ──
+  ctx.fillStyle = ORC_SKIN_M;
+  ctx.fillRect(cx - 9, 14, 3, 7);
+
+  // ── Crude pick (right side) ──
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(cx + 7, 6, 2, 13);
+  // Bone/stone pick head
+  ctx.fillStyle = '#c0b890';
+  ctx.beginPath();
+  ctx.moveTo(cx + 6, 7);
+  ctx.lineTo(cx + 14, 4);
+  ctx.lineTo(cx + 13, 10);
+  ctx.lineTo(cx + 6,  11);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#e0d8a8';
+  ctx.fillRect(cx + 7, 4, 5, 2);
+
+  // ── Orc head ──
+  ctx.fillStyle = ORC_SKIN_M;
+  ctx.beginPath();
+  ctx.arc(cx, 10, 6, 0, Math.PI * 2);
+  ctx.fill();
+  // Dark hair / mohawk stub
+  ctx.fillStyle = '#1a1008';
+  ctx.beginPath();
+  ctx.arc(cx, 9, 6, Math.PI, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(cx - 2, 4, 4, 5); // mohawk ridge
+  // Tusks
+  ctx.fillStyle = ORC_TUSK;
+  ctx.fillRect(cx - 4, 13, 2, 3);
+  ctx.fillRect(cx + 2, 13, 2, 3);
+  // Eyes (red)
+  ctx.fillStyle = '#cc2020';
+  ctx.fillRect(cx - 3, 10, 2, 1);
+  ctx.fillRect(cx + 1, 10, 2, 1);
+
+  ctx.strokeStyle = '#1a2808';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.arc(cx, 10, 6, 0, Math.PI * 2);
+  ctx.stroke();
+
+  return c;
+}
+
+function makeGrunt(T: number, owner: 0 | 1): HTMLCanvasElement {
+  const [c, ctx] = oc(T, T);
+  const cx = T / 2;
+
+  unitShadow(ctx, T);
+
+  // ── Armored legs ──
+  ctx.fillStyle = ORC_LEATHER;
+  ctx.fillRect(cx - 6, 19, 5, 8);
+  ctx.fillRect(cx + 1, 19, 5, 8);
+  // Studded boots
+  ctx.fillStyle = '#1c0c04';
+  ctx.fillRect(cx - 7, 26, 7, 3);
+  ctx.fillRect(cx,     26, 7, 3);
+  // Boot studs
+  ctx.fillStyle = MT_M;
+  ctx.fillRect(cx - 5, 27, 2, 2);
+  ctx.fillRect(cx + 2, 27, 2, 2);
+
+  // ── Crude shield (left side, bone/metal) ──
+  ctx.fillStyle = '#3c2c10';
+  ctx.fillRect(cx - 13, 12, 7, 12);
+  // Shield face (team color)
+  ctx.fillStyle = TC_D[owner];
+  ctx.fillRect(cx - 12, 13, 5, 10);
+  // Skull emblem on shield
+  ctx.fillStyle = '#d0c880';
+  ctx.beginPath();
+  ctx.arc(cx - 10, 18, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#3c2c10';
+  ctx.fillRect(cx - 11, 19, 2, 2); // jaw
+  ctx.fillRect(cx - 9,  19, 2, 2);
+
+  // ── Heavy armored torso ──
+  ctx.fillStyle = TC_D[owner];
+  ctx.beginPath();
+  ctx.moveTo(cx - 7, 12);
+  ctx.lineTo(cx + 8, 12);
+  ctx.lineTo(cx + 7, 22);
+  ctx.lineTo(cx - 6, 22);
+  ctx.closePath();
+  ctx.fill();
+  // Armor highlight
+  ctx.fillStyle = TC_M[owner];
+  ctx.fillRect(cx - 5, 13, 9, 2);
+  // Rivet details
+  ctx.fillStyle = MT_L;
+  ctx.fillRect(cx - 4, 17, 2, 2);
+  ctx.fillRect(cx + 2, 17, 2, 2);
+
+  // ── Great axe (right side) ──
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(cx + 8, 4, 2, 18);
+  // Axe blade (large, brutal)
+  ctx.fillStyle = MT_M;
+  ctx.beginPath();
+  ctx.moveTo(cx + 8, 5);
+  ctx.lineTo(cx + 17, 1);
+  ctx.lineTo(cx + 18, 13);
+  ctx.lineTo(cx + 8, 14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = MT_HL;
+  ctx.fillRect(cx + 9, 2, 7, 2);
+  // Back spike
+  ctx.fillStyle = MT_L;
+  ctx.beginPath();
+  ctx.moveTo(cx + 8, 7);
+  ctx.lineTo(cx + 4, 4);
+  ctx.lineTo(cx + 8, 10);
+  ctx.fill();
+
+  // ── Orc head (larger, more tusks) ──
+  ctx.fillStyle = ORC_SKIN_D;
+  ctx.beginPath();
+  ctx.arc(cx + 1, 9, 7, 0, Math.PI * 2);
+  ctx.fill();
+  // Battle helmet (open-faced)
+  ctx.fillStyle = MT_D;
+  ctx.beginPath();
+  ctx.arc(cx + 1, 7, 7, Math.PI, 0);
+  ctx.fill();
+  ctx.fillRect(cx - 5, 7, 3, 5);  // left cheek guard
+  ctx.fillRect(cx + 5, 7, 3, 5);  // right cheek guard
+  ctx.fillStyle = MT_M;
+  ctx.fillRect(cx - 4, 7, 2, 4);
+  // Face
+  ctx.fillStyle = ORC_SKIN_M;
+  ctx.beginPath();
+  ctx.arc(cx + 1, 11, 4, 0, Math.PI * 2);
+  ctx.fill();
+  // Large tusks
+  ctx.fillStyle = ORC_TUSK;
+  ctx.fillRect(cx - 3, 13, 3, 5);
+  ctx.fillRect(cx + 2, 13, 3, 5);
+  // Red eyes
+  ctx.fillStyle = '#ff2020';
+  ctx.fillRect(cx - 2, 10, 2, 2);
+  ctx.fillRect(cx + 3, 10, 2, 2);
+
+  return c;
+}
+
+function makeTroll(T: number, owner: 0 | 1): HTMLCanvasElement {
+  const [c, ctx] = oc(T, T);
+  const cx = T / 2;
+
+  unitShadow(ctx, T);
+
+  // ── Long legs (trolls are tall) ──
+  ctx.fillStyle = TRL_SKIN_D;
+  ctx.fillRect(cx - 4, 18, 3, 9);
+  ctx.fillRect(cx + 1, 18, 3, 9);
+  // Large flat feet
+  ctx.fillStyle = TRL_SKIN_M;
+  ctx.fillRect(cx - 5, 26, 5, 3);
+  ctx.fillRect(cx + 1, 26, 5, 3);
+
+  // ── Minimal loincloth ──
+  ctx.fillStyle = ORC_LEATHER;
+  ctx.fillRect(cx - 4, 17, 8, 5);
+  // Team color band
+  ctx.fillStyle = TC_M[owner];
+  ctx.fillRect(cx - 4, 17, 8, 2);
+
+  // ── Throwing arm (right) ──
+  ctx.fillStyle = TRL_SKIN_M;
+  ctx.fillRect(cx + 6, 11, 3, 8);
+  // Axe in hand
+  ctx.fillStyle = WD_M;
+  ctx.fillRect(cx + 9, 7, 2, 10);
+  ctx.fillStyle = MT_L;
+  ctx.beginPath();
+  ctx.moveTo(cx + 9, 8);
+  ctx.lineTo(cx + 15, 6);
+  ctx.lineTo(cx + 15, 13);
+  ctx.lineTo(cx + 9, 14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = MT_HL;
+  ctx.fillRect(cx + 10, 6, 4, 2);
+
+  // ── Quiver of axes (back, right side) ──
+  ctx.fillStyle = ORC_LEATHER_L;
+  ctx.fillRect(cx + 5, 12, 3, 6);
+  ctx.fillStyle = MT_M;
+  ctx.fillRect(cx + 6, 10, 1, 4); // axe handle sticking up
+  ctx.fillRect(cx + 7, 11, 1, 3);
+
+  // ── Left arm ──
+  ctx.fillStyle = TRL_SKIN_M;
+  ctx.fillRect(cx - 8, 11, 3, 7);
+
+  // ── Torso (lanky) ──
+  ctx.fillStyle = TRL_SKIN_D;
+  ctx.beginPath();
+  ctx.moveTo(cx - 5, 11);
+  ctx.lineTo(cx + 6, 11);
+  ctx.lineTo(cx + 5, 19);
+  ctx.lineTo(cx - 4, 19);
+  ctx.closePath();
+  ctx.fill();
+  // Team color warpaint stripe on chest
+  ctx.fillStyle = TC_L[owner];
+  ctx.fillRect(cx - 1, 12, 2, 6);
+
+  // ── Troll head (elongated, tusks pointing up) ──
+  ctx.fillStyle = TRL_SKIN_M;
+  ctx.beginPath();
+  ctx.ellipse(cx, 8, 5, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Mohawk
+  ctx.fillStyle = TC_M[owner];
+  ctx.fillRect(cx - 1, 1, 2, 7);
+  ctx.fillRect(cx - 2, 2, 4, 4);
+  // Tusks pointing upward
+  ctx.fillStyle = ORC_TUSK;
+  ctx.fillRect(cx - 4, 5, 2, 5);
+  ctx.fillRect(cx + 2, 5, 2, 5);
+  // Eyes (yellow/amber)
+  ctx.fillStyle = '#d0a020';
+  ctx.fillRect(cx - 2, 8, 2, 2);
+  ctx.fillRect(cx + 1, 8, 2, 2);
+  ctx.fillStyle = '#1a1008';
+  ctx.fillRect(cx - 2, 8, 1, 1);
+  ctx.fillRect(cx + 2, 8, 1, 1);
+
+  return c;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ORC BUILDINGS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function makeGreatHall(T: number, owner: 0 | 1): HTMLCanvasElement {
+  const W = T * 3; const H = T * 3;
+  const [c, ctx] = oc(W, H);
+
+  // ── Darker, rougher stone base ──
+  stoneTexture(ctx, 0, 0, W, H, '#1c1810', '#302818', '#484030', 9, 15);
+
+  // ── Bone/spike decorations on corners ──
+  const spike = (sx: number, sy: number) => {
+    ctx.fillStyle = '#c0b080';
+    ctx.beginPath();
+    ctx.moveTo(sx, sy + 8);
+    ctx.lineTo(sx + 3, sy);
+    ctx.lineTo(sx + 6, sy + 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#e0d0a0';
+    ctx.fillRect(sx + 2, sy, 2, 5);
+  };
+  for (const [sx, sy] of [[4,2],[12,0],[20,2],[W-26,2],[W-18,0],[W-10,2]]) spike(sx, sy);
+
+  // ── Corner towers (rougher than human) ──
+  const orcTower = (tx: number, ty: number, tr: number) => {
+    ctx.fillStyle = '#2a2018';
+    ctx.beginPath();
+    ctx.arc(tx, ty, tr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#3c3020';
+    ctx.beginPath();
+    ctx.arc(tx - 2, ty - 2, tr - 3, 0, Math.PI * 2);
+    ctx.fill();
+    // Spikes around top
+    for (let a = 0; a < 6; a++) {
+      const ang = (a / 6) * Math.PI * 2;
+      ctx.fillStyle = ORC_TUSK;
+      ctx.beginPath();
+      ctx.moveTo(tx + Math.cos(ang) * (tr - 1), ty + Math.sin(ang) * (tr - 1));
+      ctx.lineTo(tx + Math.cos(ang) * (tr + 4), ty + Math.sin(ang) * (tr + 4));
+      ctx.lineTo(tx + Math.cos(ang + 0.3) * (tr - 1), ty + Math.sin(ang + 0.3) * (tr - 1));
+      ctx.fill();
+    }
+    // Team color banner
+    ctx.fillStyle = TC_D[owner];
+    ctx.fillRect(tx - 1, ty - tr - 8, 2, 8);
+    ctx.fillStyle = TC_M[owner];
+    ctx.beginPath();
+    ctx.moveTo(tx + 1, ty - tr - 8);
+    ctx.lineTo(tx + 7, ty - tr - 5);
+    ctx.lineTo(tx + 1, ty - tr - 2);
+    ctx.fill();
+  };
+  orcTower(14, 14, 12);
+  orcTower(W - 14, 14, 12);
+  orcTower(14, H - 14, 11);
+  orcTower(W - 14, H - 14, 11);
+
+  // ── Central hall ──
+  ctx.fillStyle = '#302010';
+  ctx.fillRect(22, 22, W - 44, H - 44);
+  ctx.fillStyle = '#281808';
+  ctx.fillRect(W / 2 - 3, 22, 6, H - 44);
+
+  // ── Skull gate at bottom ──
+  ctx.fillStyle = '#100c08';
+  ctx.beginPath();
+  ctx.rect(W / 2 - 10, H - 22, 20, 22);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(W / 2, H - 22, 10, Math.PI, 0, false);
+  ctx.fill();
+  // Gate frame (bone colored)
+  ctx.strokeStyle = '#c0a868'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(W / 2, H - 22, 10, Math.PI, 0, false);
+  ctx.stroke();
+  ctx.strokeRect(W / 2 - 10, H - 22, 20, 22);
+
+  // ── Team color orc banner above gate ──
+  ctx.fillStyle = TC_D[owner];
+  ctx.fillRect(W / 2 - 12, H - 36, 24, 10);
+  ctx.fillStyle = TC_M[owner];
+  ctx.fillRect(W / 2 - 10, H - 35, 20, 8);
+  // Skull emblem on banner
+  ctx.fillStyle = ORC_TUSK;
+  ctx.beginPath();
+  ctx.arc(W / 2, H - 31, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = TC_D[owner];
+  ctx.fillRect(W / 2 - 2, H - 29, 2, 2);
+  ctx.fillRect(W / 2 + 1, H - 29, 2, 2);
+
+  // ── Window slits ──
+  ctx.fillStyle = '#040404';
+  for (const [wx, wy] of [[24, 30], [W-28, 30], [24, H-36], [W-28, H-36]]) {
+    ctx.fillRect(wx, wy, 4, 8);
+    ctx.fillRect(wx + 1, wy - 1, 2, 1);
+  }
+
+  // Bottom shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(0, H - 3, W, 3);
+  ctx.fillRect(W - 3, 0, 3, H);
+
+  return c;
+}
+
+function makeWarMill(T: number, owner: 0 | 1): HTMLCanvasElement {
+  const W = T * 3; const H = T * 2;
+  const [c, ctx] = oc(W, H);
+
+  // ── Rough stone and wood construction ──
+  stoneTexture(ctx, 0, 0, W, H, '#201808', '#342810', '#4a3818', 10, 16);
+
+  // ── Heavy wooden beams exposed on facade ──
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(0, 0, W, 12);       // top beam
+  ctx.fillRect(0, H / 2 - 2, W, 4); // mid beam
+  ctx.fillStyle = WD_M;
+  ctx.fillRect(0, 0, W, 4);        // top beam highlight
+
+  // ── Battlements with spikes ──
+  ctx.fillStyle = '#302010';
+  for (let x = 4; x < W - 4; x += 10) {
+    ctx.fillRect(x, 0, 7, 12);
+    // Spike on each merlon
+    ctx.fillStyle = ORC_TUSK;
+    ctx.beginPath();
+    ctx.moveTo(x + 2, 0);
+    ctx.lineTo(x + 3, -5);
+    ctx.lineTo(x + 5, 0);
+    ctx.fill();
+    ctx.fillStyle = '#302010';
+  }
+
+  // ── Wide reinforced gate ──
+  const gx = W / 2 - 14;
+  ctx.fillStyle = '#1c1208';
+  ctx.fillRect(gx, H - 28, 28, 28);
+  // Iron-banded door planks
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(gx + 2, H - 26, 11, 26);
+  ctx.fillRect(gx + 15, H - 26, 11, 26);
+  // Metal bands
+  ctx.fillStyle = MT_D;
+  for (const dy of [6, 14, 20]) {
+    ctx.fillRect(gx + 2, H - 26 + dy, 11, 3);
+    ctx.fillRect(gx + 15, H - 26 + dy, 11, 3);
+  }
+  // Iron bolts
+  ctx.fillStyle = MT_M;
+  for (const [dx, dy] of [[5, 4], [8, 12], [5, 18]]) {
+    ctx.beginPath(); ctx.arc(gx + dx + 2, H - 26 + dy, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(gx + 15 + dx + 2, H - 26 + dy, 2, 0, Math.PI * 2); ctx.fill();
+  }
+  // Gate frame
+  ctx.strokeStyle = MT_D; ctx.lineWidth = 2;
+  ctx.strokeRect(gx, H - 28, 28, 28);
+
+  // ── Arrow slits ──
+  ctx.fillStyle = '#040404';
+  for (const wx of [12, W - 16]) {
+    ctx.fillRect(wx, H - 38, 4, 12);
+    ctx.fillRect(wx - 2, H - 33, 8, 4);
+  }
+
+  // ── Flagpole with team color ──
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(W - 14, 0, 2, 20);
+  ctx.fillStyle = TC_M[owner];
+  ctx.beginPath();
+  ctx.moveTo(W - 12, 2);
+  ctx.lineTo(W - 2, 7);
+  ctx.lineTo(W - 12, 13);
+  ctx.fill();
+
+  // Bottom shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(0, H - 2, W, 2);
+
+  return c;
+}
+
+function makePigsty(T: number, owner: 0 | 1): HTMLCanvasElement {
+  const W = T * 2; const H = T * 2;
+  const [c, ctx] = oc(W, H);
+
+  // ── Muddy ground ──
+  ctx.fillStyle = '#3a2808';
+  ctx.fillRect(0, 0, W, H);
+  // Mud patches
+  const r = rng(9999);
+  for (let i = 0; i < 20; i++) {
+    ctx.fillStyle = r() > 0.5 ? '#4a3410' : '#2a1c04';
+    ctx.fillRect(
+      Math.floor(r() * (W - 4)),
+      Math.floor(r() * (H - 4)), 4, 3,
+    );
+  }
+
+  // ── Crude plank fence ──
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(0, 0, W, 3);
+  ctx.fillRect(0, H - 3, W, 3);
+  ctx.fillRect(0, 0, 3, H);
+  ctx.fillRect(W - 3, 0, 3, H);
+  // Fence posts (rough, uneven)
+  ctx.fillStyle = WD_M;
+  for (let x = 0; x < W; x += 9) ctx.fillRect(x, 0, 3, H);
+  ctx.fillStyle = WD_D;
+  for (let y = 9; y < H - 9; y += 9) ctx.fillRect(0, y, W, 2);
+
+  // ── Ramshackle sty building (upper right) ──
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(W / 2, 0, W / 2 - 1, H / 2 + 4);
+  stoneTexture(ctx, W / 2 + 1, 1, W / 2 - 3, H / 2 + 2, '#2a1808', WD_D, WD_M, 6, 7);
+  // Crude thatched roof
+  ctx.fillStyle = '#6a5020';
+  ctx.beginPath();
+  ctx.moveTo(W / 2, H / 2 - 4);
+  ctx.lineTo(W - 2, H / 2 - 4);
+  ctx.lineTo(W - 2, 0);
+  ctx.lineTo(W / 2, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#8a6828';
+  ctx.fillRect(W / 2, 0, W / 2 - 2, 4);
+  // Team color rag on post
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(W - 6, 0, 2, 14);
+  ctx.fillStyle = TC_M[owner];
+  ctx.beginPath();
+  ctx.moveTo(W - 4, 2); ctx.lineTo(W - 4, 10); ctx.lineTo(W + 2, 6); ctx.closePath();
+  ctx.fill();
+
+  // ── Two pig shapes ──
+  const pig = (px: number, py: number) => {
+    ctx.fillStyle = '#e0a0a0';
+    ctx.beginPath();
+    ctx.ellipse(px, py, 6, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(px - 5, py - 1, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#c08080';
+    ctx.beginPath();
+    ctx.arc(px - 6, py - 1, 2, 0, Math.PI * 2);
+    ctx.fill();
+    // Legs
+    ctx.fillStyle = '#c08080';
+    ctx.fillRect(px - 4, py + 3, 2, 3);
+    ctx.fillRect(px + 1, py + 3, 2, 3);
+  };
+  pig(10, 42);
+  pig(24, 52);
+
+  return c;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ENTRY POINT
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -891,15 +1444,23 @@ export function buildSpriteCache(T: number): SpriteCache {
     water:    [0, 1, 2, 3].map(f => makeWater(T, f)),
     rock:     makeRock(T),
     goldtile: makeGoldTile(T),
-    // Units
+    // Human units
     worker:   [makeWorker(T, 0), makeWorker(T, 1)],
     footman:  [makeFootman(T, 0), makeFootman(T, 1)],
     archer:   [makeArcher(T, 0), makeArcher(T, 1)],
-    // Buildings
+    // Orc units
+    peon:     [makePeon(T, 0),  makePeon(T, 1)],
+    grunt:    [makeGrunt(T, 0), makeGrunt(T, 1)],
+    troll:    [makeTroll(T, 0), makeTroll(T, 1)],
+    // Human buildings
     townhall: [makeTownhall(T, 0), makeTownhall(T, 1)],
     barracks: [makeBarracks(T, 0), makeBarracks(T, 1)],
     farm:     [makeFarm(T, 0), makeFarm(T, 1)],
     wall:     [makeWall(T, 0), makeWall(T, 1)],
+    // Orc buildings
+    greathall: [makeGreatHall(T, 0), makeGreatHall(T, 1)],
+    warmill:   [makeWarMill(T, 0),   makeWarMill(T, 1)],
+    pigsty:    [makePigsty(T, 0),    makePigsty(T, 1)],
     // Neutral
     goldmine: makeGoldmine(T),
     // FX

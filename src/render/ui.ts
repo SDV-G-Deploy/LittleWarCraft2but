@@ -1,6 +1,7 @@
 import type { Entity, EntityKind, GameState } from '../types';
-import { TILE_SIZE } from '../types';
+import { TILE_SIZE, isWorkerKind } from '../types';
 import { STATS } from '../data/units';
+import { RACES, ownerRace } from '../data/races';
 import type { Camera } from './camera';
 import { isValidPlacement } from '../sim/economy';
 
@@ -120,11 +121,22 @@ function drawEntityInfo(
   x: number,
 ): void {
   const stats = STATS[e.kind];
+  const rc    = ownerRace(state.races, e.owner);
+
+  // ── Race-aware display name ─────────────────────────────────────────────────
+  const displayName =
+    e.kind === rc.worker  ? rc.workerLabel  :
+    e.kind === rc.soldier ? rc.soldierLabel :
+    e.kind === rc.ranged  ? rc.rangedLabel  :
+    e.kind === 'townhall' ? rc.hallLabel    :
+    e.kind === 'barracks' ? rc.barrLabel    :
+    e.kind === 'farm'     ? rc.farmLabel    :
+    e.kind.toUpperCase();
 
   // ── Name + HP ───────────────────────────────────────────────────────────────
   ctx.fillStyle = '#eee';
   ctx.font = 'bold 13px monospace';
-  ctx.fillText(e.kind.toUpperCase(), x, panelY + 20);
+  ctx.fillText(displayName.toUpperCase(), x, panelY + 20);
 
   ctx.fillStyle = '#aaa';
   ctx.font = '11px monospace';
@@ -253,6 +265,7 @@ function collectButtons(
 ): void {
   if (e.owner !== 0) return; // no buttons for enemy entities
 
+  const rc        = RACES[state.races[0]]; // player race config
   const btnStartX = viewW - (BTN_W + BTN_PAD) * MAX_BTN_COLS;
   let col = 0;
 
@@ -266,24 +279,29 @@ function collectButtons(
 
   // ── Production buildings ────────────────────────────────────────────────────
   if (e.kind === 'townhall') {
-    const workerCost = STATS['worker']?.cost ?? 50;
-    addButton(`Worker [V]\n[${workerCost}g]`, 'train:worker', state.gold[0] < workerCost);
+    const workerCost = STATS[rc.worker]?.cost ?? 50;
+    addButton(`${rc.workerLabel} [V]\n[${workerCost}g]`, `train:${rc.worker}`,
+      state.gold[0] < workerCost);
   }
   if (e.kind === 'barracks') {
-    const footCost   = STATS['footman']?.cost ?? 80;
-    const archerCost = STATS['archer']?.cost  ?? 100;
-    addButton(`Footman [T]\n[${footCost}g]`,  'train:footman',  state.gold[0] < footCost);
-    addButton(`Archer [A]\n[${archerCost}g]`, 'train:archer',   state.gold[0] < archerCost);
+    const soldierCost = STATS[rc.soldier]?.cost ?? 80;
+    const rangedCost  = STATS[rc.ranged]?.cost  ?? 100;
+    addButton(`${rc.soldierLabel} [T]\n[${soldierCost}g]`, `train:${rc.soldier}`,
+      state.gold[0] < soldierCost);
+    addButton(`${rc.rangedLabel} [A]\n[${rangedCost}g]`, `train:${rc.ranged}`,
+      state.gold[0] < rangedCost);
   }
 
-  // ── Worker build menu ───────────────────────────────────────────────────────
-  if (e.kind === 'worker') {
+  // ── Worker build menu (workers + peons both show build buttons) ─────────────
+  if (isWorkerKind(e.kind)) {
     const barrCost = STATS['barracks']?.cost ?? 400;
     const farmCost = STATS['farm']?.cost     ?? 250;
     const wallCost = STATS['wall']?.cost     ?? 50;
-    addButton(`Barracks [B]\n[${barrCost}g]`, 'build:barracks', state.gold[0] < barrCost);
-    addButton(`Farm [F]\n[${farmCost}g]`,     'build:farm',     state.gold[0] < farmCost);
-    addButton(`Wall [W]\n[${wallCost}g]`,     'build:wall',     state.gold[0] < wallCost);
+    const barrLabel = rc.barrLabel;
+    const farmLabel = rc.farmLabel;
+    addButton(`${barrLabel} [B]\n[${barrCost}g]`, 'build:barracks', state.gold[0] < barrCost);
+    addButton(`${farmLabel} [F]\n[${farmCost}g]`, 'build:farm',     state.gold[0] < farmCost);
+    addButton(`Wall [W]\n[${wallCost}g]`,          'build:wall',     state.gold[0] < wallCost);
   }
 
   // ── Stop (any player unit/building with an active command) ──────────────────

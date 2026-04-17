@@ -16,7 +16,7 @@ export interface UnitStats {
 }
 
 export const STATS: Partial<Record<EntityKind, UnitStats>> = {
-  // ── Units ────────────────────────────────────────────────────────────────
+  // ── Human units ──────────────────────────────────────────────────────────────
   worker: {
     hp: 30,  damage: 3, armor: 0, range: 1,
     speed: 4, sight: 4, cost: 50,  buildTicks: SIM_HZ * 10,
@@ -35,7 +35,29 @@ export const STATS: Partial<Record<EntityKind, UnitStats>> = {
     attackTicks: Math.round(SIM_HZ * 1.5),
     tileW: 1, tileH: 1,
   },
-  // ── Buildings ────────────────────────────────────────────────────────────────
+  // ── Orc units ────────────────────────────────────────────────────────────────
+  peon: {
+    // Same utility as worker, different visual — same cost/stats for balance
+    hp: 30,  damage: 3, armor: 0, range: 1,
+    speed: 4, sight: 4, cost: 50,  buildTicks: SIM_HZ * 10,
+    attackTicks: SIM_HZ,
+    tileW: 1, tileH: 1,
+  },
+  grunt: {
+    // Beefier than footman: more HP, more damage, slower attack, costs more
+    hp: 80,  damage: 10, armor: 3, range: 1,
+    speed: 3, sight: 5, cost: 100, buildTicks: SIM_HZ * 18,
+    attackTicks: Math.round(SIM_HZ * 1.2),
+    tileW: 1, tileH: 1,
+  },
+  troll: {
+    // Shorter range than archer, higher damage per hit, same cost
+    hp: 40,  damage: 8, armor: 0, range: 4,
+    speed: 4, sight: 6, cost: 100, buildTicks: SIM_HZ * 18,
+    attackTicks: Math.round(SIM_HZ * 1.5),
+    tileW: 1, tileH: 1,
+  },
+  // ── Buildings (shared by both races, sprite varies by owner's race) ──────────
   townhall: {
     hp: 1200, damage: 0, armor: 5, range: 0,
     speed: 0, sight: 6, cost: 0,   buildTicks: 0,

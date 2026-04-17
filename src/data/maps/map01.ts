@@ -1,4 +1,4 @@
-import type { Tile, Vec2 } from '../../types';
+import type { Tile, MapData } from '../../types';
 
 // ─── Tile factories ───────────────────────────────────────────────────────────
 
@@ -20,7 +20,7 @@ function fill(
         map[y + dy][x + dx] = fn();
 }
 
-export function buildMap01(): Tile[][] {
+export function buildMap01(): MapData {
   // Start all grass
   const map: Tile[][] = Array.from({ length: 64 }, () =>
     Array.from({ length: 64 }, G),
@@ -33,51 +33,42 @@ export function buildMap01(): Tile[][] {
   }
 
   // ── Tree clusters ─────────────────────────────────────────────────────────
-  // Top-left quadrant
   fill(map,  5, 5,  5, 4, T);
   fill(map, 14, 8,  4, 6, T);
   fill(map,  8, 20, 3, 7, T);
   fill(map, 20, 3,  6, 3, T);
-
-  // Top-right quadrant
   fill(map, 38,  5, 5, 3, T);
   fill(map, 50, 12, 4, 5, T);
   fill(map, 44,  2, 3, 4, T);
-
-  // Center — dividing forest (creates natural chokepoint)
   fill(map, 26, 22, 3, 20, T);
   fill(map, 29, 26, 5,  3, T);
   fill(map, 34, 30, 3,  8, T);
-
-  // Bottom-left quadrant
   fill(map,  5, 38, 4, 5, T);
   fill(map, 15, 44, 5, 4, T);
   fill(map,  9, 52, 3, 5, T);
-
-  // Bottom-right quadrant
   fill(map, 42, 48, 5, 5, T);
   fill(map, 54, 40, 4, 6, T);
   fill(map, 36, 55, 6, 3, T);
 
   // ── Gold mines (2×2 each) ─────────────────────────────────────────────────
-  // Near player start (bottom-left)
-  fill(map,  8, 52, 2, 2, M);   // primary
-  fill(map, 13, 55, 2, 2, M);   // secondary
-
-  // Center map
+  fill(map,  8, 52, 2, 2, M);
+  fill(map, 13, 55, 2, 2, M);
   fill(map, 31, 32, 2, 2, M);
+  fill(map, 52,  6, 2, 2, M);
+  fill(map, 48, 10, 2, 2, M);
 
-  // Near AI start (top-right)
-  fill(map, 52,  6, 2, 2, M);   // primary
-  fill(map, 48, 10, 2, 2, M);   // secondary
-
-  return map;
+  return {
+    tiles:       map,
+    playerStart: { x: 3,  y: 50 },
+    aiStart:     { x: 55, y: 5  },
+    goldMines: [
+      { x: 8,  y: 52 },
+      { x: 13, y: 55 },
+      { x: 31, y: 32 },
+      { x: 52, y: 6  },
+      { x: 48, y: 10 },
+    ],
+    name:        'Verdant Hills',
+    description: 'Dense forests create a natural\nchokepoint in the center.',
+  };
 }
-
-// ─── Starting positions ───────────────────────────────────────────────────────
-
-/** Player (owner 0) Town Hall top-left tile */
-export const PLAYER_START: Vec2 = { x: 3, y: 50 };
-
-/** AI (owner 1) Town Hall top-left tile */
-export const AI_START: Vec2 = { x: 55, y: 5 };

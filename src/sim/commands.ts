@@ -1,5 +1,5 @@
 import type { GameState, Entity } from '../types';
-import { MAP_W, MAP_H, isUnitKind } from '../types';
+import { MAP_W, MAP_H, isUnitKind, isRangedUnit } from '../types';
 import { findPath } from './pathfinding';
 import { ticksPerStep } from '../data/units';
 import { processAttack, issueAttackCommand } from './combat';
@@ -86,7 +86,7 @@ export function autoAttackPass(state: GameState): void {
     for (const t of state.entities) {
       if (t.owner === unit.owner) continue;
       if (t.kind === 'goldmine') continue;
-      if (unit.kind === 'archer' && !isUnitKind(t.kind)) continue; // archers skip buildings
+      if (isRangedUnit(unit.kind) && !isUnitKind(t.kind)) continue; // archers skip buildings
       const d = Math.hypot(t.pos.x - unit.pos.x, t.pos.y - unit.pos.y);
       if (d <= unit.sightRadius && d < bestD) { bestD = d; best = t; }
     }
@@ -108,7 +108,7 @@ export function processCommand(state: GameState, entity: Entity): void {
         let bestD = Infinity;
         for (const t of state.entities) {
           if (t.owner === entity.owner || t.kind === 'goldmine') continue;
-          if (entity.kind === 'archer' && !isUnitKind(t.kind)) continue;
+          if (isRangedUnit(entity.kind) && !isUnitKind(t.kind)) continue;
           const d = Math.hypot(t.pos.x - entity.pos.x, t.pos.y - entity.pos.y);
           if (d <= entity.sightRadius && d < bestD) { bestD = d; best = t; }
         }

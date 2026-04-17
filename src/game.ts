@@ -1,5 +1,5 @@
-import { SIM_TICK_MS, TILE_SIZE, CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL, isUnitKind } from './types';
-import type { EntityKind } from './types';
+import { SIM_TICK_MS, TILE_SIZE, CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL,
+         isUnitKind, isWorkerKind, type EntityKind, type Race, type MapId } from './types';
 import { createWorld } from './sim/world';
 import { spawnEntity, entitiesAt, killEntity } from './sim/entities';
 import { processCommand, issueMoveCommand, separateUnits, autoAttackPass } from './sim/commands';
@@ -7,71 +7,92 @@ import { issueAttackCommand } from './sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, computePopCaps } from './sim/economy';
 import { updateFog } from './sim/fogofwar';
 import { createAI, tickAI, AIController } from './sim/ai';
-import { render, drawMinimap, MINI_SCALE, MINI_W, MINI_H, MINI_PAD } from './render/renderer';
+import { render, drawMinimap, resetRenderCache, MINI_SCALE, MINI_W, MINI_H, MINI_PAD } from './render/renderer';
 import { drawUi, drawGhostBuilding, UiButton } from './render/ui';
 import { createCamera, clampCamera, screenToTile, screenToWorld } from './render/camera';
 import { createKeyState } from './input/keyboard';
 import { createMouseState } from './input/mouse';
 import { STATS } from './data/units';
-import { PLAYER_START, AI_START } from './data/maps/map01';
+import { RACES } from './data/races';
+import { buildMap01 } from './data/maps/map01';
+import { buildMap02 } from './data/maps/map02';
 
 const CAM_SPEED   = 400;
 const EDGE_ZONE   = 20;
 const SELECT_DIST = TILE_SIZE * 0.6;
 const UI_HEIGHT   = 96; // must match render/ui.ts PANEL_H
 
-export function startGame(canvas: HTMLCanvasElement): void {
+// ─── Options ──────────────────────────────────────────────────────────────────
+
+export interface GameOptions {
+  playerRace: Race;
+  mapId:      MapId;
+}
+
+// ─── Entry point ──────────────────────────────────────────────────────────────
+
+export function startGame(
+  canvas: HTMLCanvasElement,
+  options: GameOptions,
+  onBackToMenu: () => void,
+): void {
   const ctx = canvas.getContext('2d')!;
 
-  const state = createWorld();
-  const cam   = createCamera(
-    Math.max(0, PLAYER_START.x - 8),
-    Math.max(0, PLAYER_START.y - 6),
+  // Reset cached render data from any prior game
+  resetRenderCache();
+
+  const aiRace = options.playerRace === 'human' ? 'orc' : 'human';
+  const mapData = options.mapId === 2 ? buildMap02() : buildMap01();
+  const state   = createWorld(mapData, [options.playerRace, aiRace]);
+  const cam     = createCamera(
+    Math.max(0, mapData.playerStart.x - 8),
+    Math.max(0, mapData.playerStart.y - 6),
   );
   const keys  = createKeyState();
   const mouse = createMouseState(canvas);
 
-  // ── Spawn player base ────────────────────────────────────────────────────────
-  spawnEntity(state, 'townhall', 0, PLAYER_START);
-  spawnEntity(state, 'worker',   0, { x: PLAYER_START.x + 4, y: PLAYER_START.y + 1 });
+  const playerRC = RACES[options.playerRace];
+  const aiRC     = RACES[aiRace];
 
-  // ── Spawn gold mines ──────────────────────────────────────────────────────────
-  for (const pos of [
-    { x: 8,  y: 52 },  // near player (primary)
-    { x: 13, y: 55 },  // near player (secondary)
-    { x: 31, y: 32 },  // centre
-    { x: 52, y: 6  },  // near AI (primary)
-    { x: 48, y: 10 },  // near AI (secondary)
-  ]) {
+  // Mutable reference so onKeyDown always calls the cleanup-wrapped version
+  let backToMenu = onBackToMenu;
+
+  // ── Spawn player base ──────────────────────────────────────────────────────
+  const ps = mapData.playerStart;
+  spawnEntity(state, 'townhall',     0, ps);
+  spawnEntity(state, playerRC.worker, 0, { x: ps.x + 4, y: ps.y + 1 });
+
+  // ── Spawn gold mines ───────────────────────────────────────────────────────
+  for (const pos of mapData.goldMines) {
     const mine = spawnEntity(state, 'goldmine', 0, pos);
     mine.goldReserve = MINE_GOLD_INITIAL;
   }
 
-  // ── AI base ───────────────────────────────────────────────────────────────────
-  spawnEntity(state, 'townhall', 1, AI_START);
-  spawnEntity(state, 'worker',   1, { x: AI_START.x + 1, y: AI_START.y + 3 });
-  spawnEntity(state, 'worker',   1, { x: AI_START.x + 2, y: AI_START.y + 3 });
+  // ── Spawn AI base ──────────────────────────────────────────────────────────
+  const as_ = mapData.aiStart;
+  spawnEntity(state, 'townhall',    1, as_);
+  spawnEntity(state, aiRC.worker,   1, { x: as_.x + 1, y: as_.y + 3 });
+  spawnEntity(state, aiRC.worker,   1, { x: as_.x + 2, y: as_.y + 3 });
 
-  // ── AI controller ──────────────────────────────────────────────────────────────
+  // ── AI controller ──────────────────────────────────────────────────────────
   const ai: AIController = createAI();
 
-  // ── Initial fog reveal (so player base is visible on frame 1) ─────────────────
+  // ── Initial fog reveal ─────────────────────────────────────────────────────
   updateFog(state);
 
-  // ── Selection & UI state ──────────────────────────────────────────────────────
+  // ── Selection & UI state ───────────────────────────────────────────────────
   const selectedIds = new Set<number>();
   let uiButtons: UiButton[] = [];
   let placementMode: { building: EntityKind } | null = null;
   let gameResult: 'playing' | 'win' | 'lose' = 'playing';
   let attackMoveHeld = false;
 
-  // ── Control groups (Ctrl+1-9 bind, 1-9 recall) ────────────────────────────────
-  // Stores entity-id arrays; double-tap tracks last press time per slot
-  const controlGroups   = new Map<number, number[]>();
-  const lastGroupTap    = new Map<number, number>(); // slot → timestamp ms
-  const DOUBLE_TAP_MS   = 300;
+  // ── Control groups ─────────────────────────────────────────────────────────
+  const controlGroups = new Map<number, number[]>();
+  const lastGroupTap  = new Map<number, number>();
+  const DOUBLE_TAP_MS = 300;
 
-  // ── Resize ────────────────────────────────────────────────────────────────────
+  // ── Resize ─────────────────────────────────────────────────────────────────
   function resize(): void {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -79,9 +100,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
   resize();
   window.addEventListener('resize', resize);
 
-  // ── Keyboard ──────────────────────────────────────────────────────────────────
-  window.addEventListener('keydown', (e) => {
-    // ── Control-group bind (Ctrl/Meta + 1-9) ─────────────────────────────────
+  // ── Keyboard ───────────────────────────────────────────────────────────────
+  function onKeyDown(e: KeyboardEvent): void {
+    // Control-group bind (Ctrl/Meta + 1-9)
     if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9') {
       e.preventDefault();
       const slot = parseInt(e.key);
@@ -92,19 +113,15 @@ export function startGame(canvas: HTMLCanvasElement): void {
       return;
     }
 
-    // ── Control-group recall (1-9 alone) ────────────────────────────────────
+    // Control-group recall (1-9 alone)
     if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key >= '1' && e.key <= '9') {
       const slot  = parseInt(e.key);
       const group = controlGroups.get(slot);
       if (group) {
-        // Filter out dead entities
         const alive = group.filter(id => state.entities.some(en => en.id === id));
         controlGroups.set(slot, alive);
-
         selectedIds.clear();
         alive.forEach(id => selectedIds.add(id));
-
-        // Double-tap → center camera on group
         const now = performance.now();
         if (now - (lastGroupTap.get(slot) ?? 0) < DOUBLE_TAP_MS && alive.length > 0) {
           let ax = 0; let ay = 0;
@@ -120,13 +137,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
       return;
     }
 
-    // ── Global keys ──────────────────────────────────────────────────────────
+    // Global keys
     if (e.key === 'Escape') { placementMode = null; return; }
     if ((e.key === 'r' || e.key === 'R') && gameResult !== 'playing') {
-      window.location.reload(); return;
+      backToMenu(); return;
     }
 
-    // ── S = Stop all selected player entities ────────────────────────────────
+    // S = Stop all selected player entities
     if (e.key === 's' || e.key === 'S') {
       for (const id of selectedIds) {
         const en = state.entities.find(x => x.id === id && x.owner === 0);
@@ -135,43 +152,44 @@ export function startGame(canvas: HTMLCanvasElement): void {
       return;
     }
 
-    // ── Context-sensitive hotkeys based on first selected player entity ───────
+    // Context-sensitive hotkeys — use player's race config
     const firstSel = [...selectedIds]
       .map(id => state.entities.find(en => en.id === id && en.owner === 0))
       .find(Boolean);
 
     if (firstSel) {
-      // Worker build hotkeys
-      if (firstSel.kind === 'worker') {
+      // Worker build hotkeys (covers worker + peon)
+      if (isWorkerKind(firstSel.kind)) {
         if (e.key === 'b' || e.key === 'B') { placementMode = { building: 'barracks' }; return; }
         if (e.key === 'f' || e.key === 'F') { placementMode = { building: 'farm' };     return; }
         if (e.key === 'w' || e.key === 'W') { placementMode = { building: 'wall' };     return; }
       }
-      // Townhall training hotkey
+      // Townhall training — race-appropriate worker
       if (firstSel.kind === 'townhall') {
-        if (e.key === 'v' || e.key === 'V') { issueTrainCommand(state, firstSel, 'worker');  return; }
+        if (e.key === 'v' || e.key === 'V') { issueTrainCommand(state, firstSel, playerRC.worker); return; }
       }
-      // Barracks training hotkeys — handle A here so it doesn't bleed into attack-move
+      // Barracks training — handle A here to prevent attack-move bleed
       if (firstSel.kind === 'barracks') {
-        if (e.key === 't' || e.key === 'T') { issueTrainCommand(state, firstSel, 'footman'); return; }
-        if (e.key === 'a' || e.key === 'A') { issueTrainCommand(state, firstSel, 'archer');  return; }
+        if (e.key === 't' || e.key === 'T') { issueTrainCommand(state, firstSel, playerRC.soldier); return; }
+        if (e.key === 'a' || e.key === 'A') { issueTrainCommand(state, firstSel, playerRC.ranged);  return; }
       }
     }
 
-    // ── A held = attack-move modifier (units only, not caught above) ─────────
+    // A held = attack-move modifier (only if not caught above)
     if (e.key === 'a' || e.key === 'A') attackMoveHeld = true;
-  });
+  }
 
-  window.addEventListener('keyup', (e) => {
+  function onKeyUp(e: KeyboardEvent): void {
     if (e.key === 'a' || e.key === 'A') attackMoveHeld = false;
-  });
+  }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────────
-  function isUnit(e: { kind: EntityKind }): boolean { return isUnitKind(e.kind); }
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup',   onKeyUp);
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
   function unitAtWorld(wx: number, wy: number) {
     return state.entities.find(e => {
-      if (!isUnit(e)) return false;
+      if (!isUnitKind(e.kind)) return false;
       const ex = (e.pos.x + 0.5) * TILE_SIZE;
       const ey = (e.pos.y + 0.5) * TILE_SIZE;
       return Math.hypot(wx - ex, wy - ey) <= SELECT_DIST;
@@ -180,19 +198,19 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   function buildingAtTile(tx: number, ty: number) {
     return state.entities.find(e =>
-      !isUnit(e) &&
+      !isUnitKind(e.kind) &&
       tx >= e.pos.x && tx < e.pos.x + e.tileW &&
       ty >= e.pos.y && ty < e.pos.y + e.tileH,
     );
   }
 
-  // ── Input ──────────────────────────────────────────────────────────────────────
+  // ── Input ──────────────────────────────────────────────────────────────────
   function handleInput(): void {
-    // Drag-box select (player units only — to avoid accidental mass-enemy-select)
+    // Drag-box select (player units only)
     for (const drag of mouse.dragSelects) {
       if (!mouse.shiftHeld) selectedIds.clear();
       for (const e of state.entities) {
-        if (e.owner !== 0 || !isUnit(e)) continue;
+        if (e.owner !== 0 || !isUnitKind(e.kind)) continue;
         const sx = (e.pos.x + 0.5) * TILE_SIZE - cam.x;
         const sy = (e.pos.y + 0.5) * TILE_SIZE - cam.y;
         if (sx >= drag.x1 && sx <= drag.x2 && sy >= drag.y1 && sy <= drag.y2) {
@@ -202,14 +220,14 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     mouse.dragSelects.length = 0;
 
-    // Minimap position (must match drawMinimap formula in renderer.ts)
+    // Minimap position
     const viewH_game = canvas.height - UI_HEIGHT;
     const miniX = canvas.width - MINI_W - MINI_PAD;
     const miniY = viewH_game   - MINI_H - MINI_PAD;
 
     // Click events
     for (const click of mouse.clicks) {
-      // ── Minimap click: scroll camera to clicked tile ────────────────────────
+      // ── Minimap click: scroll camera ───────────────────────────────────────
       if (click.x >= miniX && click.x < miniX + MINI_W &&
           click.y >= miniY && click.y < miniY + MINI_H &&
           click.y < viewH_game) {
@@ -218,10 +236,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
         cam.x = tileX * TILE_SIZE - canvas.width  / 2;
         cam.y = tileY * TILE_SIZE - viewH_game     / 2;
         clampCamera(cam, canvas.width, viewH_game);
-        continue; // consume click — don't pass to world
+        continue;
       }
 
-      // Check if click hit a UI button (consume, don't pass to world)
+      // Check if click hit a UI button
       if (click.button === 0) {
         const btn = uiButtons.find(b =>
           click.x >= b.x && click.x <= b.x + b.w &&
@@ -233,17 +251,18 @@ export function startGame(canvas: HTMLCanvasElement): void {
         }
       }
 
-      // Don't process world clicks in the UI panel area
+      // Don't process world clicks in the UI panel
       if (click.y > canvas.height - UI_HEIGHT) continue;
 
       const { wx, wy } = screenToWorld(click.x, click.y, cam);
       const { tx, ty } = screenToTile(click.x, click.y, cam);
 
-      // Placement mode — left-click places building, right-click cancels
+      // Placement mode
       if (placementMode) {
         if (click.button === 0) {
           for (const id of selectedIds) {
-            const worker = state.entities.find(e => e.id === id && e.kind === 'worker' && e.owner === 0);
+            const worker = state.entities.find(e =>
+              e.id === id && isWorkerKind(e.kind) && e.owner === 0);
             if (worker) {
               issueBuildCommand(state, worker, placementMode.building, { x: tx, y: ty }, state.tick);
               break;
@@ -257,21 +276,18 @@ export function startGame(canvas: HTMLCanvasElement): void {
       }
 
       if (click.button === 0) {
-        // Left-click — select ANY entity (enemy units/buildings allowed for info viewing)
+        // Left-click — select any entity
         const hitUnit     = unitAtWorld(wx, wy);
         const hitBuilding = buildingAtTile(tx, ty);
         const hit = hitUnit ?? hitBuilding ?? null;
-
         if (!mouse.shiftHeld) selectedIds.clear();
         if (hit) selectedIds.add(hit.id);
 
       } else if (click.button === 2 && selectedIds.size > 0) {
-        // Right-click — order
         const hitUnit     = unitAtWorld(wx, wy);
         const hitBuilding = buildingAtTile(tx, ty);
 
-        // ── Rally point: right-click empty ground with building(s) selected ───
-        // Both buildings get rally AND any units in mixed selection still move.
+        // ── Rally point: right-click empty ground with building(s) selected ──
         if (!hitUnit && (!hitBuilding || hitBuilding.kind === 'goldmine')) {
           for (const id of selectedIds) {
             const bldg = state.entities.find(e =>
@@ -280,31 +296,27 @@ export function startGame(canvas: HTMLCanvasElement): void {
             );
             if (bldg) bldg.rallyPoint = { x: tx, y: ty };
           }
-          // Fall through so units in selection also receive the move order
+          // Fall through so units in mixed selection also get move order
         }
 
         if (hitUnit && hitUnit.owner === 1) {
-          // Attack enemy unit
           for (const id of selectedIds) {
-            const attacker = state.entities.find(e => e.id === id && isUnit(e) && e.owner === 0);
+            const attacker = state.entities.find(e => e.id === id && isUnitKind(e.kind) && e.owner === 0);
             if (attacker) issueAttackCommand(attacker, hitUnit.id, state.tick);
           }
         } else if (hitBuilding && hitBuilding.owner === 1 && hitBuilding.kind !== 'goldmine') {
-          // Attack enemy building (footmen/workers only; archers ignore buildings internally)
           for (const id of selectedIds) {
-            const attacker = state.entities.find(e => e.id === id && isUnit(e) && e.owner === 0);
+            const attacker = state.entities.find(e => e.id === id && isUnitKind(e.kind) && e.owner === 0);
             if (attacker) issueAttackCommand(attacker, hitBuilding.id, state.tick);
           }
         } else if (hitBuilding?.kind === 'goldmine') {
-          // Gather gold
           for (const id of selectedIds) {
-            const worker = state.entities.find(e => e.id === id && e.kind === 'worker' && e.owner === 0);
+            const worker = state.entities.find(e => e.id === id && isWorkerKind(e.kind) && e.owner === 0);
             if (worker) issueGatherCommand(worker, hitBuilding.id, state.tick);
           }
         } else {
-          // Move (or attack-move if A is held)
           for (const id of selectedIds) {
-            const mover = state.entities.find(e => e.id === id && isUnit(e) && e.owner === 0);
+            const mover = state.entities.find(e => e.id === id && isUnitKind(e.kind) && e.owner === 0);
             if (mover) issueMoveCommand(state, mover, tx, ty, attackMoveHeld);
           }
         }
@@ -312,7 +324,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     mouse.clicks.length = 0;
 
-    // Remove stale selections (dead entities)
+    // Remove dead selections
     for (const id of selectedIds) {
       if (!state.entities.find(e => e.id === id)) selectedIds.delete(id);
     }
@@ -320,25 +332,24 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   function handleUiAction(action: string): void {
     if (action.startsWith('train:')) {
-      const unit = action.slice(6) as 'worker' | 'footman' | 'archer';
+      const unit = action.slice(6) as EntityKind;
       for (const id of selectedIds) {
-        const building = state.entities.find(e => e.id === id && !isUnit(e) && e.owner === 0);
+        const building = state.entities.find(e => e.id === id && !isUnitKind(e.kind) && e.owner === 0);
         if (building) { issueTrainCommand(state, building, unit); break; }
       }
     } else if (action.startsWith('build:')) {
       placementMode = { building: action.slice(6) as EntityKind };
 
     } else if (action === 'stop') {
-      // Cancel current command for all selected player units/buildings
       for (const id of selectedIds) {
         const e = state.entities.find(en => en.id === id && en.owner === 0);
         if (e) e.cmd = null;
       }
 
     } else if (action === 'demolish') {
-      // Destroy selected player building and refund 80% of its cost
       for (const id of selectedIds) {
-        const e = state.entities.find(en => en.id === id && en.owner === 0 && !isUnit(en) && en.kind !== 'goldmine');
+        const e = state.entities.find(en =>
+          en.id === id && en.owner === 0 && !isUnitKind(en.kind) && en.kind !== 'goldmine');
         if (!e) continue;
         const cost = STATS[e.kind]?.cost ?? 0;
         state.gold[0] += Math.floor(cost * 0.8);
@@ -349,17 +360,17 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
   }
 
-  // ── Win / lose detection ──────────────────────────────────────────────────────
+  // ── Win / lose detection ───────────────────────────────────────────────────
   const BLDG_KINDS = new Set(['townhall', 'barracks', 'farm']);
   function checkWinLose(): void {
     if (gameResult !== 'playing') return;
-    const hasPlayerTH = state.entities.some(e => e.owner === 0 && e.kind === 'townhall');
+    const hasPlayerTH  = state.entities.some(e => e.owner === 0 && e.kind === 'townhall');
     const hasEnemyBldg = state.entities.some(e => e.owner === 1 && BLDG_KINDS.has(e.kind));
     if (!hasPlayerTH)  gameResult = 'lose';
     if (!hasEnemyBldg) gameResult = 'win';
   }
 
-  // ── Sim tick ───────────────────────────────────────────────────────────────────
+  // ── Sim tick ───────────────────────────────────────────────────────────────
   function simTick(): void {
     state.tick++;
     for (const entity of state.entities) processCommand(state, entity);
@@ -372,7 +383,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     checkWinLose();
   }
 
-  // ── Result overlay ─────────────────────────────────────────────────────────────
+  // ── Result overlay ─────────────────────────────────────────────────────────
   function drawResultOverlay(): void {
     if (gameResult === 'playing') return;
     const w = canvas.width; const h = canvas.height;
@@ -384,11 +395,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
     ctx.fillText(gameResult === 'win' ? 'VICTORY!' : 'DEFEAT', w / 2, h / 2 - 24);
     ctx.fillStyle = '#ccc';
     ctx.font = '22px monospace';
-    ctx.fillText('Press R to restart', w / 2, h / 2 + 30);
+    ctx.fillText('Press R to return to menu', w / 2, h / 2 + 30);
     ctx.textAlign = 'left';
   }
 
-  // ── Drag box overlay ───────────────────────────────────────────────────────────
   function drawDragBox(): void {
     const d = mouse.activeDrag;
     if (!d) return;
@@ -399,7 +409,6 @@ export function startGame(canvas: HTMLCanvasElement): void {
     ctx.fillRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
   }
 
-  // ── Control-group badges (top-left HUD area) ──────────────────────────────────
   function drawGroupBadges(): void {
     let gx = 4;
     controlGroups.forEach((ids, slot) => {
@@ -420,11 +429,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
     });
   }
 
-  // ── Main loop ──────────────────────────────────────────────────────────────────
+  // ── Main loop ──────────────────────────────────────────────────────────────
   let lastTime = 0;
   let simAccum = 0;
+  let running  = true;
 
   function loop(now: number): void {
+    if (!running) return;
     const dt   = Math.min(now - lastTime, 100);
     lastTime   = now;
     const viewH = canvas.height;
@@ -434,7 +445,6 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (keys.ArrowLeft  || (edge && mouse.x < EDGE_ZONE))                 cam.x -= spd;
     if (keys.ArrowRight || (edge && mouse.x > canvas.width  - EDGE_ZONE)) cam.x += spd;
     if (keys.ArrowUp    || (edge && mouse.y < EDGE_ZONE))                 cam.y -= spd;
-    // ↓ Only scroll down when mouse is in the narrow strip ABOVE the UI panel, not inside it
     if (keys.ArrowDown  || (edge && mouse.y > viewH - UI_HEIGHT - EDGE_ZONE && mouse.y < viewH - UI_HEIGHT)) cam.y += spd;
     clampCamera(cam, canvas.width, viewH - UI_HEIGHT);
 
@@ -458,6 +468,16 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
     requestAnimationFrame(loop);
   }
+
+  // ── Cleanup on back-to-menu ────────────────────────────────────────────────
+  // Re-assign `backToMenu` so the onKeyDown closure picks up the cleanup version
+  backToMenu = () => {
+    running = false;
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup',   onKeyUp);
+    window.removeEventListener('resize',  resize);
+    onBackToMenu();
+  };
 
   requestAnimationFrame((t) => { lastTime = t; requestAnimationFrame(loop); });
 }

@@ -20,6 +20,19 @@ export interface Tile {
   passable: boolean;
 }
 
+// ─── Map data ─────────────────────────────────────────────────────────────────
+
+export type MapId = 1 | 2;
+
+export interface MapData {
+  tiles:       Tile[][];
+  playerStart: Vec2;
+  aiStart:     Vec2;
+  goldMines:   Vec2[];   // top-left tile of each 2×2 mine
+  name:        string;
+  description: string;
+}
+
 // ─── Geometry ─────────────────────────────────────────────────────────────────
 
 export interface Vec2 {
@@ -27,18 +40,34 @@ export interface Vec2 {
   y: number;
 }
 
+// ─── Race ─────────────────────────────────────────────────────────────────────
+
+export type Race = 'human' | 'orc';
+
 // ─── Entities ─────────────────────────────────────────────────────────────────
 
 export type Owner = 0 | 1; // 0 = player, 1 = AI
 
 export type EntityKind =
-  | 'worker' | 'footman' | 'archer'                    // units
-  | 'townhall' | 'barracks' | 'farm' | 'wall'          // buildings
-  | 'goldmine';                                         // resource node
+  | 'worker'  | 'footman' | 'archer'             // human units
+  | 'peon'    | 'grunt'   | 'troll'              // orc units
+  | 'townhall' | 'barracks' | 'farm' | 'wall'    // shared buildings (sprite varies by race)
+  | 'goldmine';                                   // resource node
 
-/** Set of entity kinds that are actual mobile combat/worker units. */
-export const UNIT_KINDS = new Set<EntityKind>(['worker', 'footman', 'archer']);
+/** Mobile combat/worker units — all races combined */
+export const UNIT_KINDS = new Set<EntityKind>([
+  'worker', 'footman', 'archer',
+  'peon',   'grunt',   'troll',
+]);
 export function isUnitKind(kind: EntityKind): boolean { return UNIT_KINDS.has(kind); }
+
+/** Worker-role units across races */
+export const WORKER_KINDS = new Set<EntityKind>(['worker', 'peon']);
+export function isWorkerKind(kind: EntityKind): boolean { return WORKER_KINDS.has(kind); }
+
+/** Ranged units across races — skip buildings when attacking */
+export const RANGED_UNIT_KINDS = new Set<EntityKind>(['archer', 'troll']);
+export function isRangedUnit(kind: EntityKind): boolean { return RANGED_UNIT_KINDS.has(kind); }
 
 export type Command =
   | { type: 'move';    path: Vec2[]; stepTick: number; attackMove: boolean }
@@ -83,4 +112,5 @@ export interface GameState {
   gold:   [number, number];
   pop:    [number, number];
   popCap: [number, number];
+  races:  [Race, Race];   // races[0]=player, races[1]=AI
 }

@@ -1,5 +1,5 @@
 import type { Entity, GameState } from '../types';
-import { SIM_HZ, isUnitKind } from '../types';
+import { SIM_HZ, isUnitKind, isRangedUnit } from '../types';
 import { STATS, ticksPerStep } from '../data/units';
 import { getEntity, killEntity } from './entities';
 import { findPath } from './pathfinding';
@@ -70,8 +70,8 @@ export function processAttack(state: GameState, entity: Entity): void {
   const target = getEntity(state, cmd.targetId);
   if (!target) { entity.cmd = null; return; }
 
-  // Archers only fight mobile units — not buildings or walls
-  if (entity.kind === 'archer' && !isUnitKind(target.kind)) { entity.cmd = null; return; }
+  // Ranged units (archer, troll) only fight mobile units — not buildings or walls
+  if (isRangedUnit(entity.kind) && !isUnitKind(target.kind)) { entity.cmd = null; return; }
 
   const stats  = STATS[entity.kind];
   const range  = stats?.range ?? 1;

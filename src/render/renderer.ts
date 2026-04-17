@@ -12,6 +12,12 @@ function getSprites(): SpriteCache {
   return sprites;
 }
 
+/** Call when starting a new game so the minimap terrain cache regenerates. */
+export function resetRenderCache(): void {
+  minimapTerrain = null;
+  // sprites are race-independent (all races baked in) so no reset needed
+}
+
 // ─── Visual constants ─────────────────────────────────────────────────────────
 
 const SELECTION_COLOR = '#00ff88';
@@ -293,10 +299,15 @@ function drawUnit(
     ctx.stroke();
   }
 
-  // Sprite
-  const sprite = (e.kind === 'worker'  ? sp.worker  :
-                  e.kind === 'footman' ? sp.footman :
-                                         sp.archer)[e.owner as 0 | 1];
+  // Sprite (covers both races)
+  const spriteSheet =
+    e.kind === 'worker'  ? sp.worker  :
+    e.kind === 'footman' ? sp.footman :
+    e.kind === 'archer'  ? sp.archer  :
+    e.kind === 'peon'    ? sp.peon    :
+    e.kind === 'grunt'   ? sp.grunt   :
+                           sp.troll;
+  const sprite = spriteSheet[e.owner as 0 | 1];
   ctx.drawImage(sprite, sx, sy, TILE_SIZE, TILE_SIZE);
 
   // HP bar
@@ -327,18 +338,21 @@ function drawBuilding(
     ctx.strokeRect(sx - 2, sy - 2, pw + 4, ph + 4);
   }
 
-  // Sprite
+  // Sprite — building look varies by owner's race
+  const ownerRace = state.races[e.owner as 0 | 1] ?? 'human';
+  const isOrc     = ownerRace === 'orc';
   let sprite: HTMLCanvasElement;
   if (e.kind === 'goldmine') {
     sprite = sp.goldmine;
   } else if (e.kind === 'wall') {
     sprite = sp.wall[e.owner as 0 | 1];
   } else if (e.kind === 'townhall') {
-    sprite = sp.townhall[e.owner as 0 | 1];
+    sprite = isOrc ? sp.greathall[e.owner as 0 | 1] : sp.townhall[e.owner as 0 | 1];
   } else if (e.kind === 'barracks') {
-    sprite = sp.barracks[e.owner as 0 | 1];
+    sprite = isOrc ? sp.warmill[e.owner as 0 | 1]   : sp.barracks[e.owner as 0 | 1];
   } else {
-    sprite = sp.farm[e.owner as 0 | 1];
+    // farm
+    sprite = isOrc ? sp.pigsty[e.owner as 0 | 1]    : sp.farm[e.owner as 0 | 1];
   }
   ctx.drawImage(sprite, sx, sy, pw, ph);
 
