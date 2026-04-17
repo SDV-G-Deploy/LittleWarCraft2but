@@ -60,25 +60,25 @@ export const STATS: Partial<Record<EntityKind, UnitStats>> = {
   // ── Buildings (shared by both races, sprite varies by owner's race) ──────────
   townhall: {
     hp: 1200, damage: 0, armor: 5, range: 0,
-    speed: 0, sight: 6, cost: 0,   buildTicks: 0,
+    speed: 0, sight: 8, cost: 0,   buildTicks: 0,
     attackTicks: 0,
     tileW: 3, tileH: 3,
   },
   barracks: {
     hp: 800,  damage: 0, armor: 3, range: 0,
-    speed: 0, sight: 5, cost: 400, buildTicks: SIM_HZ * 40,
+    speed: 0, sight: 4, cost: 400, buildTicks: SIM_HZ * 40,
     attackTicks: 0,
     tileW: 3, tileH: 2,
   },
   farm: {
     hp: 400,  damage: 0, armor: 1, range: 0,
-    speed: 0, sight: 3, cost: 250, buildTicks: SIM_HZ * 25,
+    speed: 0, sight: 4, cost: 250, buildTicks: SIM_HZ * 25,
     attackTicks: 0,
     tileW: 2, tileH: 2,
   },
   wall: {
     hp: 200, damage: 0, armor: 5, range: 0,
-    speed: 0, sight: 0, cost: 50, buildTicks: SIM_HZ * 5,
+    speed: 0, sight: 6, cost: 50, buildTicks: SIM_HZ * 5,
     attackTicks: 0,
     tileW: 1, tileH: 1,
   },

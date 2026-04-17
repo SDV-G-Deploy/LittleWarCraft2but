@@ -393,13 +393,14 @@ export function runMenu(
         uy += 34;
       }
 
-      // Description
-      const descY = cardY + 210;
+      // Description (multi-line, each line on its own row)
+      let descY = cardY + 210;
       ctx.textAlign = 'center';
       ctx.fillStyle = GREY;
       ctx.font      = '11px monospace';
       for (const line of rc.description.split('\n')) {
         ctx.fillText(line, cardX + cardW / 2, descY);
+        descY += 15;
       }
 
       // Select button

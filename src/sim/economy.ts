@@ -57,12 +57,15 @@ export function processGather(state: GameState, entity: Entity): void {
 
   switch (cmd.phase) {
     case 'tomine': {
-      if (!ec._gatherPath || ec._gatherPath.length === 0) {
+      if (ec._gatherPath === undefined) {
         // target tile just above the mine
-        ec._gatherPath = findPath(state, entity.pos.x, entity.pos.y,
-          mine.pos.x, mine.pos.y - 1) ?? [];
+        const raw = findPath(state, entity.pos.x, entity.pos.y,
+          mine.pos.x, mine.pos.y - 1);
+        if (raw === null) { entity.cmd = null; return; } // truly unreachable — give up
+        ec._gatherPath = raw;
       }
       if (ec._gatherPath.length === 0) {
+        // already adjacent — start mining
         cmd.phase = 'gathering'; cmd.waitTicks = state.tick; return;
       }
       if (state.tick - cmd.waitTicks < tps) return;
@@ -85,10 +88,12 @@ export function processGather(state: GameState, entity: Entity): void {
     case 'returning': {
       const th = nearestTownHall(state, entity.owner as 0 | 1, entity.pos.x, entity.pos.y);
       if (!th) { entity.cmd = null; return; }
-      if (!ec._gatherPath || ec._gatherPath.length === 0) {
+      if (ec._gatherPath === undefined) {
         const dropX = th.pos.x + Math.floor(th.tileW / 2);
         const dropY = th.pos.y + th.tileH;
-        ec._gatherPath = findPath(state, entity.pos.x, entity.pos.y, dropX, dropY) ?? [];
+        const raw = findPath(state, entity.pos.x, entity.pos.y, dropX, dropY);
+        // If path home is blocked, credit gold anyway and restart
+        ec._gatherPath = raw ?? [];
       }
       if (ec._gatherPath.length === 0) {
         state.gold[entity.owner as 0 | 1] += entity.carryGold ?? 0;

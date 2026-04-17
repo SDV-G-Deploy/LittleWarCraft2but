@@ -131,61 +131,81 @@ function drawEntityInfo(
     e.kind === 'townhall' ? rc.hallLabel    :
     e.kind === 'barracks' ? rc.barrLabel    :
     e.kind === 'farm'     ? rc.farmLabel    :
+    e.kind === 'goldmine' ? 'Gold Mine'     :
     e.kind.toUpperCase();
 
-  // ── Name + HP ───────────────────────────────────────────────────────────────
+  // Running Y cursor — everything flows downward from here
+  const LINE = 13;
+  let y = panelY + 16;
+
+  // ── Name ───────────────────────────────────────────────────────────────────
   ctx.fillStyle = '#eee';
   ctx.font = 'bold 13px monospace';
-  ctx.fillText(displayName.toUpperCase(), x, panelY + 20);
+  ctx.fillText(displayName.toUpperCase(), x, y); y += LINE + 1;
 
+  // ── HP ─────────────────────────────────────────────────────────────────────
   ctx.fillStyle = '#aaa';
   ctx.font = '11px monospace';
-  ctx.fillText(`HP: ${e.hp} / ${e.hpMax}`, x, panelY + 34);
+  ctx.fillText(`HP: ${e.hp} / ${e.hpMax}`, x, y); y += LINE;
 
-  // ── Combat stats (units only) ───────────────────────────────────────────────
+  // ── Combat stats (mobile units only) ───────────────────────────────────────
   if (stats && stats.speed > 0) {
     const atkSpd = stats.attackTicks > 0
-      ? (stats.attackTicks / 20).toFixed(1) + 's'   // 20 = SIM_HZ
+      ? (stats.attackTicks / 20).toFixed(1) + 's'
       : '—';
     const rngStr = stats.range > 1 ? `${stats.range}` : 'melee';
     ctx.fillStyle = '#ffcc88';
     ctx.font = '10px monospace';
     ctx.fillText(
       `ATK:${stats.damage}  DEF:${stats.armor}  RNG:${rngStr}  SPD:${atkSpd}`,
-      x, panelY + 47,
-    );
+      x, y,
+    ); y += LINE;
   }
 
-  // ── Building-specific info ──────────────────────────────────────────────────
+  // ── Gold mine reserve ───────────────────────────────────────────────────────
   if (e.kind === 'goldmine') {
     ctx.fillStyle = '#ffe97a';
     ctx.font = '11px monospace';
-    ctx.fillText(`Gold: ${e.goldReserve ?? 0}`, x, panelY + 47);
+    ctx.fillText(`Gold remaining: ${e.goldReserve ?? 0}`, x, y); y += LINE;
   }
 
-  if (e.carryGold) {
-    ctx.fillStyle = '#ffe97a';
-    ctx.font = '11px monospace';
-    ctx.fillText(`Carrying: ${e.carryGold}g`, x, panelY + 59);
-  }
-
+  // ── Food slots (farms / town halls) ────────────────────────────────────────
   if (e.kind === 'farm' || e.kind === 'townhall') {
     ctx.fillStyle = '#ffcc88';
     ctx.font = '11px monospace';
-    ctx.fillText(`+4 food slots`, x, panelY + 59);
+    ctx.fillText('+4 food slots', x, y); y += LINE;
   }
 
-  // ── Rally point info (townhall + barracks) ─────────────────────────────────
+  // ── Pop + treasury (player-owned, non-goldmine) ─────────────────────────────
+  if (e.owner === 0 && e.kind !== 'goldmine') {
+    const popFull = state.pop[0] >= state.popCap[0];
+    ctx.fillStyle = popFull ? '#ff6666' : '#88ff88';
+    ctx.font = '11px monospace';
+    ctx.fillText(`Pop: ${state.pop[0]}/${state.popCap[0]}`, x, y);
+    ctx.fillStyle = '#ffe97a';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText(`${state.gold[0]}g`, x + 90, y);
+    y += LINE;
+  }
+
+  // ── Carry gold (workers) ────────────────────────────────────────────────────
+  if (e.carryGold) {
+    ctx.fillStyle = '#ffe97a';
+    ctx.font = '11px monospace';
+    ctx.fillText(`Carrying: ${e.carryGold}g`, x, y); y += LINE;
+  }
+
+  // ── Rally point (townhall / barracks, player-owned) ────────────────────────
   if ((e.kind === 'townhall' || e.kind === 'barracks') && e.owner === 0) {
     ctx.font = '10px monospace';
     if (e.rallyPoint) {
       ctx.fillStyle = '#ffe840';
-      ctx.fillText(`Rally → (${e.rallyPoint.x}, ${e.rallyPoint.y})`, x, panelY + 72);
+      ctx.fillText(`Rally → (${e.rallyPoint.x}, ${e.rallyPoint.y})`, x, y); y += LINE - 1;
       ctx.fillStyle = 'rgba(255,255,255,0.28)';
-      ctx.fillText('RMB ground: move rally', x, panelY + 84);
+      ctx.fillText('RMB empty ground to move rally', x, y); y += LINE - 1;
     } else {
       ctx.fillStyle = 'rgba(255,255,255,0.28)';
-      ctx.fillText('RMB ground: set rally point', x, panelY + 72);
+      ctx.fillText('RMB empty ground: set rally', x, y); y += LINE - 1;
     }
   }
 
@@ -195,11 +215,12 @@ function drawEntityInfo(
     const pct   = Math.round(100 * (1 - e.cmd.ticksLeft / (tStats?.buildTicks ?? 1)));
     ctx.fillStyle = '#88ccff';
     ctx.font = '11px monospace';
-    ctx.fillText(`Training: ${e.cmd.unit} ${pct}%`, x, panelY + 72);
-    drawProgressBar(ctx, x, panelY + 75, 150, '#4488ff', pct);
+    ctx.fillText(`Training: ${e.cmd.unit} ${pct}%`, x, y); y += LINE - 2;
+    drawProgressBar(ctx, x, y, 150, '#4488ff', pct); y += 8;
     if (e.cmd.queue.length > 0) {
       ctx.fillStyle = '#aaa';
-      ctx.fillText(`Queue: ${e.cmd.queue.join(', ')}`, x, panelY + 88);
+      ctx.font = '10px monospace';
+      ctx.fillText(`Queue: ${e.cmd.queue.join(', ')}`, x, y);
     }
   }
 
@@ -209,12 +230,12 @@ function drawEntityInfo(
     ctx.font = '11px monospace';
     if (e.cmd.phase === 'moving') {
       ctx.fillStyle = '#88ccff';
-      ctx.fillText(`→ Walking to site…`, x, panelY + 72);
+      ctx.fillText('→ Walking to site…', x, y);
     } else {
       const pct = Math.round(100 * (1 - e.cmd.ticksLeft / total));
       ctx.fillStyle = '#88ffcc';
-      ctx.fillText(`Building ${e.cmd.building}: ${pct}%`, x, panelY + 72);
-      drawProgressBar(ctx, x, panelY + 75, 150, '#44cc88', pct);
+      ctx.fillText(`Building ${e.cmd.building}: ${pct}%`, x, y); y += LINE - 2;
+      drawProgressBar(ctx, x, y, 150, '#44cc88', pct);
     }
   }
 
@@ -222,36 +243,32 @@ function drawEntityInfo(
   if (e.cmd?.type === 'gather') {
     ctx.fillStyle = '#ffe97a';
     ctx.font = '11px monospace';
-    const label = e.cmd.phase === 'gathering' ? 'Mining…'
-      : e.cmd.phase === 'returning' ? 'Returning gold…'
-      : 'Walking to mine…';
-    ctx.fillText(label, x, panelY + 72);
+    const label =
+      e.cmd.phase === 'gathering'  ? 'Mining…'          :
+      e.cmd.phase === 'returning'  ? 'Returning gold…'  :
+      'Walking to mine…';
+    ctx.fillText(label, x, y);
   }
 
   // ── Attack status ───────────────────────────────────────────────────────────
   if (e.cmd?.type === 'attack') {
     ctx.fillStyle = '#ff8888';
     ctx.font = '11px monospace';
-    ctx.fillText(e.cmd.chasePath.length > 0 ? 'Chasing…' : 'Attacking!', x, panelY + 72);
+    ctx.fillText(e.cmd.chasePath.length > 0 ? 'Chasing…' : 'Attacking!', x, y);
+  }
+
+  // ── Move status ─────────────────────────────────────────────────────────────
+  if (e.cmd?.type === 'move') {
+    ctx.fillStyle = '#aaddff';
+    ctx.font = '11px monospace';
+    ctx.fillText('Moving…', x, y);
   }
 
   // ── Idle hint (player units only) ───────────────────────────────────────────
   if (e.owner === 0 && !e.cmd && stats && stats.speed > 0) {
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.font = '10px monospace';
-    ctx.fillText('RMB: Move / Attack / Gather    A+RMB: Atk-Move', x, panelY + 88);
-  }
-
-  // ── Pop + treasury (player only) ────────────────────────────────────────────
-  if (e.owner === 0) {
-    const popFull = state.pop[0] >= state.popCap[0];
-    ctx.fillStyle = popFull ? '#ff6666' : '#88ff88';
-    ctx.font = '11px monospace';
-    const statLineY = stats && stats.speed > 0 ? panelY + 59 : panelY + 47;
-    ctx.fillText(`Pop: ${state.pop[0]}/${state.popCap[0]}`, x, statLineY);
-    ctx.fillStyle = '#ffe97a';
-    ctx.font = 'bold 12px monospace';
-    ctx.fillText(`${state.gold[0]}g`, x + 90, statLineY);
+    ctx.fillText('RMB: Move/Attack/Gather   A+RMB: Atk-Move', x, panelY + PANEL_H - 8);
   }
 }
 
