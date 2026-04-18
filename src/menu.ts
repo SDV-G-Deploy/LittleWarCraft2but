@@ -116,7 +116,7 @@ export function runMenu(
   }
   if (urlRoom) {
     ms.screen   = 'online';
-    ms.joinCode = urlRoom;
+    ms.joinCode = urlRoom.trim();
   }
 
   let buttons: MenuButton[] = [];
@@ -172,11 +172,13 @@ export function runMenu(
         break;
       }
       case 'join_game': {
-        if (ms.joinCode.length < 4) break;
+        const normalizedJoinCode = ms.joinCode.trim();
+        ms.joinCode = normalizedJoinCode;
+        if (normalizedJoinCode.length < 4) break;
         ms.netSession?.destroy();
         ms.netRole    = 'guest';
         // Pass guest's chosen race so it's sent in the hello message
-        ms.netSession = createSession('guest', ms.joinCode, undefined, ms.guestRace, ms.netMode);
+        ms.netSession = createSession('guest', normalizedJoinCode, undefined, ms.guestRace, ms.netMode);
         // Guest starts game after receiving full config from host
         ms.netSession.onConfig = (cfg) => {
           ms.playerRace = cfg.race;
@@ -210,10 +212,11 @@ export function runMenu(
     if (ms.screen !== 'online') return;
     if (e.key === 'Backspace') {
       ms.joinCode = ms.joinCode.slice(0, -1);
-    } else if (e.key.length === 1 && ms.joinCode.length < 36) {
-      ms.joinCode += e.key;
     } else if (e.key === 'Enter') {
       handleAction('join_game');
+    } else if (e.key.length === 1 && ms.joinCode.length < 36) {
+      if (/\s/.test(e.key)) return;
+      ms.joinCode += e.key;
     }
   }
   window.addEventListener('keydown', onKeyDown);
