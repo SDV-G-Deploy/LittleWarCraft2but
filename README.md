@@ -78,6 +78,22 @@ npm run dev
 npm run build
 ```
 
+## Online infra config
+
+Client networking is now env-driven to keep online hardening low-scope.
+
+Supported Vite env vars:
+- `VITE_PEER_HOST`
+- `VITE_PEER_PORT`
+- `VITE_PEER_PATH`
+- `VITE_PEER_SECURE`
+- `VITE_ICE_SERVERS` as a JSON array string
+
+Examples:
+- client env example: `.env.example`
+- self-host infra example: `infra/compose.yaml`
+- coturn env example: `infra/.env.example`
+
 ## Roadmap
 
 See [ROADMAP.md](./ROADMAP.md) for:

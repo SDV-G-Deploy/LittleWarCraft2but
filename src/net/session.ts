@@ -17,6 +17,73 @@ import Peer, { DataConnection } from 'peerjs';
 import type { NetCmd, TickPacket } from './netcmd';
 import type { Race, MapId, EntityKind } from '../types';
 
+interface RuntimePeerConfig {
+  host: string;
+  port: number;
+  path: string;
+  secure: boolean;
+}
+
+function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
+  if (value == null || value.trim() === '') return fallback;
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+function parseNumberEnv(value: string | undefined, fallback: number): number {
+  if (value == null || value.trim() === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizePath(path: string | undefined, fallback: string): string {
+  const raw = (path ?? fallback).trim();
+  if (!raw) return fallback;
+  const withLeading = raw.startsWith('/') ? raw : `/${raw}`;
+  return withLeading.endsWith('/') ? withLeading : `${withLeading}/`;
+}
+
+function defaultPeerHost(): string {
+  if (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost') {
+    return window.location.hostname;
+  }
+  return '0.peerjs.com';
+}
+
+function defaultPeerSecure(): boolean {
+  if (typeof window !== 'undefined') {
+    return window.location.protocol === 'https:';
+  }
+  return true;
+}
+
+function parseIceServers(raw: string | undefined): RTCIceServer[] | null {
+  if (!raw || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((entry): entry is RTCIceServer => !!entry && typeof entry === 'object' && 'urls' in entry);
+  } catch {
+    return null;
+  }
+}
+
+function getRuntimePeerConfig(): { peer: RuntimePeerConfig; iceServers: RTCIceServer[] } {
+  const host = (import.meta.env.VITE_PEER_HOST as string | undefined)?.trim() || defaultPeerHost();
+  const secure = parseBooleanEnv(import.meta.env.VITE_PEER_SECURE as string | undefined, defaultPeerSecure());
+  const port = parseNumberEnv(import.meta.env.VITE_PEER_PORT as string | undefined, secure ? 443 : 9000);
+  const path = normalizePath(import.meta.env.VITE_PEER_PATH as string | undefined, '/');
+  const iceServers = parseIceServers(import.meta.env.VITE_ICE_SERVERS as string | undefined) ?? [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ];
+
+  return {
+    peer: { host, port, path, secure },
+    iceServers,
+  };
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type SessionStatus =
@@ -319,17 +386,15 @@ export function createSession(
   };
 
   // ── PeerJS setup ─────────────────────────────────────────────────────────────
+  const runtimeNet = getRuntimePeerConfig();
   const peer = new Peer({
-    host:   '0.peerjs.com',
-    port:   443,
-    path:   '/',
-    secure: true,
+    host:   runtimeNet.peer.host,
+    port:   runtimeNet.peer.port,
+    path:   runtimeNet.peer.path,
+    secure: runtimeNet.peer.secure,
     debug:  1,
     config: {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ],
+      iceServers: runtimeNet.iceServers,
     },
   });
 
