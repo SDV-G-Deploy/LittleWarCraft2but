@@ -89,11 +89,13 @@ export function startGame(
     mine.goldReserve = MINE_GOLD_INITIAL;
   }
 
-  // ── Spawn AI base ──────────────────────────────────────────────────────────
+  // ── Spawn AI / guest base ─────────────────────────────────────────────────
   const as_ = mapData.aiStart;
   spawnEntity(state, 'townhall',    1, as_);
   spawnEntity(state, aiRC.worker,   1, { x: as_.x + 1, y: as_.y + 3 });
-  spawnEntity(state, aiRC.worker,   1, { x: as_.x + 2, y: as_.y + 3 });
+  // Offline vs AI: give AI a second worker head-start.
+  // Online: equal start — each side gets one worker.
+  if (!net) spawnEntity(state, aiRC.worker, 1, { x: as_.x + 2, y: as_.y + 3 });
 
   // ── AI controller ──────────────────────────────────────────────────────────
   const ai: AIController = createAI();

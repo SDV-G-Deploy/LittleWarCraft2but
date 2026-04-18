@@ -76,16 +76,19 @@ export function createSession(
       const toSend = localBuf;
       localBuf = [];
 
-      if (conn?.open) {
+      // Only send if there are commands (saves bandwidth; keepalive is PeerJS's job)
+      if (conn?.open && toSend.length > 0) {
         conn.send({ tick, cmds: toSend } satisfies TickPacket);
       }
 
-      const remote = remoteQueue.get(tick);
-      if (remote !== undefined) {
-        remoteQueue.delete(tick);
-        return remote;
-      }
-      return null;
+      // Drain ALL buffered remote commands regardless of tick tag.
+      // With no-lockstep netcode, commands are applied as soon as they arrive on
+      // the next sim tick — exact-tick matching would discard every late packet.
+      if (remoteQueue.size === 0) return null;
+      const allCmds: NetCmd[] = [];
+      for (const cmds of remoteQueue.values()) allCmds.push(...cmds);
+      remoteQueue.clear();
+      return allCmds.length > 0 ? allCmds : null;
     },
 
     destroy() {
@@ -125,10 +128,10 @@ export function createSession(
         return;
       }
 
-      // Tick packet
+      // Tick packet — only queue if there are actual commands
       if (typeof (msg as TickPacket).tick === 'number' && Array.isArray((msg as TickPacket).cmds)) {
         const pkt = msg as TickPacket;
-        remoteQueue.set(pkt.tick, pkt.cmds);
+        if (pkt.cmds.length > 0) remoteQueue.set(pkt.tick, pkt.cmds);
       }
     });
 
