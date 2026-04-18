@@ -82,6 +82,13 @@ export const STATS: Partial<Record<EntityKind, UnitStats>> = {
     attackTicks: 0,
     tileW: 1, tileH: 1,
   },
+  // ── Construction scaffold (tileW/tileH/hp/hpMax overridden at spawn time) ────
+  construction: {
+    hp: 1, damage: 0, armor: 0, range: 0,
+    speed: 0, sight: 0, cost: 0, buildTicks: 1,
+    attackTicks: 0,
+    tileW: 1, tileH: 1,
+  },
   // ── Resource node ────────────────────────────────────────────────────────────
   goldmine: {
     hp: 9999, damage: 0, armor: 0, range: 0,

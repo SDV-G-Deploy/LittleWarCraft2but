@@ -332,6 +332,16 @@ export function startGame(
           });
           if (attackerIds.length) emit({ k: 'attack', ids: attackerIds, targetId: hitBuilding.id });
 
+        } else if (hitBuilding?.kind === 'construction' && hitBuilding.owner === myOwner) {
+          // Resume / continue building this scaffold with selected workers
+          const workerIds = [...selectedIds].filter(id => {
+            const e = state.entities.find(en => en.id === id);
+            return e && isWorkerKind(e.kind) && e.owner === myOwner;
+          });
+          for (const wid of workerIds) {
+            emit({ k: 'resume', workerId: wid, siteId: hitBuilding.id });
+          }
+
         } else if (hitBuilding?.kind === 'goldmine') {
           const workerIds = [...selectedIds].filter(id => {
             const e = state.entities.find(en => en.id === id);

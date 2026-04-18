@@ -1,7 +1,7 @@
 import type { Entity, EntityKind, GameState, Vec2 } from '../types';
 import { GATHER_TICKS, GATHER_AMOUNT, MAP_W, MAP_H, isUnitKind, isWorkerKind } from '../types';
 import { STATS, ticksPerStep } from '../data/units';
-import { getEntity, spawnEntity, isTileBlockedByEntity } from './entities';
+import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity } from './entities';
 import { findPath } from './pathfinding';
 
 // ─── Population ───────────────────────────────────────────────────────────────
@@ -221,13 +221,42 @@ export function issueBuildCommand(
   if (!isValidPlacement(state, building, pos.x, pos.y)) return false;
 
   state.gold[worker.owner as 0 | 1] -= cost;
+
+  // Spawn the construction scaffold immediately so it:
+  //  - Reserves the tile footprint (blocks further placement)
+  //  - Shows the shadow on the map from this moment on
+  //  - Tracks progress via hp (0 → buildTicks)
+  const site = spawnEntity(state, 'construction', worker.owner as 0 | 1, pos);
+  site.hp    = 0;
+  site.hpMax = stats.buildTicks;
+  site.tileW = stats.tileW;
+  site.tileH = stats.tileH;
+  site.constructionOf = building;
+
   worker.cmd = {
     type: 'build', building, pos: { ...pos },
-    ticksLeft: stats.buildTicks,
+    siteId: site.id,
     phase: 'moving', stepTick: currentTick,
   };
   (worker as EntityWithCache)._buildPath = undefined;
   return true;
+}
+
+/** Send an existing worker to continue building an already-placed construction site. */
+export function issueResumeBuildCommand(
+  worker: Entity,
+  site: Entity,
+  currentTick: number,
+): void {
+  worker.cmd = {
+    type: 'build',
+    building: site.constructionOf!,
+    pos: { ...site.pos },
+    siteId: site.id,
+    phase: 'moving',
+    stepTick: currentTick,
+  };
+  (worker as EntityWithCache)._buildPath = undefined;
 }
 
 export function processBuild(state: GameState, entity: Entity): void {
@@ -236,10 +265,21 @@ export function processBuild(state: GameState, entity: Entity): void {
   const ec  = entity as EntityWithCache;
   const tps = ticksPerStep(entity.kind);
 
+  // Construction site must exist — if demolished, abandon this command
+  const site = getEntity(state, cmd.siteId);
+  if (!site || site.kind !== 'construction') {
+    entity.cmd = null;
+    ec._buildPath = undefined;
+    return;
+  }
+
   if (cmd.phase === 'moving') {
-    if (!ec._buildPath || ec._buildPath.length === 0) {
-      ec._buildPath = findPath(state, entity.pos.x, entity.pos.y,
-        cmd.pos.x, cmd.pos.y) ?? [];
+    // Path to the tile just south of the building footprint (site blocks its own tiles)
+    if (!ec._buildPath) {
+      const bStats = STATS[cmd.building];
+      const adjX   = cmd.pos.x + Math.floor((bStats?.tileW ?? 1) / 2);
+      const adjY   = cmd.pos.y + (bStats?.tileH ?? 1);
+      ec._buildPath = findPath(state, entity.pos.x, entity.pos.y, adjX, adjY) ?? [];
     }
     if (ec._buildPath.length === 0) {
       cmd.phase = 'building'; return;
@@ -253,10 +293,13 @@ export function processBuild(state: GameState, entity: Entity): void {
     }
 
   } else {
-    // building phase — one tick per progress step
-    cmd.ticksLeft--;
-    if (cmd.ticksLeft <= 0) {
-      spawnEntity(state, cmd.building, entity.owner as 0 | 1, cmd.pos);
+    // Building phase — one HP tick of progress per sim step
+    site.hp = Math.min(site.hp + 1, site.hpMax);
+    if (site.hp >= site.hpMax) {
+      // Construction complete: swap scaffold for the real building
+      const { pos, owner } = site;
+      killEntity(state, site.id);
+      spawnEntity(state, cmd.building, owner, pos);
       entity.cmd = null;
       ec._buildPath = undefined;
     }

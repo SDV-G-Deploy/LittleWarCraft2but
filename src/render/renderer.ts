@@ -345,38 +345,41 @@ function drawBuilding(
     ctx.strokeRect(sx - 2, sy - 2, pw + 4, ph + 4);
   }
 
+  // For construction scaffolds, render the target building's sprite at
+  // partial opacity; a full scaffolding overlay always shows on top.
+  const isConstruction = e.kind === 'construction';
+  const renderKind     = isConstruction ? (e.constructionOf ?? 'barracks') : e.kind;
+
+  if (isConstruction) {
+    // Opacity scales from 30% (just started) to 80% (almost done)
+    ctx.save();
+    ctx.globalAlpha = 0.30 + 0.50 * (e.hp / Math.max(1, e.hpMax));
+  }
+
   // Sprite — building look varies by owner's race
   const ownerRace = state.races[e.owner as 0 | 1] ?? 'human';
   const isOrc     = ownerRace === 'orc';
   let sprite: HTMLCanvasElement;
-  if (e.kind === 'goldmine') {
+  if (renderKind === 'goldmine') {
     sprite = sp.goldmine;
-  } else if (e.kind === 'wall') {
+  } else if (renderKind === 'wall') {
     sprite = sp.wall[e.owner as 0 | 1];
-  } else if (e.kind === 'townhall') {
+  } else if (renderKind === 'townhall') {
     sprite = isOrc ? sp.greathall[e.owner as 0 | 1] : sp.townhall[e.owner as 0 | 1];
-  } else if (e.kind === 'barracks') {
+  } else if (renderKind === 'barracks') {
     sprite = isOrc ? sp.warmill[e.owner as 0 | 1]   : sp.barracks[e.owner as 0 | 1];
   } else {
-    // farm
+    // farm / anything else
     sprite = isOrc ? sp.pigsty[e.owner as 0 | 1]    : sp.farm[e.owner as 0 | 1];
   }
   ctx.drawImage(sprite, sx, sy, pw, ph);
 
-  // HP bar (buildings get a taller bar for readability)
-  drawHpBar(ctx, sx, sy, pw, e.kind === 'wall' ? 3 : 5, e.hp / e.hpMax);
+  // HP bar — for construction sites this doubles as a build-progress bar
+  drawHpBar(ctx, sx, sy, pw, e.kind === 'wall' ? 3 : 5, e.hp / Math.max(1, e.hpMax));
 
-  // Construction progress overlay
-  const buildingCmd = state.entities.find(en =>
-    en.cmd?.type === 'build' &&
-    en.cmd.phase === 'building' &&
-    en.cmd.pos.x === e.pos.x &&
-    en.cmd.pos.y === e.pos.y,
-  )?.cmd;
-  if (buildingCmd?.type === 'build' && buildingCmd.phase === 'building') {
-    // Scaffolding lines overlay
-    ctx.save();
-    ctx.globalAlpha = 0.45;
+  // Scaffolding overlay — always shown on construction sites
+  if (isConstruction) {
+    ctx.globalAlpha = 0.55;
     ctx.strokeStyle = '#c8b068';
     ctx.lineWidth = 1.5;
     for (let x = sx; x < sx + pw; x += 8) {

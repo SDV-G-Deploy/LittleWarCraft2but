@@ -52,7 +52,8 @@ export type EntityKind =
   | 'worker'  | 'footman' | 'archer'             // human units
   | 'peon'    | 'grunt'   | 'troll'              // orc units
   | 'townhall' | 'barracks' | 'farm' | 'wall'    // shared buildings (sprite varies by race)
-  | 'goldmine';                                   // resource node
+  | 'goldmine'                                    // resource node
+  | 'construction';                               // building-in-progress scaffold
 
 /** Mobile combat/worker units — all races combined */
 export const UNIT_KINDS = new Set<EntityKind>([
@@ -73,7 +74,7 @@ export type Command =
   | { type: 'move';    path: Vec2[]; stepTick: number; attackMove: boolean }
   | { type: 'attack';  targetId: number; cooldownTick: number; chasePath: Vec2[]; chasePathTick: number }
   | { type: 'gather';  mineId: number; phase: 'tomine' | 'gathering' | 'returning'; waitTicks: number }
-  | { type: 'build';   building: EntityKind; pos: Vec2; ticksLeft: number; phase: 'moving' | 'building'; stepTick: number }
+  | { type: 'build';   building: EntityKind; pos: Vec2; siteId: number; phase: 'moving' | 'building'; stepTick: number }
   | { type: 'train';   unit: EntityKind; ticksLeft: number; queue: EntityKind[] };
 
 export interface Entity {
@@ -90,6 +91,7 @@ export interface Entity {
   goldReserve?: number;   // gold mines only
   carryGold?: number;     // workers carrying gold back
   rallyPoint?: Vec2;      // townhall / barracks: newly trained units walk here
+  constructionOf?: EntityKind;  // 'construction' entities: target building kind
 }
 
 // ─── Corpse ───────────────────────────────────────────────────────────────────

@@ -226,19 +226,28 @@ function drawEntityInfo(
     }
   }
 
-  // ── Build progress ──────────────────────────────────────────────────────────
+  // ── Build progress (shown on the worker) ───────────────────────────────────
   if (e.cmd?.type === 'build') {
-    const total = STATS[e.cmd.building]?.buildTicks ?? 1;
     ctx.font = '11px monospace';
     if (e.cmd.phase === 'moving') {
       ctx.fillStyle = '#88ccff';
-      ctx.fillText('→ Walking to site…', x, y);
+      ctx.fillText(`→ Going to build ${e.cmd.building}…`, x, y); y += LINE;
     } else {
-      const pct = Math.round(100 * (1 - e.cmd.ticksLeft / total));
       ctx.fillStyle = '#88ffcc';
-      ctx.fillText(`Building ${e.cmd.building}: ${pct}%`, x, y); y += LINE - 2;
-      drawProgressBar(ctx, x, y, 150, '#44cc88', pct);
+      ctx.fillText(`Building ${e.cmd.building}… (click site)`, x, y); y += LINE;
     }
+  }
+
+  // ── Construction site progress (shown on the scaffold entity) ──────────────
+  if (e.kind === 'construction' && e.constructionOf) {
+    const pct = Math.round(100 * e.hp / Math.max(1, e.hpMax));
+    ctx.fillStyle = '#88ffcc';
+    ctx.font = '11px monospace';
+    ctx.fillText(`${e.constructionOf}: ${pct}% built`, x, y); y += LINE - 2;
+    drawProgressBar(ctx, x, y, 150, '#44cc88', pct); y += 10;
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = '10px monospace';
+    ctx.fillText('RMB worker here to continue', x, y); y += LINE - 1;
   }
 
   // ── Gather status ───────────────────────────────────────────────────────────
@@ -329,10 +338,13 @@ function collectButtons(
     addButton('Stop\n[S]', 'stop');
   }
 
-  // ── Demolish (any player building except goldmine) ─────────────────────────
+  // ── Demolish / Cancel construction ─────────────────────────────────────────
   if (e.kind !== 'goldmine' && (STATS[e.kind]?.speed ?? 1) === 0) {
-    const refund = Math.floor((STATS[e.kind]?.cost ?? 0) * 0.8);
-    addButton(`Demolish\n[+${refund}g]`, 'demolish', false, true);
+    const isConst  = e.kind === 'construction';
+    const srcKind  = isConst ? (e.constructionOf ?? e.kind) : e.kind;
+    const refund   = Math.floor((STATS[srcKind]?.cost ?? 0) * (isConst ? 1.0 : 0.8));
+    const btnLabel = isConst ? `Cancel\n[+${refund}g]` : `Demolish\n[+${refund}g]`;
+    addButton(btnLabel, 'demolish', false, true);
   }
 }
 

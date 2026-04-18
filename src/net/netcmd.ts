@@ -8,7 +8,7 @@ import type { EntityKind, GameState } from '../types';
 import { isUnitKind, isWorkerKind } from '../types';
 import { STATS } from '../data/units';
 import { issueAttackCommand } from '../sim/combat';
-import { issueGatherCommand, issueTrainCommand, issueBuildCommand } from '../sim/economy';
+import { issueGatherCommand, issueTrainCommand, issueBuildCommand, issueResumeBuildCommand } from '../sim/economy';
 import { issueMoveCommand } from '../sim/commands';
 import { killEntity } from '../sim/entities';
 
@@ -22,7 +22,8 @@ export type NetCmd =
   | { k: 'build';   workerId: number; building: EntityKind; tx: number; ty: number }
   | { k: 'stop';    ids: number[] }
   | { k: 'rally';   buildingId: number; tx: number; ty: number }
-  | { k: 'demolish';buildingId: number };
+  | { k: 'demolish';buildingId: number }
+  | { k: 'resume';  workerId: number; siteId: number };
 
 export interface TickPacket {
   tick: number;
@@ -88,9 +89,20 @@ export function applyNetCmds(
                 !isUnitKind(en.kind) && en.kind !== 'goldmine',
         );
         if (b) {
-          state.gold[owner] += Math.floor((STATS[b.kind]?.cost ?? 0) * 0.8);
+          // Construction sites refund 100% (no work was wasted); finished buildings 80%
+          const srcKind  = b.kind === 'construction' ? (b.constructionOf ?? b.kind) : b.kind;
+          const refundPct = b.kind === 'construction' ? 1.0 : 0.8;
+          state.gold[owner] += Math.floor((STATS[srcKind]?.cost ?? 0) * refundPct);
           killEntity(state, b.id);
         }
+        break;
+      }
+      case 'resume': {
+        const w = state.entities.find(en =>
+          en.id === cmd.workerId && en.owner === owner && isWorkerKind(en.kind));
+        const s = state.entities.find(en =>
+          en.id === cmd.siteId && en.owner === owner && en.kind === 'construction');
+        if (w && s) issueResumeBuildCommand(w, s, state.tick);
         break;
       }
     }
