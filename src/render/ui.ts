@@ -1,5 +1,6 @@
-import type { Entity, EntityKind, GameState } from '../types';
-import { TILE_SIZE, isWorkerKind } from '../types';
+import type { Entity, EntityKind, GameState, OpeningPlan } from '../types';
+import type { SessionStats, SessionStatus } from '../net/session';
+import { SIM_HZ, TILE_SIZE, isUnitKind, isWorkerKind } from '../types';
 import { STATS } from '../data/units';
 import { RACES, ownerRace } from '../data/races';
 import type { Camera } from './camera';
@@ -30,6 +31,7 @@ export function drawUi(
   viewW: number,
   viewH: number,
   myOwner: 0 | 1 = 0,
+  onlineStatus?: { status: SessionStatus; statusMsg: string; stats: SessionStats } | null,
 ): UiButton[] {
   const panelY = viewH - PANEL_H;
   const buttons: UiButton[] = [];
@@ -43,6 +45,8 @@ export function drawUi(
   ctx.moveTo(0, panelY);
   ctx.lineTo(viewW, panelY);
   ctx.stroke();
+
+  if (onlineStatus) drawOnlineStrip(ctx, viewW, panelY, onlineStatus);
 
   const sel = [...selectedIds]
     .map(id => state.entities.find(e => e.id === id))
@@ -84,6 +88,47 @@ export function drawUi(
   return buttons;
 }
 
+function drawOnlineStrip(
+  ctx: CanvasRenderingContext2D,
+  viewW: number,
+  panelY: number,
+  onlineStatus: { status: SessionStatus; statusMsg: string; stats: SessionStats },
+): void {
+  const { status, stats } = onlineStatus;
+  const label =
+    status === 'ready' && stats.waitingStallTicks === 0 ? 'Online: stable' :
+    status === 'ready' ? 'Waiting for peer…' :
+    status === 'disconnected' ? 'Online: disconnected' :
+    status === 'error' ? 'Online: error' :
+    'Online: connecting…';
+  const detail = onlineStatus.statusMsg || label;
+  const color =
+    status === 'error' ? '#ff8888' :
+    status === 'disconnected' ? '#ffb366' :
+    stats.waitingStallTicks > 0 ? '#ffe97a' :
+    '#88ffcc';
+
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(viewW - 248, panelY + 6, 240, 32);
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.strokeRect(viewW - 247.5, panelY + 6.5, 239, 31);
+  ctx.fillStyle = color;
+  ctx.font = '11px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(label, viewW - 240, panelY + 16);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.62)';
+  ctx.font = '10px monospace';
+  ctx.fillText(detail.slice(0, 30), viewW - 240, panelY + 27);
+
+  const ageText = stats.lastPacketAgeMs === null ? 'no packets yet' : `${Math.round(stats.lastPacketAgeMs)}ms ago`;
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText(ageText, viewW - 16, panelY + 21);
+  ctx.textAlign = 'left';
+}
+
 function drawEmptyPanel(
   ctx: CanvasRenderingContext2D,
   panelY: number,
@@ -112,6 +157,50 @@ function drawPortrait(
   ctx.textAlign = 'center';
   ctx.fillText(e.kind[0].toUpperCase(), px + pw / 2, py + ph / 2 + 8);
   ctx.textAlign = 'left';
+}
+
+function inferOpeningPlan(state: GameState, owner: 0 | 1, entity?: Entity | null): OpeningPlan {
+  if (entity?.openingPlan) return entity.openingPlan;
+
+  const ownerEntities = state.entities.filter(en => en.owner === owner);
+  const townHall = ownerEntities.find(en => en.kind === 'townhall');
+  const barracks = ownerEntities.find(en => en.kind === 'barracks');
+  const workers = ownerEntities.filter(en => isWorkerKind(en.kind)).length;
+  const army = ownerEntities.filter(en => isUnitKind(en.kind) && !isWorkerKind(en.kind));
+  const ranged = army.filter(en => en.kind === ownerRace(state.races, owner).ranged).length;
+  const gold = state.gold[owner];
+
+  if (barracks?.openingPlan) return barracks.openingPlan;
+  if (townHall?.openingPlan) return townHall.openingPlan;
+  if (!barracks && workers < 4) return 'eco';
+  if (barracks && ranged > 0) return 'pressure';
+  if (!barracks && gold >= 300) return 'tempo';
+  if (army.length >= 3 && ranged * 2 >= army.length) return 'pressure';
+  return 'tempo';
+}
+
+function openingPlanText(plan: OpeningPlan): { title: string; body: string; risk: string } {
+  switch (plan) {
+    case 'eco':
+      return {
+        title: 'Economy opening',
+        body: 'Safer worker growth, slower first map presence',
+        risk: 'Risk: give up initiative if pressure arrives first',
+      };
+    case 'pressure':
+      return {
+        title: 'Pressure opening',
+        body: 'Forward rally and sharper ranged route pressure',
+        risk: 'Risk: fragile if you overextend without control',
+      };
+    case 'tempo':
+    default:
+      return {
+        title: 'Tempo opening',
+        body: 'Earlier army timing, weaker income curve',
+        risk: 'Risk: if timing whiffs, eco falls behind',
+      };
+  }
 }
 
 function drawEntityInfo(
@@ -162,6 +251,17 @@ function drawEntityInfo(
       `ATK:${stats.damage}  DEF:${stats.armor}  RNG:${rngStr}  SPD:${atkSpd}`,
       x, y,
     ); y += LINE;
+
+    const roleLabel =
+      e.kind === rc.soldier ? 'Role: frontline anchor' :
+      e.kind === rc.ranged ? 'Role: backline pressure' :
+      isWorkerKind(e.kind) ? 'Role: eco / build' :
+      null;
+    if (roleLabel) {
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.font = '10px monospace';
+      ctx.fillText(roleLabel, x, y); y += LINE - 1;
+    }
   }
 
   // ── Gold mine reserve ───────────────────────────────────────────────────────
@@ -169,6 +269,28 @@ function drawEntityInfo(
     ctx.fillStyle = '#ffe97a';
     ctx.font = '11px monospace';
     ctx.fillText(`Gold remaining: ${e.goldReserve ?? 0}`, x, y); y += LINE;
+
+    const myTownHall = state.entities.find(en => en.owner === myOwner && en.kind === 'townhall');
+    const enemyTownHall = state.entities.find(en => en.owner !== myOwner && en.kind === 'townhall');
+    const myDist = myTownHall ? Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y) : Infinity;
+    const enemyDist = enemyTownHall ? Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y) : Infinity;
+    const distanceGap = Math.abs(myDist - enemyDist);
+    const nearCenter = e.pos.x > 16 && e.pos.x < 48;
+    const isContested = nearCenter || distanceGap <= 8;
+    const mineLabel = isContested ? 'Contested mine, control matters' : myDist < enemyDist
+      ? 'Safer mine, eco anchor'
+      : 'Outer mine, route pressure matters';
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = '10px monospace';
+    ctx.fillText(mineLabel, x, y); y += LINE - 1;
+
+    const actionHint = isContested
+      ? 'Bring army or rally here before workers'
+      : myDist < enemyDist
+        ? 'Good target for worker saturation'
+        : 'Take it when you can defend the route';
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillText(actionHint, x, y); y += LINE - 1;
   }
 
   // ── Food slots (farms / town halls) ────────────────────────────────────────
@@ -180,14 +302,24 @@ function drawEntityInfo(
 
   // ── Pop + treasury (player-owned, non-goldmine) ─────────────────────────────
   if (e.owner === myOwner && e.kind !== 'goldmine') {
-    const popFull = state.pop[myOwner] >= state.popCap[myOwner];
-    ctx.fillStyle = popFull ? '#ff6666' : '#88ff88';
+    const pop = state.pop[myOwner];
+    const popCap = state.popCap[myOwner];
+    const popFull = pop >= popCap;
+    const popNearFull = !popFull && popCap > 0 && popCap - pop <= 1;
+    ctx.fillStyle = popFull ? '#ff6666' : popNearFull ? '#ffbb66' : '#88ff88';
     ctx.font = '11px monospace';
-    ctx.fillText(`Pop: ${state.pop[myOwner]}/${state.popCap[myOwner]}`, x, y);
+    ctx.fillText(`Pop: ${pop}/${popCap}`, x, y);
     ctx.fillStyle = '#ffe97a';
     ctx.font = 'bold 12px monospace';
     ctx.fillText(`${state.gold[myOwner]}g`, x + 90, y);
     y += LINE;
+
+    if (popFull || popNearFull) {
+      ctx.fillStyle = popFull ? '#ff7777' : '#ffcc88';
+      ctx.font = '10px monospace';
+      ctx.fillText(popFull ? 'Food full, add Farm now' : 'Food almost full, prep Farm', x, y);
+      y += LINE - 1;
+    }
   }
 
   // ── Carry gold (workers) ────────────────────────────────────────────────────
@@ -197,12 +329,60 @@ function drawEntityInfo(
     ctx.fillText(`Carrying: ${e.carryGold}g`, x, y); y += LINE;
   }
 
+  // ── Under attack clarity ───────────────────────────────────────────────────
+  if (typeof e.underAttackTick === 'number' && state.tick - e.underAttackTick <= SIM_HZ * 2) {
+    ctx.fillStyle = '#ff7777';
+    ctx.font = 'bold 10px monospace';
+    if (isWorkerKind(e.kind)) {
+      ctx.fillText('Harassed, pull back or defend', x, y); y += LINE - 1;
+    } else if (e.kind === 'construction') {
+      ctx.fillText('Build under pressure', x, y); y += LINE - 1;
+    } else {
+      ctx.fillText('Under attack', x, y); y += LINE - 1;
+    }
+  }
+
+  // ── Opening branch framing (townhall / barracks, player-owned) ─────────────
+  if ((e.kind === 'townhall' || e.kind === 'barracks') && e.owner === myOwner) {
+    const openingPlan = inferOpeningPlan(state, myOwner, e);
+    const openingCopy = openingPlanText(openingPlan);
+    ctx.fillStyle = '#88d8ff';
+    ctx.font = '10px monospace';
+    ctx.fillText(`${openingCopy.title}: ${openingPlan.toUpperCase()}`, x, y); y += LINE - 1;
+    ctx.fillStyle = 'rgba(255,255,255,0.52)';
+    ctx.fillText(openingCopy.body, x, y); y += LINE - 1;
+    ctx.fillStyle = 'rgba(255,220,140,0.55)';
+    ctx.fillText(openingCopy.risk, x, y); y += LINE - 1;
+  }
+
   // ── Rally point (townhall / barracks, player-owned) ────────────────────────
   if ((e.kind === 'townhall' || e.kind === 'barracks') && e.owner === myOwner) {
     ctx.font = '10px monospace';
     if (e.rallyPoint) {
       ctx.fillStyle = '#ffe840';
       ctx.fillText(`Rally → (${e.rallyPoint.x}, ${e.rallyPoint.y})`, x, y); y += LINE - 1;
+      const myTownHall = state.entities.find(en => en.owner === myOwner && en.kind === 'townhall');
+      const enemyTownHall = state.entities.find(en => en.owner !== myOwner && en.kind === 'townhall');
+      const myDist = myTownHall ? Math.hypot(e.rallyPoint.x - myTownHall.pos.x, e.rallyPoint.y - myTownHall.pos.y) : Infinity;
+      const enemyDist = enemyTownHall ? Math.hypot(e.rallyPoint.x - enemyTownHall.pos.x, e.rallyPoint.y - enemyTownHall.pos.y) : Infinity;
+      ctx.fillStyle = 'rgba(255,255,255,0.42)';
+      const openingPlan = inferOpeningPlan(state, myOwner, e);
+      const rallyText = Math.abs(myDist - enemyDist) <= 8
+        ? (openingPlan === 'eco'
+            ? 'Contested rally, you are leaving eco comfort'
+            : openingPlan === 'tempo'
+              ? 'Forward rally, good for first contest timing'
+              : 'Forward rally, ideal for pressure fights')
+        : myDist < enemyDist
+          ? (openingPlan === 'pressure'
+              ? 'Safe rally, pressure is not fully committed yet'
+              : openingPlan === 'tempo'
+                ? 'Safe rally, lets tempo army stabilize first'
+                : 'Safe rally, good for macro buildup')
+          : (openingPlan === 'pressure'
+              ? 'Deep rally, pressure branch is fully committed'
+              : 'Deep rally, commit only with map control');
+      ctx.fillText(rallyText, x, y); y += LINE - 1;
       ctx.fillStyle = 'rgba(255,255,255,0.28)';
       ctx.fillText('RMB empty ground to move rally', x, y); y += LINE - 1;
     } else {
@@ -309,16 +489,62 @@ function collectButtons(
   // ── Production buildings ────────────────────────────────────────────────────
   if (e.kind === 'townhall') {
     const workerCost = STATS[rc.worker]?.cost ?? 50;
+    const barracksCost = STATS['barracks']?.cost ?? 360;
+    const workerBusy = e.cmd?.type === 'train';
+    const ownerEntities = state.entities.filter(en => en.owner === myOwner);
+    const barracks = ownerEntities.find(en => en.kind === 'barracks');
+    const workers = ownerEntities.filter(en => isWorkerKind(en.kind)).length;
+    const canTempo = !barracks && state.gold[myOwner] >= Math.max(0, barracksCost - 120);
+    const canPressure = !!barracks || !!e.rallyPoint;
+
     addButton(`${rc.workerLabel} [V]\n[${workerCost}g]`, `train:${rc.worker}`,
       state.gold[myOwner] < workerCost);
+    if (!workerBusy && state.gold[myOwner] >= workerCost) {
+      addButton(
+        `${workers < 4 ? 'Eco branch' : 'Eco branch'}\nworker saturation`,
+        `plan:eco|train:${rc.worker}`,
+      );
+    }
+    addButton(
+      canTempo ? 'Tempo branch\nprep barracks timing' : 'Tempo branch\nsave for barracks',
+      'plan:tempo',
+      false,
+    );
+    addButton(
+      canPressure ? 'Pressure branch\nforward rally setup' : 'Pressure branch\nset rally, then commit',
+      'plan:pressure',
+      false,
+    );
   }
   if (e.kind === 'barracks') {
     const soldierCost = STATS[rc.soldier]?.cost ?? 80;
     const rangedCost  = STATS[rc.ranged]?.cost  ?? 100;
+    const myUnits = state.entities.filter(en => en.owner === myOwner && isUnitKind(en.kind));
+    const soldierCount = myUnits.filter(en => en.kind === rc.soldier).length;
+    const rangedCount = myUnits.filter(en => en.kind === rc.ranged).length;
+    const queue = e.cmd?.type === 'train' ? [e.cmd.unit, ...e.cmd.queue] : [];
+    const queuedSoldiers = queue.filter(kind => kind === rc.soldier).length;
+    const queuedRanged = queue.filter(kind => kind === rc.ranged).length;
+    const frontlineLead = soldierCount + queuedSoldiers - (rangedCount + queuedRanged);
+    const wantsFrontline = frontlineLead <= 1;
+    const wantsRanged = rangedCount + queuedRanged < Math.max(1, Math.floor((soldierCount + queuedSoldiers) / 2));
+
     addButton(`${rc.soldierLabel} [T]\n[${soldierCost}g]`, `train:${rc.soldier}`,
       state.gold[myOwner] < soldierCost);
     addButton(`${rc.rangedLabel} [A]\n[${rangedCost}g]`, `train:${rc.ranged}`,
       state.gold[myOwner] < rangedCost);
+    if (state.gold[myOwner] >= soldierCost) {
+      addButton(
+        wantsFrontline ? 'Tempo branch\nfrontline now' : 'Frontline add\nhold the line',
+        `plan:tempo|train:${rc.soldier}`,
+      );
+    }
+    if (state.gold[myOwner] >= rangedCost) {
+      addButton(
+        wantsRanged ? 'Pressure branch\nranged timing' : 'Backline add\nkeep pressure up',
+        `plan:pressure|train:${rc.ranged}`,
+      );
+    }
   }
 
   // ── Worker build menu (workers + peons both show build buttons) ─────────────
@@ -331,6 +557,9 @@ function collectButtons(
     addButton(`${barrLabel} [B]\n[${barrCost}g]`, 'build:barracks', state.gold[myOwner] < barrCost);
     addButton(`${farmLabel} [F]\n[${farmCost}g]`, 'build:farm',     state.gold[myOwner] < farmCost);
     addButton(`Wall [W]\n[${wallCost}g]`,          'build:wall',     state.gold[myOwner] < wallCost);
+    if (state.gold[myOwner] >= wallCost) {
+      addButton('Hold line\nquick wall', 'build:wall');
+    }
   }
 
   // ── Stop (any player unit/building with an active command) ──────────────────

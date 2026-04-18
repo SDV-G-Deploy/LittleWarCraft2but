@@ -1,5 +1,5 @@
 import type { Entity, EntityKind, GameState, Vec2 } from '../types';
-import { GATHER_TICKS, GATHER_AMOUNT, MAP_W, MAP_H, isUnitKind, isWorkerKind } from '../types';
+import { GATHER_TICKS, GATHER_AMOUNT, MAP_W, MAP_H, SIM_HZ, isUnitKind, isWorkerKind } from '../types';
 import { STATS, ticksPerStep } from '../data/units';
 import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity } from './entities';
 import { findPath } from './pathfinding';
@@ -165,12 +165,25 @@ export function processTrain(state: GameState, building: Entity): void {
   const spawnPos = findSpawnTile(state, sx, sy);
   const newUnit  = spawnEntity(state, cmd.unit, building.owner as 0 | 1, spawnPos);
 
+  if (building.openingPlan && state.tick <= SIM_HZ * 240) {
+    newUnit.openingPlan = building.openingPlan;
+  }
+
   // Walk to rally point immediately if one is set
   if (building.rallyPoint) {
     const rp   = building.rallyPoint;
     const path = findPath(state, spawnPos.x, spawnPos.y, rp.x, rp.y);
     if (path && path.length > 0) {
-      newUnit.cmd = { type: 'move', path, stepTick: state.tick, attackMove: false };
+      newUnit.cmd = {
+        type: 'move',
+        path,
+        stepTick: state.tick,
+        attackMove: false,
+        goal: { ...rp },
+        lastPos: { ...spawnPos },
+        lastProgressTick: state.tick,
+        repathCount: 0,
+      };
     }
   }
 

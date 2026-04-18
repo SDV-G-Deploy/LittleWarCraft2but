@@ -1,5 +1,5 @@
 import { SIM_TICK_MS, TILE_SIZE, CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL,
-         isUnitKind, isWorkerKind, type EntityKind, type Race, type MapId } from './types';
+         isUnitKind, isWorkerKind, type EntityKind, type Race, type MapId, type OpeningPlan } from './types';
 import { createWorld } from './sim/world';
 import { spawnEntity, killEntity } from './sim/entities';
 import { processCommand, issueMoveCommand, separateUnits, autoAttackPass } from './sim/commands';
@@ -9,6 +9,7 @@ import { updateFog } from './sim/fogofwar';
 import { createAI, tickAI, AIController } from './sim/ai';
 import { render, drawMinimap, resetRenderCache, MINI_SCALE, MINI_W, MINI_H, MINI_PAD } from './render/renderer';
 import { drawUi, drawGhostBuilding, UiButton } from './render/ui';
+import { drawCommandMarkers, type CommandMarker } from './render/markers';
 import { createCamera, clampCamera, screenToTile, screenToWorld } from './render/camera';
 import { createKeyState } from './input/keyboard';
 import { createMouseState } from './input/mouse';
@@ -69,13 +70,38 @@ export function startGame(
   const myOwner   = options.myOwner ?? 0;
   const peerOwner = (myOwner === 0 ? 1 : 0) as 0 | 1;
   const myRC      = RACES[state.races[myOwner]];
+  const commandMarkers: CommandMarker[] = [];
 
   /**
    * Emit a command.
    * Offline: apply immediately.
    * Online: queue for delayed, symmetric mini-lockstep execution.
    */
+  function pushMarker(kind: CommandMarker['kind'], tx: number, ty: number): void {
+    commandMarkers.push({
+      kind,
+      wx: (tx + 0.5) * TILE_SIZE,
+      wy: (ty + 0.5) * TILE_SIZE,
+      createdAt: performance.now(),
+      ttlMs: kind === 'attack' ? 420 : kind === 'error' ? 520 : 620,
+    });
+  }
+
+  function showMoveRejectedMarker(tx: number, ty: number): void {
+    pushMarker('error', tx, ty);
+  }
+
   function emit(cmd: NetCmd): void {
+    if (cmd.k === 'move') pushMarker('move', cmd.tx, cmd.ty);
+    else if (cmd.k === 'attack') {
+      const target = state.entities.find(e => e.id === cmd.targetId);
+      if (target) pushMarker('attack', target.pos.x + Math.floor(target.tileW / 2), target.pos.y + Math.floor(target.tileH / 2));
+    } else if (cmd.k === 'gather') {
+      const mine = state.entities.find(e => e.id === cmd.mineId);
+      if (mine) pushMarker('gather', mine.pos.x, mine.pos.y);
+    } else if (cmd.k === 'build') pushMarker('build', cmd.tx, cmd.ty);
+    else if (cmd.k === 'rally') pushMarker('rally', cmd.tx, cmd.ty);
+
     if (net) {
       net.push(cmd);
     } else {
@@ -320,7 +346,7 @@ export function startGame(
               e.id === id && e.owner === myOwner &&
               (e.kind === 'townhall' || e.kind === 'barracks'),
             );
-            if (bldg) emit({ k: 'rally', buildingId: bldg.id, tx, ty });
+            if (bldg) emit({ k: 'rally', buildingId: bldg.id, tx, ty, plan: bldg.openingPlan });
           }
         }
 
@@ -360,7 +386,20 @@ export function startGame(
             const e = state.entities.find(en => en.id === id);
             return e && isUnitKind(e.kind) && e.owner === myOwner;
           });
-          if (moverIds.length) emit({ k: 'move', ids: moverIds, tx, ty, atk: attackMoveHeld });
+          if (moverIds.length) {
+            const hadOrdersBefore = moverIds.some(id => {
+              const e = state.entities.find(en => en.id === id);
+              return !!e?.cmd;
+            });
+            emit({ k: 'move', ids: moverIds, tx, ty, atk: attackMoveHeld });
+            const anyAccepted = moverIds.some(id => {
+              const e = state.entities.find(en => en.id === id);
+              return e?.cmd?.type === 'move';
+            });
+            if (!net && !anyAccepted && !hadOrdersBefore) {
+              showMoveRejectedMarker(tx, ty);
+            }
+          }
         }
       }
     }
@@ -373,6 +412,33 @@ export function startGame(
   }
 
   function handleUiAction(action: string): void {
+    const parts = action.split('|');
+    let pendingPlan: OpeningPlan | null = null;
+    let pendingAction = '';
+
+    for (const part of parts) {
+      if (part.startsWith('plan:')) {
+        pendingPlan = part.slice(5) as OpeningPlan;
+      } else if (part) {
+        pendingAction = part;
+      }
+    }
+
+    if (pendingPlan) {
+      for (const id of selectedIds) {
+        const building = state.entities.find(e =>
+          e.id === id && e.owner === myOwner && (e.kind === 'townhall' || e.kind === 'barracks'));
+        if (!building) continue;
+        building.openingPlan = pendingPlan;
+        if (building.rallyPoint) {
+          emit({ k: 'rally', buildingId: building.id, tx: building.rallyPoint.x, ty: building.rallyPoint.y, plan: pendingPlan });
+        }
+      }
+      if (!pendingAction) return;
+    }
+
+    action = pendingAction;
+
     if (action.startsWith('train:')) {
       const unit = action.slice(6) as EntityKind;
       for (const id of selectedIds) {
@@ -414,8 +480,13 @@ export function startGame(
     if (net) {
       const exchange = net.exchange(state.tick);
       if (!exchange.ready) return;
-      if (exchange.local.length > 0) applyNetCmds(state, exchange.local, myOwner);
-      if (exchange.remote.length > 0) applyNetCmds(state, exchange.remote, peerOwner);
+      if (myOwner === 0) {
+        if (exchange.local.length > 0) applyNetCmds(state, exchange.local, 0);
+        if (exchange.remote.length > 0) applyNetCmds(state, exchange.remote, 1);
+      } else {
+        if (exchange.remote.length > 0) applyNetCmds(state, exchange.remote, 0);
+        if (exchange.local.length > 0) applyNetCmds(state, exchange.local, 1);
+      }
     }
 
     state.tick++;
@@ -513,7 +584,15 @@ export function startGame(
       drawGhostBuilding(ctx, state, cam, placementMode.building, tx, ty);
     }
     drawDragBox();
-    uiButtons = drawUi(ctx, state, selectedIds, canvas.width, viewH, myOwner);
+    for (let i = commandMarkers.length - 1; i >= 0; i--) {
+      if (now - commandMarkers[i].createdAt >= commandMarkers[i].ttlMs) commandMarkers.splice(i, 1);
+    }
+    drawCommandMarkers(ctx, cam, commandMarkers, now);
+    uiButtons = drawUi(ctx, state, selectedIds, canvas.width, viewH, myOwner, net ? {
+      status: net.status,
+      statusMsg: net.statusMsg,
+      stats: net.getStats(),
+    } : null);
     drawGroupBadges();
     drawResultOverlay();
 

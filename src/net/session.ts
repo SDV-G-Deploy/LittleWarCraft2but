@@ -34,6 +34,13 @@ export interface SessionConfig {
   mapId:     MapId;
 }
 
+export interface SessionStats {
+  waitingStallTicks: number;
+  remoteAnnouncedUpToTick: number;
+  currentDelayTicks: number;
+  lastPacketAgeMs: number | null;
+}
+
 export interface NetSession {
   role:    'host' | 'guest';
   code:    string;          // room code = host's PeerJS ID
@@ -48,6 +55,7 @@ export interface NetSession {
 
   push(cmd: NetCmd): void;
   exchange(tick: number): TickExchange;
+  getStats(): SessionStats;
   destroy(): void;
 }
 
@@ -163,6 +171,7 @@ export function createSession(
   let waitingStallTicks = 0;
   let inboundWindowStartedAt = Date.now();
   let inboundPacketsInWindow = 0;
+  let lastPacketReceivedAt: number | null = null;
 
   function failConnection(reason: string): void {
     session.status = 'error';
@@ -291,6 +300,15 @@ export function createSession(
       return { ready: true, local, remote };
     },
 
+    getStats() {
+      return {
+        waitingStallTicks,
+        remoteAnnouncedUpToTick,
+        currentDelayTicks: EXECUTION_DELAY_TICKS,
+        lastPacketAgeMs: lastPacketReceivedAt === null ? null : Math.max(0, Date.now() - lastPacketReceivedAt),
+      };
+    },
+
     destroy() {
       conn?.close();
       peer.destroy();
@@ -339,6 +357,7 @@ export function createSession(
         return;
       }
 
+      lastPacketReceivedAt = Date.now();
       const msg = raw as WireMessage;
 
       // Host receives guest's race → replies with full config → both start

@@ -85,8 +85,11 @@ export function processAttack(state: GameState, entity: Entity): void {
 
     const dmg       = stats?.damage ?? 0;
     const armor     = STATS[target.kind]?.armor ?? 0;
-    const netDmg    = Math.max(1, dmg - armor);
+    const workerPressureBonus = !isUnitKind(entity.kind) ? 0 : (target.kind === 'worker' || target.kind === 'peon') ? 1 : 0;
+    const constructionPressureBonus = target.kind === 'construction' ? 1 : 0;
+    const netDmg    = Math.max(1, dmg - armor + workerPressureBonus + constructionPressureBonus);
     target.hp      -= netDmg;
+    target.underAttackTick = state.tick;
     cmd.cooldownTick = state.tick + (STATS[entity.kind]?.attackTicks ?? SIM_HZ);
 
     if (target.hp <= 0) {

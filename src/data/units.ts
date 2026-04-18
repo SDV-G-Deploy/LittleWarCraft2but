@@ -19,42 +19,42 @@ export const STATS: Partial<Record<EntityKind, UnitStats>> = {
   // ── Human units ──────────────────────────────────────────────────────────────
   worker: {
     hp: 30,  damage: 3, armor: 0, range: 1,
-    speed: 4, sight: 4, cost: 50,  buildTicks: SIM_HZ * 10,
+    speed: 4, sight: 4, cost: 55,  buildTicks: SIM_HZ * 9,
     attackTicks: SIM_HZ,
     tileW: 1, tileH: 1,
   },
   footman: {
-    hp: 60,  damage: 8, armor: 2, range: 1,
-    speed: 4, sight: 5, cost: 80,  buildTicks: SIM_HZ * 15,
+    hp: 72,  damage: 8, armor: 3, range: 1,
+    speed: 4, sight: 5, cost: 85,  buildTicks: SIM_HZ * 14,
     attackTicks: SIM_HZ,
     tileW: 1, tileH: 1,
   },
   archer: {
-    hp: 40,  damage: 6, armor: 0, range: 5,
-    speed: 4, sight: 6, cost: 100, buildTicks: SIM_HZ * 18,
-    attackTicks: Math.round(SIM_HZ * 1.5),
+    hp: 34,  damage: 8, armor: 0, range: 5,
+    speed: 4, sight: 7, cost: 95, buildTicks: SIM_HZ * 17,
+    attackTicks: Math.round(SIM_HZ * 1.4),
     tileW: 1, tileH: 1,
   },
   // ── Orc units ────────────────────────────────────────────────────────────────
   peon: {
     // Same utility as worker, different visual — same cost/stats for balance
     hp: 30,  damage: 3, armor: 0, range: 1,
-    speed: 4, sight: 4, cost: 50,  buildTicks: SIM_HZ * 10,
+    speed: 4, sight: 4, cost: 55,  buildTicks: SIM_HZ * 9,
     attackTicks: SIM_HZ,
     tileW: 1, tileH: 1,
   },
   grunt: {
     // Beefier than footman: more HP, more damage, slower attack, costs more
-    hp: 80,  damage: 10, armor: 3, range: 1,
-    speed: 3, sight: 5, cost: 100, buildTicks: SIM_HZ * 18,
+    hp: 92,  damage: 10, armor: 4, range: 1,
+    speed: 3, sight: 5, cost: 105, buildTicks: SIM_HZ * 17,
     attackTicks: Math.round(SIM_HZ * 1.2),
     tileW: 1, tileH: 1,
   },
   troll: {
     // Shorter range than archer, higher damage per hit, same cost
-    hp: 40,  damage: 8, armor: 0, range: 4,
-    speed: 4, sight: 6, cost: 100, buildTicks: SIM_HZ * 18,
-    attackTicks: Math.round(SIM_HZ * 1.5),
+    hp: 36,  damage: 10, armor: 0, range: 4,
+    speed: 4, sight: 7, cost: 95, buildTicks: SIM_HZ * 17,
+    attackTicks: Math.round(SIM_HZ * 1.4),
     tileW: 1, tileH: 1,
   },
   // ── Buildings (shared by both races, sprite varies by owner's race) ──────────
@@ -66,13 +66,13 @@ export const STATS: Partial<Record<EntityKind, UnitStats>> = {
   },
   barracks: {
     hp: 800,  damage: 0, armor: 3, range: 0,
-    speed: 0, sight: 4, cost: 400, buildTicks: SIM_HZ * 40,
+    speed: 0, sight: 4, cost: 360, buildTicks: SIM_HZ * 34,
     attackTicks: 0,
     tileW: 3, tileH: 2,
   },
   farm: {
     hp: 400,  damage: 0, armor: 1, range: 0,
-    speed: 0, sight: 4, cost: 250, buildTicks: SIM_HZ * 25,
+    speed: 0, sight: 4, cost: 180, buildTicks: SIM_HZ * 18,
     attackTicks: 0,
     tileW: 2, tileH: 2,
   },

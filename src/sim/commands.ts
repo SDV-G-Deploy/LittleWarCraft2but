@@ -1,4 +1,4 @@
-import type { GameState, Entity } from '../types';
+import type { GameState, Entity, Vec2 } from '../types';
 import { MAP_W, MAP_H, isUnitKind, isRangedUnit } from '../types';
 import { findPath } from './pathfinding';
 import { ticksPerStep } from '../data/units';
@@ -8,17 +8,98 @@ import { isTileBlockedByEntity } from './entities';
 
 /** Issue a move-to-tile command on an entity. Replaces current command.
  *  Pass attackMove=true to make the unit auto-attack enemies seen en route. */
+const MOVE_STUCK_TICKS = 10;
+const MOVE_REPATH_LIMIT = 3;
+const MOVE_FALLBACK_RADIUS = 2;
+
+function isTileOccupiedByOtherUnit(state: GameState, entity: Entity, tx: number, ty: number): boolean {
+  return state.entities.some(other =>
+    other.id !== entity.id &&
+    isUnitKind(other.kind) &&
+    other.pos.x === tx &&
+    other.pos.y === ty,
+  );
+}
+
+function findDeterministicSidestep(state: GameState, entity: Entity, blocked: Vec2): Vec2 | null {
+  let best: Vec2 | null = null;
+  let bestDist = Infinity;
+
+  for (const d of NUDGE_DIRS) {
+    const nx = entity.pos.x + d.x;
+    const ny = entity.pos.y + d.y;
+    if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H) continue;
+    if (!state.tiles[ny][nx].passable) continue;
+    if (isTileBlockedByEntity(state, nx, ny)) continue;
+    if (isTileOccupiedByOtherUnit(state, entity, nx, ny)) continue;
+
+    const dist = Math.max(Math.abs(blocked.x - nx), Math.abs(blocked.y - ny));
+    if (!best || dist < bestDist) {
+      best = { x: nx, y: ny };
+      bestDist = dist;
+    }
+  }
+
+  return best;
+}
+
+function clampGoalToMap(tx: number, ty: number): Vec2 {
+  return {
+    x: Math.max(0, Math.min(MAP_W - 1, tx)),
+    y: Math.max(0, Math.min(MAP_H - 1, ty)),
+  };
+}
+
+function findNearbyMoveGoal(state: GameState, entity: Entity, tx: number, ty: number): Vec2 | null {
+  const clamped = clampGoalToMap(tx, ty);
+  const candidates: Vec2[] = [clamped];
+  for (let r = 1; r <= MOVE_FALLBACK_RADIUS; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        candidates.push(clampGoalToMap(clamped.x + dx, clamped.y + dy));
+      }
+    }
+  }
+
+  let best: Vec2 | null = null;
+  let bestPath: Vec2[] | null = null;
+  for (const c of candidates) {
+    const path = findPath(state, entity.pos.x, entity.pos.y, c.x, c.y);
+    if (!path) continue;
+    if (!bestPath || path.length < bestPath.length) {
+      best = c;
+      bestPath = path;
+    }
+  }
+  return best;
+}
+
 export function issueMoveCommand(
   state: GameState,
   entity: Entity,
   tx: number,
   ty: number,
   attackMove = false,
-): void {
-  const path = findPath(state, entity.pos.x, entity.pos.y, tx, ty);
-  if (!path || path.length === 0) return;
+): boolean {
+  const goal = findNearbyMoveGoal(state, entity, tx, ty);
+  if (!goal) return false;
 
-  entity.cmd = { type: 'move', path, stepTick: state.tick, attackMove };
+  const path = findPath(state, entity.pos.x, entity.pos.y, goal.x, goal.y);
+  if (!path || path.length === 0) return false;
+
+  entity.cmd = {
+    type: 'move',
+    path,
+    stepTick: state.tick,
+    attackMove,
+    goal,
+    lastPos: { ...entity.pos },
+    lastProgressTick: state.tick,
+    repathCount: 0,
+  };
+
+  return true;
 }
 
 /** True if unit is standing still (idle or in a non-moving active phase). */
@@ -118,12 +199,75 @@ export function processCommand(state: GameState, entity: Entity): void {
       const tps = ticksPerStep(entity.kind);
       if (state.tick - cmd.stepTick < tps) return;
 
+      if (entity.pos.x !== cmd.lastPos.x || entity.pos.y !== cmd.lastPos.y) {
+        cmd.lastPos = { ...entity.pos };
+        cmd.lastProgressTick = state.tick;
+      } else if (state.tick - cmd.lastProgressTick >= MOVE_STUCK_TICKS && cmd.repathCount < MOVE_REPATH_LIMIT) {
+        const fallbackGoal = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
+        const newPath = fallbackGoal
+          ? findPath(state, entity.pos.x, entity.pos.y, fallbackGoal.x, fallbackGoal.y)
+          : null;
+        cmd.lastProgressTick = state.tick;
+        cmd.lastPos = { ...entity.pos };
+        cmd.repathCount++;
+        if (fallbackGoal && newPath && newPath.length > 0) {
+          cmd.goal = fallbackGoal;
+          cmd.path = newPath;
+          cmd.stepTick = state.tick;
+        }
+      }
+
       if (cmd.path.length === 0) { entity.cmd = null; return; }
 
-      const next = cmd.path.shift()!;
+      const next = cmd.path[0]!;
+      if (isTileOccupiedByOtherUnit(state, entity, next.x, next.y)) {
+        const sidestep = findDeterministicSidestep(state, entity, next);
+        cmd.lastProgressTick = state.tick;
+        cmd.lastPos = { ...entity.pos };
+
+        if (sidestep) {
+          entity.pos.x = sidestep.x;
+          entity.pos.y = sidestep.y;
+          const fallbackGoal = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
+          const newPath = fallbackGoal
+            ? findPath(state, entity.pos.x, entity.pos.y, fallbackGoal.x, fallbackGoal.y)
+            : null;
+          cmd.stepTick = state.tick;
+          cmd.lastPos = { ...entity.pos };
+          cmd.lastProgressTick = state.tick;
+          if (fallbackGoal && newPath && newPath.length > 0) {
+            cmd.goal = fallbackGoal;
+            cmd.path = newPath;
+            cmd.repathCount = 0;
+          } else {
+            cmd.path = [];
+          }
+          break;
+        }
+
+        if (cmd.repathCount < MOVE_REPATH_LIMIT) {
+          const fallbackGoal = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
+          const newPath = fallbackGoal
+            ? findPath(state, entity.pos.x, entity.pos.y, fallbackGoal.x, fallbackGoal.y)
+            : null;
+          cmd.repathCount++;
+          if (fallbackGoal && newPath && newPath.length > 0) {
+            cmd.goal = fallbackGoal;
+            cmd.path = newPath;
+            cmd.stepTick = state.tick;
+          }
+        }
+        return;
+      }
+
+      cmd.path.shift();
       entity.pos.x = next.x;
       entity.pos.y = next.y;
       cmd.stepTick = state.tick;
+      if (entity.pos.x !== cmd.lastPos.x || entity.pos.y !== cmd.lastPos.y) {
+        cmd.lastPos = { ...entity.pos };
+        cmd.lastProgressTick = state.tick;
+      }
       break;
     }
     case 'attack': {

@@ -4,7 +4,7 @@
  * Each one maps 1-to-1 with a game action; peer applies them as owner=peerOwner.
  */
 
-import type { EntityKind, GameState } from '../types';
+import type { EntityKind, GameState, OpeningPlan } from '../types';
 import { isUnitKind, isWorkerKind } from '../types';
 import { STATS } from '../data/units';
 import { issueAttackCommand } from '../sim/combat';
@@ -21,13 +21,58 @@ export type NetCmd =
   | { k: 'train';   buildingId: number; unit: EntityKind }
   | { k: 'build';   workerId: number; building: EntityKind; tx: number; ty: number }
   | { k: 'stop';    ids: number[] }
-  | { k: 'rally';   buildingId: number; tx: number; ty: number }
+  | { k: 'rally';   buildingId: number; tx: number; ty: number; plan?: OpeningPlan }
   | { k: 'demolish';buildingId: number }
   | { k: 'resume';  workerId: number; siteId: number };
 
 export interface TickPacket {
   tick: number;
   cmds: NetCmd[];
+}
+
+function sortUnitIds(ids: number[]): number[] {
+  return [...ids].sort((a, b) => a - b);
+}
+
+function buildMoveSpreadOffsets(count: number): { x: number; y: number }[] {
+  const offsets: { x: number; y: number }[] = [{ x: 0, y: 0 }];
+  if (count <= 1) return offsets;
+
+  for (let r = 1; offsets.length < count; r++) {
+    for (let x = -r + 1; x <= r && offsets.length < count; x++) {
+      offsets.push({ x, y: -r });
+    }
+    for (let y = -r + 1; y <= r && offsets.length < count; y++) {
+      offsets.push({ x: r, y });
+    }
+    for (let x = r - 1; x >= -r && offsets.length < count; x--) {
+      offsets.push({ x, y: r });
+    }
+    for (let y = r - 1; y >= -r && offsets.length < count; y--) {
+      offsets.push({ x: -r, y });
+    }
+  }
+
+  return offsets;
+}
+
+function assignMoveDestinations(ids: number[], tx: number, ty: number): Map<number, { x: number; y: number }> {
+  const assigned = new Map<number, { x: number; y: number }>();
+  const sorted = sortUnitIds(ids);
+  const offsets = buildMoveSpreadOffsets(sorted.length);
+
+  for (let i = 0; i < sorted.length; i++) {
+    const offset = offsets[i] ?? { x: 0, y: 0 };
+    assigned.set(sorted[i], { x: tx + offset.x, y: ty + offset.y });
+  }
+
+  return assigned;
+}
+
+function buildMoveFallbackDestinations(tx: number, ty: number): { x: number; y: number }[] {
+  return buildMoveSpreadOffsets(9)
+    .slice(1)
+    .map(offset => ({ x: tx + offset.x, y: ty + offset.y }));
 }
 
 // ─── Apply ────────────────────────────────────────────────────────────────────
@@ -41,21 +86,35 @@ export function applyNetCmds(
   for (const cmd of cmds) {
     switch (cmd.k) {
       case 'move': {
-        for (const id of cmd.ids) {
+        const destinations = assignMoveDestinations(cmd.ids, cmd.tx, cmd.ty);
+        const fallbackDestinations = buildMoveFallbackDestinations(cmd.tx, cmd.ty);
+        for (const id of sortUnitIds(cmd.ids)) {
           const e = state.entities.find(en => en.id === id && en.owner === owner && isUnitKind(en.kind));
-          if (e) issueMoveCommand(state, e, cmd.tx, cmd.ty, cmd.atk);
+          if (!e) continue;
+
+          const primary = destinations.get(id) ?? { x: cmd.tx, y: cmd.ty };
+          let issued = issueMoveCommand(state, e, primary.x, primary.y, cmd.atk);
+          if (!issued) {
+            issued = issueMoveCommand(state, e, cmd.tx, cmd.ty, cmd.atk);
+          }
+          if (!issued) {
+            for (const fallback of fallbackDestinations) {
+              issued = issueMoveCommand(state, e, fallback.x, fallback.y, cmd.atk);
+              if (issued) break;
+            }
+          }
         }
         break;
       }
       case 'attack': {
-        for (const id of cmd.ids) {
+        for (const id of sortUnitIds(cmd.ids)) {
           const e = state.entities.find(en => en.id === id && en.owner === owner && isUnitKind(en.kind));
           if (e) issueAttackCommand(e, cmd.targetId, state.tick);
         }
         break;
       }
       case 'gather': {
-        for (const id of cmd.ids) {
+        for (const id of sortUnitIds(cmd.ids)) {
           const e = state.entities.find(en => en.id === id && en.owner === owner && isWorkerKind(en.kind));
           if (e) issueGatherCommand(e, cmd.mineId, state.tick);
         }
@@ -72,7 +131,7 @@ export function applyNetCmds(
         break;
       }
       case 'stop': {
-        for (const id of cmd.ids) {
+        for (const id of sortUnitIds(cmd.ids)) {
           const e = state.entities.find(en => en.id === id && en.owner === owner);
           if (e) e.cmd = null;
         }
@@ -80,7 +139,10 @@ export function applyNetCmds(
       }
       case 'rally': {
         const b = state.entities.find(en => en.id === cmd.buildingId && en.owner === owner);
-        if (b) b.rallyPoint = { x: cmd.tx, y: cmd.ty };
+        if (b) {
+          b.rallyPoint = { x: cmd.tx, y: cmd.ty };
+          if (cmd.plan) b.openingPlan = cmd.plan;
+        }
         break;
       }
       case 'demolish': {

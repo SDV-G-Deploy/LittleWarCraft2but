@@ -96,6 +96,7 @@ export function tickAI(state: GameState, ai: AIController): void {
     // ── Assault: send army toward player base ─────────────────────────────────
     case 'assault': {
       const playerTH = es.find(e => e.owner === 0 && e.kind === 'townhall');
+      const contestedMine = bestContestedMine(state, 1);
 
       for (const s of mySoldiers) {
         if (s.cmd && s.cmd.type !== 'move') continue;
@@ -106,6 +107,8 @@ export function tickAI(state: GameState, ai: AIController): void {
 
         if (nearest) {
           issueAttackCommand(s, nearest.id, state.tick);
+        } else if (contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > 6) {
+          issueMoveCommand(state, s, contestedMine.pos.x, contestedMine.pos.y - 1);
         } else if (playerTH) {
           issueMoveCommand(state, s, playerTH.pos.x + 1, playerTH.pos.y + 2);
         }
@@ -178,6 +181,27 @@ function nearestPlayerUnit(state: GameState, unit: Entity): Entity | null {
     if (e.owner !== 0 || !isUnitKind(e.kind)) continue;
     const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
     if (d < bestD) { bestD = d; best = e; }
+  }
+  return best;
+}
+
+function bestContestedMine(state: GameState, owner: 0 | 1): Entity | null {
+  let best: Entity | null = null;
+  let bestScore = -Infinity;
+  const myTownHall = state.entities.find(e => e.owner === owner && e.kind === 'townhall');
+  const enemyTownHall = state.entities.find(e => e.owner !== owner && e.kind === 'townhall');
+  if (!myTownHall || !enemyTownHall) return null;
+
+  for (const e of state.entities) {
+    if (e.kind !== 'goldmine' || (e.goldReserve ?? 0) <= 0) continue;
+    const myDist = Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y);
+    const enemyDist = Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y);
+    const centerBias = e.pos.x > 16 && e.pos.x < 48 ? 6 : 0;
+    const score = (e.goldReserve ?? 0) / 100 + centerBias - Math.abs(myDist - enemyDist) * 0.2;
+    if (score > bestScore) {
+      best = e;
+      bestScore = score;
+    }
   }
   return best;
 }

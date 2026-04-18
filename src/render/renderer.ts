@@ -327,6 +327,15 @@ function drawUnit(
     ctx.arc(sx + TILE_SIZE - 4, sy + 4, 3, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  // Quick role readability
+  if (e.kind === 'archer' || e.kind === 'troll') {
+    ctx.strokeStyle = 'rgba(255, 232, 64, 0.75)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(sx + TILE_SIZE / 2, sy + TILE_SIZE / 2, TILE_SIZE * 0.22, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 }
 
 function drawBuilding(
@@ -499,7 +508,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, state: GameState, myOwner: 0 | 1
   const popFull = state.pop[myOwner] >= state.popCap[myOwner];
   // Backdrop
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillRect(4, 4, 320, 22);
+  ctx.fillRect(4, 4, 420, 36);
   // Gold icon (small yellow diamond)
   ctx.fillStyle = '#e8c828';
   ctx.beginPath();
@@ -522,4 +531,24 @@ function drawHUD(ctx: CanvasRenderingContext2D, state: GameState, myOwner: 0 | 1
   ctx.fillStyle = '#888880';
   ctx.font = '11px monospace';
   ctx.fillText(`⏱ ${state.tick}`, 200, 20);
+
+  // Map pressure hint
+  const myTownHall = state.entities.find(e => e.owner === myOwner && e.kind === 'townhall');
+  const enemyTownHall = state.entities.find(e => e.owner !== myOwner && e.kind === 'townhall');
+  const contestedMines = state.entities.filter(e => {
+    if (e.kind !== 'goldmine') return false;
+    if (!myTownHall || !enemyTownHall) return e.pos.x > 16 && e.pos.x < 48;
+    const myDist = Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y);
+    const enemyDist = Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y);
+    return e.pos.x > 16 && e.pos.x < 48 || Math.abs(myDist - enemyDist) <= 8;
+  }).length;
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = '10px monospace';
+  const mapLabel = state.mapName ?? 'Map';
+  const pressureHint = contestedMines >= 2
+    ? 'Pressure: rally army toward contested mines first'
+    : contestedMines > 0
+      ? 'Pressure: secure one forward route, then expand'
+      : 'Pressure: scout outer routes before greedy mining';
+  ctx.fillText(`${mapLabel}  |  ${pressureHint}`, 4, 34);
 }

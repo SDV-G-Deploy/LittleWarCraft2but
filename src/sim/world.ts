@@ -17,5 +17,7 @@ export function createWorld(mapData: MapData, races: [Race, Race]): GameState {
     pop:      [0, 0],
     popCap:   [4, 4],
     races,
+    mapName: mapData.name,
+    mapDescription: mapData.description,
   };
 }
