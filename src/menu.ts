@@ -358,15 +358,31 @@ export function runMenu(
         lines: [
           'Workers (Peasant / Peon) gather gold from mines.',
           'Build Farms to raise your population cap.',
-          'Build a Barracks to train soldiers.',
+          'Build a Barracks to train frontline and ranged units.',
+        ],
+      },
+      {
+        heading: 'Opening Plans',
+        lines: [
+          'Eco: add workers first for safer growth and later strength.',
+          'Tempo: reach Barracks and frontline timing sooner.',
+          'Pressure: use forward rally and ranged timing to contest space early.',
+        ],
+      },
+      {
+        heading: 'Map Pressure',
+        lines: [
+          'Contested mines matter most early. Fight for them before greedy mining.',
+          'During the opening clash window, fights near contested mines hit harder.',
+          'Walls are cheap tools for holding a line or buying time.',
         ],
       },
       {
         heading: 'Combat',
         lines: [
           'Right-click an enemy to attack.',
-          'Hold A then right-click to issue an attack-move order.',
-          'Ranged units (Archer / Troll) hang back and shoot from distance.',
+          'Hold A then right-click on the map to issue an attack-move order.',
+          'Melee units hold the front, ranged units pressure from behind.',
         ],
       },
       {
@@ -374,9 +390,9 @@ export function runMenu(
         lines: [
           'Arrow keys or edge-scroll  — pan camera',
           'Left-click / drag          — select units',
-          'Right-click                — move / attack / gather',
+          'Right-click                — move / attack / gather / set rally',
           'V  — train worker (Town Hall selected)',
-          'T / A  — train soldier / ranged (Barracks selected)',
+          'T / A  — train frontline / ranged (Barracks selected)',
           'B / F / W  — build Barracks / Farm / Wall (Worker selected)',
           '1–9  — control groups   (Ctrl+# to assign, # to recall)',
           'S  — stop selected units',
@@ -388,6 +404,7 @@ export function runMenu(
         lines: [
           'Right-click empty ground with a building selected to set a rally point.',
           'Newly trained units will automatically march there.',
+          'Forward rally supports pressure, safer rally supports macro buildup.',
         ],
       },
     ];
@@ -469,9 +486,9 @@ export function runMenu(
 
       // Unit roster
       const units = [
-        { label: rc.workerLabel,  desc: 'Builder & gatherer' },
-        { label: rc.soldierLabel, desc: 'Melee warrior' },
-        { label: rc.rangedLabel,  desc: 'Ranged attacker' },
+        { label: rc.workerLabel,  desc: 'Eco, build, and gathering' },
+        { label: rc.soldierLabel, desc: 'Frontline melee unit' },
+        { label: rc.rangedLabel,  desc: 'Backline pressure unit' },
       ];
       let uy = cardY + 84;
       for (const u of units) {
