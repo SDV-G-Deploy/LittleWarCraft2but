@@ -12,12 +12,17 @@ Recent completed passes:
 - deterministic multi-unit command ordering for `move`, `attack`, `gather`, `stop`
 - deterministic move spread generator for larger groups
 - stuck/repath refinement with blocked-step sidestep + path rebuild
+- opening branch pass v1 (eco / tempo / pressure framing + opening intent state)
+- online lockstep hardening for duplicate tick packets + disconnect stall handling
+- opening branch pass v2 contested-mine pressure hook
 
 Current state:
 - build green
 - main multiplayer determinism blocker from review was fixed
+- follow-up lockstep packet/disconnect issues were fixed too
 - recent determinism-sensitive changes were verified with targeted review passes
 - network safety is no longer the main design bottleneck
+- gameplay variety is back to being the main design focus
 
 ## Core direction
 
@@ -61,6 +66,7 @@ The next meaningful gains should come from:
 - richer tactical action options
 - stronger army role clarity
 - map pressure and expansion gameplay
+- playtest-driven follow-up on whether eco / tempo / pressure now diverge enough in real matches
 
 AI should be improved only after those systems create interesting matches on their own.
 

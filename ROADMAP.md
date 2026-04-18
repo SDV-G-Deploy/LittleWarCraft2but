@@ -21,6 +21,9 @@ Update it when a phase is completed, reframed, or split.
 - blocked-step sidestep added for movement
 - after sidestep, move path is rebuilt from current position to keep path and position coherent
 - `repathCount` no longer burns on successful sidestep progress
+- opening branch pass v1 added explicit eco / tempo / pressure framing in UI and opening intent state
+- online lockstep hardened against duplicate per-tick packet replay and disconnect stalls
+- opening branch pass v2 added a small contested-mine pressure hook for early-game clashes
 
 ### Verified
 - build green after each recent pass
@@ -77,17 +80,24 @@ If a pass is only UI/local render, targeted review is not required every time.
 ## Phase C. Branching gameplay decisions
 Goal: make early and midgame branch into distinct player plans.
 
+Current branch status:
+- v1 established eco / tempo / pressure framing and opening intent support
+- v2 added a small mechanical payoff around contested mines during the early opening window
+- next step should be playtest-guided, not another blind support-layer pass
+
 Focus ideas:
 - economy vs army timing
 - one-base pressure vs greed
 - defend now vs expand now
 - basic unit mix decisions instead of one obvious mass strategy
 - incentives for committing early tempo or delayed power
+- make contested resource interaction produce real opening divergence, not just extra text
 
 Definition of done:
 - first minutes of a match allow multiple plausible plans
 - matches no longer collapse into one default build and one default push timing
 - players can choose between safer and greedier lines with real consequences
+- eco / tempo / pressure produce visibly different early map behavior in actual playtests
 
 Suggested commit themes:
 - `design: add stronger early-game branching and timing choices`
@@ -222,7 +232,9 @@ Not before:
 A good restart prompt for future `/new` sessions should mention:
 - gameplay/UI first pass done
 - main determinism blocker fixed and reviewed
+- duplicate-packet + disconnect-stall lockstep issues fixed
 - build green
-- recent safety/spread/stuck passes completed
+- opening branch pass v1 done
+- contested-mine opening pressure hook added as v2
 - current strategic priority is gameplay variety through player decisions and action diversity
-- next likely target is branching gameplay decisions or action variety, unless a new bug changes priority
+- next likely target is validating and extending opening branch divergence through playtest-oriented gameplay work, unless a new bug changes priority
