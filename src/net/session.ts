@@ -62,6 +62,16 @@ const VALID_MAP_IDS = new Set<MapId>([1, 2]);
 const VALID_BUILDINGS = new Set<EntityKind>(['townhall', 'barracks', 'farm', 'wall']);
 const VALID_TRAIN_UNITS = new Set<EntityKind>(['worker', 'footman', 'archer', 'peon', 'grunt', 'troll']);
 
+const MAX_PACKET_BYTES = 16 * 1024;
+const MAX_CMDS_PER_PACKET = 128;
+const MAX_LOCAL_CMDS_PER_TICK = 128;
+const MAX_QUEUED_REMOTE_TICKS = 128;
+const MAX_QUEUED_REMOTE_CMDS = 1024;
+const REMOTE_APPLY_DELAY_TICKS = 2;
+const REMOTE_STALE_TICK_LIMIT = 64;
+const INBOUND_RATE_WINDOW_MS = 1000;
+const MAX_INBOUND_PACKETS_PER_WINDOW = 120;
+
 function isInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v);
 }
@@ -108,7 +118,7 @@ function isNetCmd(v: unknown): v is NetCmd {
 function parseTickPacket(v: unknown): TickPacket | null {
   if (!v || typeof v !== 'object') return null;
   const pkt = v as Partial<TickPacket>;
-  if (!isInt(pkt.tick) || !Array.isArray(pkt.cmds) || pkt.cmds.length > 256) return null;
+  if (!isInt(pkt.tick) || pkt.tick < 0 || !Array.isArray(pkt.cmds) || pkt.cmds.length > MAX_CMDS_PER_PACKET) return null;
   if (!pkt.cmds.every(isNetCmd)) return null;
   return { tick: pkt.tick, cmds: pkt.cmds };
 }
@@ -138,13 +148,66 @@ export function createSession(
   let localBuf: NetCmd[] = [];
   const remoteQueue = new Map<number, NetCmd[]>();
 
+  let queuedRemoteCmdCount = 0;
+  let inboundWindowStartedAt = Date.now();
+  let inboundPacketsInWindow = 0;
+
+  function failConnection(reason: string): void {
+    session.status = 'error';
+    session.statusMsg = reason;
+    session.onStatusChange?.();
+    conn?.close();
+  }
+
+  function enforceInboundRateLimit(): boolean {
+    const now = Date.now();
+    if (now - inboundWindowStartedAt >= INBOUND_RATE_WINDOW_MS) {
+      inboundWindowStartedAt = now;
+      inboundPacketsInWindow = 0;
+    }
+    inboundPacketsInWindow++;
+    return inboundPacketsInWindow <= MAX_INBOUND_PACKETS_PER_WINDOW;
+  }
+
+  function dropStaleRemoteTicks(currentTick: number): void {
+    const oldestAllowedTick = currentTick - REMOTE_STALE_TICK_LIMIT;
+    for (const [queuedTick, cmds] of remoteQueue) {
+      if (queuedTick < oldestAllowedTick) {
+        queuedRemoteCmdCount -= cmds.length;
+        remoteQueue.delete(queuedTick);
+      }
+    }
+  }
+
+  function enqueueRemotePacket(pkt: TickPacket): void {
+    if (pkt.cmds.length === 0) return;
+
+    const prev = remoteQueue.get(pkt.tick);
+    if (prev) {
+      prev.push(...pkt.cmds);
+    } else {
+      remoteQueue.set(pkt.tick, [...pkt.cmds]);
+    }
+    queuedRemoteCmdCount += pkt.cmds.length;
+
+    while (remoteQueue.size > MAX_QUEUED_REMOTE_TICKS || queuedRemoteCmdCount > MAX_QUEUED_REMOTE_CMDS) {
+      const oldestTick = Math.min(...remoteQueue.keys());
+      const dropped = remoteQueue.get(oldestTick);
+      if (!dropped) break;
+      queuedRemoteCmdCount -= dropped.length;
+      remoteQueue.delete(oldestTick);
+    }
+  }
+
   const session: NetSession = {
     role,
     code:      role === 'guest' ? (hostCode ?? '') : '',
     status:    'init',
     statusMsg: 'Initialising…',
 
-    push(cmd) { localBuf.push(cmd); },
+    push(cmd) {
+      if (localBuf.length < MAX_LOCAL_CMDS_PER_TICK) localBuf.push(cmd);
+    },
 
     exchange(tick) {
       const toSend = localBuf;
@@ -155,14 +218,25 @@ export function createSession(
         conn.send({ tick, cmds: toSend } satisfies TickPacket);
       }
 
-      // Drain ALL buffered remote commands regardless of tick tag.
-      // With no-lockstep netcode, commands are applied as soon as they arrive on
-      // the next sim tick — exact-tick matching would discard every late packet.
+      dropStaleRemoteTicks(tick);
+
       if (remoteQueue.size === 0) return null;
-      const allCmds: NetCmd[] = [];
-      for (const cmds of remoteQueue.values()) allCmds.push(...cmds);
-      remoteQueue.clear();
-      return allCmds.length > 0 ? allCmds : null;
+      const applyUpToTick = tick - REMOTE_APPLY_DELAY_TICKS;
+      if (applyUpToTick < 0) return null;
+
+      const dueTicks = [...remoteQueue.keys()].filter(t => t <= applyUpToTick).sort((a, b) => a - b);
+      if (dueTicks.length === 0) return null;
+
+      const dueCmds: NetCmd[] = [];
+      for (const dueTick of dueTicks) {
+        const cmds = remoteQueue.get(dueTick);
+        if (!cmds) continue;
+        dueCmds.push(...cmds);
+        queuedRemoteCmdCount -= cmds.length;
+        remoteQueue.delete(dueTick);
+      }
+
+      return dueCmds.length > 0 ? dueCmds : null;
     },
 
     destroy() {
@@ -196,6 +270,23 @@ export function createSession(
     });
 
     c.on('data', (raw) => {
+      if (!enforceInboundRateLimit()) {
+        failConnection('Connection closed: inbound packet flood');
+        return;
+      }
+
+      let approxSize = 0;
+      try {
+        approxSize = JSON.stringify(raw).length;
+      } catch {
+        failConnection('Connection closed: malformed inbound payload');
+        return;
+      }
+      if (approxSize > MAX_PACKET_BYTES) {
+        failConnection('Connection closed: inbound packet too large');
+        return;
+      }
+
       const msg = raw as WireMessage;
 
       // Host receives guest's race → replies with full config → both start
@@ -233,9 +324,7 @@ export function createSession(
 
       // Tick packet — only queue if there are actual commands
       const pkt = parseTickPacket(msg);
-      if (pkt) {
-        if (pkt.cmds.length > 0) remoteQueue.set(pkt.tick, pkt.cmds);
-      }
+      if (pkt) enqueueRemotePacket(pkt);
     });
 
     c.on('close', () => {
