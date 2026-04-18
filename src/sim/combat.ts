@@ -78,6 +78,21 @@ export function processAttack(state: GameState, entity: Entity): void {
   const dist   = distToEntity(entity.pos.x, entity.pos.y, target);
   const losOk  = range <= 1 || hasLOS(state, entity.pos.x, entity.pos.y, target.pos.x, target.pos.y);
 
+  const myTownHall = state.entities.find(e => e.owner === entity.owner && e.kind === 'townhall');
+  const enemyTownHall = state.entities.find(e => e.owner !== entity.owner && e.kind === 'townhall');
+  const nearContestedMine = target.kind === 'goldmine' ? false : state.entities.some(e => {
+    if (e.kind !== 'goldmine' || (e.goldReserve ?? 0) <= 0) return false;
+    const myDist = myTownHall ? Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y) : Infinity;
+    const enemyDist = enemyTownHall ? Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y) : Infinity;
+    const isContested = (e.pos.x > 16 && e.pos.x < 48) || Math.abs(myDist - enemyDist) <= 8;
+    if (!isContested) return false;
+    const targetCx = target.pos.x + target.tileW / 2;
+    const targetCy = target.pos.y + target.tileH / 2;
+    const mineCx = e.pos.x + e.tileW / 2;
+    const mineCy = e.pos.y + e.tileH / 2;
+    return Math.hypot(targetCx - mineCx, targetCy - mineCy) <= 7;
+  });
+
   if (dist <= range && losOk) {
     // ── In range with LOS: attack ───────────────────────────────────────────
     cmd.chasePath = [];
@@ -87,7 +102,8 @@ export function processAttack(state: GameState, entity: Entity): void {
     const armor     = STATS[target.kind]?.armor ?? 0;
     const workerPressureBonus = !isUnitKind(entity.kind) ? 0 : (target.kind === 'worker' || target.kind === 'peon') ? 1 : 0;
     const constructionPressureBonus = target.kind === 'construction' ? 1 : 0;
-    const netDmg    = Math.max(1, dmg - armor + workerPressureBonus + constructionPressureBonus);
+    const contestedMinePressureBonus = nearContestedMine && state.tick <= state.contestedMineBonusUntilTick && isUnitKind(entity.kind) ? 1 : 0;
+    const netDmg    = Math.max(1, dmg - armor + workerPressureBonus + constructionPressureBonus + contestedMinePressureBonus);
     target.hp      -= netDmg;
     target.underAttackTick = state.tick;
     cmd.cooldownTick = state.tick + (STATS[entity.kind]?.attackTicks ?? SIM_HZ);

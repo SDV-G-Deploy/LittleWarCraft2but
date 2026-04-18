@@ -130,4 +130,5 @@ export interface GameState {
   races:  [Race, Race];   // races[0]=player, races[1]=AI
   mapName?: string;
   mapDescription?: string;
+  contestedMineBonusUntilTick: number;
 }

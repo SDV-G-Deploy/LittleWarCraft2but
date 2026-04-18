@@ -506,6 +506,7 @@ function drawFog(
 
 function drawHUD(ctx: CanvasRenderingContext2D, state: GameState, myOwner: 0 | 1 = 0): void {
   const popFull = state.pop[myOwner] >= state.popCap[myOwner];
+  const openingWindowTicks = Math.max(0, state.contestedMineBonusUntilTick - state.tick);
   // Backdrop
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.fillRect(4, 4, 420, 36);
@@ -550,5 +551,8 @@ function drawHUD(ctx: CanvasRenderingContext2D, state: GameState, myOwner: 0 | 1
     : contestedMines > 0
       ? 'Pressure: secure one forward route, then expand'
       : 'Pressure: scout outer routes before greedy mining';
-  ctx.fillText(`${mapLabel}  |  ${pressureHint}`, 4, 34);
+  const openingHook = openingWindowTicks > 0
+    ? `  |  Opening clash: contested mine fights hit harder for ${Math.ceil(openingWindowTicks / 20)}s`
+    : '';
+  ctx.fillText(`${mapLabel}  |  ${pressureHint}${openingHook}`, 4, 34);
 }

@@ -19,5 +19,6 @@ export function createWorld(mapData: MapData, races: [Race, Race]): GameState {
     races,
     mapName: mapData.name,
     mapDescription: mapData.description,
+    contestedMineBonusUntilTick: MAP_W,
   };
 }

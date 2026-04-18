@@ -291,6 +291,12 @@ function drawEntityInfo(
         : 'Take it when you can defend the route';
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.fillText(actionHint, x, y); y += LINE - 1;
+
+    if (isContested && state.tick <= state.contestedMineBonusUntilTick) {
+      const secondsLeft = Math.ceil((state.contestedMineBonusUntilTick - state.tick) / SIM_HZ);
+      ctx.fillStyle = 'rgba(255,200,120,0.60)';
+      ctx.fillText(`Opening clash window: +1 pressure damage nearby for ${secondsLeft}s`, x, y); y += LINE - 1;
+    }
   }
 
   // ── Food slots (farms / town halls) ────────────────────────────────────────
