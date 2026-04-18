@@ -97,10 +97,12 @@ export function findPath(
       if (closed.has(nk)) continue;
       if (!passable(state, nx, ny) && !(nx === gx && ny === gy)) continue;
 
-      // Diagonal movement: both adjacent cardinal tiles must be passable
+      // Diagonal movement: avoid cutting through blocked corners,
+      // but allow sliding past temporary unit traffic better.
       if (d.x !== 0 && d.y !== 0) {
-        if (!passable(state, current.x + d.x, current.y) ||
-            !passable(state, current.x, current.y + d.y)) continue;
+        const sideA = passable(state, current.x + d.x, current.y);
+        const sideB = passable(state, current.x, current.y + d.y);
+        if (!sideA && !sideB) continue;
       }
 
       const stepCost = d.x !== 0 && d.y !== 0 ? 1.414 : 1;

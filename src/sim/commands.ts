@@ -8,9 +8,9 @@ import { isTileBlockedByEntity } from './entities';
 
 /** Issue a move-to-tile command on an entity. Replaces current command.
  *  Pass attackMove=true to make the unit auto-attack enemies seen en route. */
-const MOVE_STUCK_TICKS = 10;
-const MOVE_REPATH_LIMIT = 3;
-const MOVE_FALLBACK_RADIUS = 2;
+const MOVE_STUCK_TICKS = 14;
+const MOVE_REPATH_LIMIT = 5;
+const MOVE_FALLBACK_RADIUS = 3;
 
 function isTileOccupiedByOtherUnit(state: GameState, entity: Entity, tx: number, ty: number): boolean {
   return state.entities.some(other =>
@@ -23,7 +23,8 @@ function isTileOccupiedByOtherUnit(state: GameState, entity: Entity, tx: number,
 
 function findDeterministicSidestep(state: GameState, entity: Entity, blocked: Vec2): Vec2 | null {
   let best: Vec2 | null = null;
-  let bestDist = Infinity;
+  let bestScore = Infinity;
+  const goal = entity.cmd?.type === 'move' ? entity.cmd.goal : blocked;
 
   for (const d of NUDGE_DIRS) {
     const nx = entity.pos.x + d.x;
@@ -33,10 +34,12 @@ function findDeterministicSidestep(state: GameState, entity: Entity, blocked: Ve
     if (isTileBlockedByEntity(state, nx, ny)) continue;
     if (isTileOccupiedByOtherUnit(state, entity, nx, ny)) continue;
 
-    const dist = Math.max(Math.abs(blocked.x - nx), Math.abs(blocked.y - ny));
-    if (!best || dist < bestDist) {
+    const blockedDist = Math.max(Math.abs(blocked.x - nx), Math.abs(blocked.y - ny));
+    const goalDist = Math.max(Math.abs(goal.x - nx), Math.abs(goal.y - ny));
+    const score = blockedDist * 100 + goalDist;
+    if (!best || score < bestScore) {
       best = { x: nx, y: ny };
-      bestDist = dist;
+      bestScore = score;
     }
   }
 
@@ -221,6 +224,20 @@ export function processCommand(state: GameState, entity: Entity): void {
 
       const next = cmd.path[0]!;
       if (isTileOccupiedByOtherUnit(state, entity, next.x, next.y)) {
+        if (cmd.repathCount < MOVE_REPATH_LIMIT) {
+          const fallbackGoal = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
+          const newPath = fallbackGoal
+            ? findPath(state, entity.pos.x, entity.pos.y, fallbackGoal.x, fallbackGoal.y)
+            : null;
+          cmd.repathCount++;
+          if (fallbackGoal && newPath && newPath.length > 0) {
+            cmd.goal = fallbackGoal;
+            cmd.path = newPath;
+            cmd.stepTick = state.tick;
+            return;
+          }
+        }
+
         const sidestep = findDeterministicSidestep(state, entity, next);
         cmd.lastProgressTick = state.tick;
         cmd.lastPos = { ...entity.pos };
@@ -242,21 +259,9 @@ export function processCommand(state: GameState, entity: Entity): void {
           } else {
             cmd.path = [];
           }
-          break;
+          return;
         }
 
-        if (cmd.repathCount < MOVE_REPATH_LIMIT) {
-          const fallbackGoal = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
-          const newPath = fallbackGoal
-            ? findPath(state, entity.pos.x, entity.pos.y, fallbackGoal.x, fallbackGoal.y)
-            : null;
-          cmd.repathCount++;
-          if (fallbackGoal && newPath && newPath.length > 0) {
-            cmd.goal = fallbackGoal;
-            cmd.path = newPath;
-            cmd.stepTick = state.tick;
-          }
-        }
         return;
       }
 

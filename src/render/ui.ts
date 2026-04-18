@@ -13,7 +13,7 @@ const BTN_W      = 100;
 const BTN_H      = 32;
 const BTN_PAD    = 8;
 const PORTRAIT_W = 80;
-const MAX_BTN_COLS = 4;
+const MAX_BTN_COLS = 6;
 
 export interface UiButton {
   x: number; y: number;
@@ -354,13 +354,11 @@ function drawEntityInfo(
   if ((e.kind === 'townhall' || e.kind === 'barracks') && e.owner === myOwner) {
     const openingPlan = inferOpeningPlan(state, myOwner, e);
     const openingCopy = openingPlanText(openingPlan);
-    ctx.fillStyle = '#88d8ff';
+    ctx.fillStyle = 'rgba(136,216,255,0.58)';
     ctx.font = '10px monospace';
-    ctx.fillText(`${openingCopy.title}: ${openingPlan.toUpperCase()}`, x, y); y += LINE - 1;
-    ctx.fillStyle = 'rgba(255,255,255,0.52)';
+    ctx.fillText(`Opening hint: ${openingCopy.title}`, x, y); y += LINE - 1;
+    ctx.fillStyle = 'rgba(255,255,255,0.34)';
     ctx.fillText(openingCopy.body, x, y); y += LINE - 1;
-    ctx.fillStyle = 'rgba(255,220,140,0.55)';
-    ctx.fillText(openingCopy.risk, x, y); y += LINE - 1;
   }
 
   // ── Rally point (townhall / barracks, player-owned) ────────────────────────
@@ -507,22 +505,9 @@ function collectButtons(
 
     addButton(`${rc.workerLabel} [V]\n[${workerCost}g]`, `train:${rc.worker}`,
       state.gold[myOwner] < workerCost);
-    if (!workerBusy && state.gold[myOwner] >= workerCost) {
-      addButton(
-        `${workers < 4 ? 'Eco branch' : 'Eco branch'}\nworker saturation`,
-        `plan:eco|train:${rc.worker}`,
-      );
+    if (!workerBusy && state.gold[myOwner] >= workerCost && workers < 4) {
+      addButton('Worker spike\nfast eco', `train:${rc.worker}`);
     }
-    addButton(
-      canTempo ? 'Tempo branch\nprep barracks timing' : 'Tempo branch\nsave for barracks',
-      'plan:tempo',
-      false,
-    );
-    addButton(
-      canPressure ? 'Pressure branch\nforward rally setup' : 'Pressure branch\nset rally, then commit',
-      'plan:pressure',
-      false,
-    );
   }
   if (e.kind === 'barracks') {
     const soldierCost = STATS[rc.soldier]?.cost ?? 80;
@@ -548,23 +533,14 @@ function collectButtons(
       state.gold[myOwner] < rangedCost);
     addButton(`${rc.heavyLabel} [H]\n[${heavyCost}g]`, `train:${rc.heavy}`,
       state.gold[myOwner] < heavyCost);
-    if (state.gold[myOwner] >= soldierCost) {
-      addButton(
-        wantsFrontline ? 'Tempo branch\nfrontline now' : 'Frontline add\nhold the line',
-        `plan:tempo|train:${rc.soldier}`,
-      );
+    if (state.gold[myOwner] >= soldierCost && wantsFrontline) {
+      addButton('Frontline add\nhold the line', `train:${rc.soldier}`);
     }
-    if (state.gold[myOwner] >= rangedCost) {
-      addButton(
-        wantsRanged ? 'Pressure branch\nranged timing' : 'Backline add\nkeep pressure up',
-        `plan:pressure|train:${rc.ranged}`,
-      );
+    if (state.gold[myOwner] >= rangedCost && wantsRanged) {
+      addButton('Backline add\nkeep pressure up', `train:${rc.ranged}`);
     }
-    if (state.gold[myOwner] >= heavyCost) {
-      addButton(
-        wantsHeavy ? 'Anchor add\n1-2 elite frontliners' : 'Heavy add\nreinforce frontline',
-        `plan:tempo|train:${rc.heavy}`,
-      );
+    if (state.gold[myOwner] >= heavyCost && wantsHeavy) {
+      addButton('Anchor add\n1-2 elite frontliners', `train:${rc.heavy}`);
     }
   }
 

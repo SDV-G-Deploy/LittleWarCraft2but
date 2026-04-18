@@ -362,14 +362,6 @@ export function runMenu(
         ],
       },
       {
-        heading: 'Opening Plans',
-        lines: [
-          'Eco: add workers first for safer growth and later strength.',
-          'Tempo: reach Barracks and frontline timing sooner.',
-          'Pressure: use forward rally and ranged timing to contest space early.',
-        ],
-      },
-      {
         heading: 'Map Pressure',
         lines: [
           'Contested mines matter most early. Fight for them before greedy mining.',
