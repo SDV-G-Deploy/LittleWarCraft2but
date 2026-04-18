@@ -122,6 +122,7 @@ export interface GameState {
   tiles: Tile[][];
   fog:   FogState[][];
   entities: Entity[];
+  entityById?: Map<number, Entity>;
   corpses: Corpse[];
   nextId: number;
   gold:   [number, number];

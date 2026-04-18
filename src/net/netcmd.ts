@@ -10,7 +10,7 @@ import { STATS } from '../data/units';
 import { issueAttackCommand } from '../sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, issueResumeBuildCommand } from '../sim/economy';
 import { issueMoveCommand } from '../sim/commands';
-import { killEntity } from '../sim/entities';
+import { getEntity, killEntity } from '../sim/entities';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,8 +90,8 @@ export function applyNetCmds(
         const destinations = assignMoveDestinations(cmd.ids, cmd.tx, cmd.ty);
         const fallbackDestinations = buildMoveFallbackDestinations(cmd.tx, cmd.ty);
         for (const id of sortUnitIds(cmd.ids)) {
-          const e = state.entities.find(en => en.id === id && en.owner === owner && isUnitKind(en.kind));
-          if (!e) continue;
+          const e = getEntity(state, id);
+          if (!e || e.owner !== owner || !isUnitKind(e.kind)) continue;
 
           const primary = destinations.get(id) ?? { x: cmd.tx, y: cmd.ty };
           let issued = issueMoveCommand(state, e, primary.x, primary.y, cmd.atk);
@@ -109,70 +109,66 @@ export function applyNetCmds(
       }
       case 'attack': {
         for (const id of sortUnitIds(cmd.ids)) {
-          const e = state.entities.find(en => en.id === id && en.owner === owner && isUnitKind(en.kind));
-          if (e) issueAttackCommand(e, cmd.targetId, state.tick);
+          const e = getEntity(state, id);
+          if (e && e.owner === owner && isUnitKind(e.kind)) issueAttackCommand(e, cmd.targetId, state.tick);
         }
         break;
       }
       case 'gather': {
         for (const id of sortUnitIds(cmd.ids)) {
-          const e = state.entities.find(en => en.id === id && en.owner === owner && isWorkerKind(en.kind));
-          if (e) issueGatherCommand(e, cmd.mineId, state.tick);
+          const e = getEntity(state, id);
+          if (e && e.owner === owner && isWorkerKind(e.kind)) issueGatherCommand(e, cmd.mineId, state.tick);
         }
         break;
       }
       case 'train': {
-        const b = state.entities.find(en => en.id === cmd.buildingId && en.owner === owner);
-        if (b) issueTrainCommand(state, b, cmd.unit);
+        const b = getEntity(state, cmd.buildingId);
+        if (b && b.owner === owner) issueTrainCommand(state, b, cmd.unit);
         break;
       }
       case 'build': {
-        const w = state.entities.find(en => en.id === cmd.workerId && en.owner === owner && isWorkerKind(en.kind));
-        if (w) issueBuildCommand(state, w, cmd.building, { x: cmd.tx, y: cmd.ty }, state.tick);
+        const w = getEntity(state, cmd.workerId);
+        if (w && w.owner === owner && isWorkerKind(w.kind)) issueBuildCommand(state, w, cmd.building, { x: cmd.tx, y: cmd.ty }, state.tick);
         break;
       }
       case 'stop': {
         for (const id of sortUnitIds(cmd.ids)) {
-          const e = state.entities.find(en => en.id === id && en.owner === owner);
-          if (e) e.cmd = null;
+          const e = getEntity(state, id);
+          if (e && e.owner === owner) e.cmd = null;
         }
         break;
       }
       case 'set_plan': {
-        const b = state.entities.find(en => en.id === cmd.buildingId && en.owner === owner);
-        if (b && (b.kind === 'townhall' || b.kind === 'barracks')) {
+        const b = getEntity(state, cmd.buildingId);
+        if (b && b.owner === owner && (b.kind === 'townhall' || b.kind === 'barracks')) {
           b.openingPlan = cmd.plan;
         }
         break;
       }
       case 'rally': {
-        const b = state.entities.find(en => en.id === cmd.buildingId && en.owner === owner);
-        if (b) {
+        const b = getEntity(state, cmd.buildingId);
+        if (b && b.owner === owner) {
           b.rallyPoint = { x: cmd.tx, y: cmd.ty };
           if (cmd.plan) b.openingPlan = cmd.plan;
         }
         break;
       }
       case 'demolish': {
-        const b = state.entities.find(
-          en => en.id === cmd.buildingId && en.owner === owner &&
-                !isUnitKind(en.kind) && en.kind !== 'goldmine',
-        );
-        if (b) {
-          // Construction sites refund 100% (no work was wasted); finished buildings 80%
-          const srcKind  = b.kind === 'construction' ? (b.constructionOf ?? b.kind) : b.kind;
-          const refundPct = b.kind === 'construction' ? 1.0 : 0.8;
-          state.gold[owner] += Math.floor((STATS[srcKind]?.cost ?? 0) * refundPct);
-          killEntity(state, b.id);
-        }
+        const b = getEntity(state, cmd.buildingId);
+        if (!b || b.owner !== owner || isUnitKind(b.kind) || b.kind === 'goldmine') break;
+        // Construction sites refund 100% (no work was wasted); finished buildings 80%
+        const srcKind  = b.kind === 'construction' ? (b.constructionOf ?? b.kind) : b.kind;
+        const refundPct = b.kind === 'construction' ? 1.0 : 0.8;
+        state.gold[owner] += Math.floor((STATS[srcKind]?.cost ?? 0) * refundPct);
+        killEntity(state, b.id);
         break;
       }
       case 'resume': {
-        const w = state.entities.find(en =>
-          en.id === cmd.workerId && en.owner === owner && isWorkerKind(en.kind));
-        const s = state.entities.find(en =>
-          en.id === cmd.siteId && en.owner === owner && en.kind === 'construction');
-        if (w && s) issueResumeBuildCommand(w, s, state.tick);
+        const w = getEntity(state, cmd.workerId);
+        const s = getEntity(state, cmd.siteId);
+        if (w && s && w.owner === owner && s.owner === owner && isWorkerKind(w.kind) && s.kind === 'construction') {
+          issueResumeBuildCommand(w, s, state.tick);
+        }
         break;
       }
     }

@@ -2,6 +2,19 @@ import type { Entity, EntityKind, Owner, GameState, Vec2 } from '../types';
 import { isUnitKind } from '../types';
 import { STATS } from '../data/units';
 
+export type EntityLookup = Map<number, Entity>;
+
+function rebuildEntityIndex(state: GameState): EntityLookup {
+  const index: EntityLookup = new Map();
+  for (const entity of state.entities) index.set(entity.id, entity);
+  state.entityById = index;
+  return index;
+}
+
+export function getEntityIndex(state: GameState): EntityLookup {
+  return state.entityById ?? rebuildEntityIndex(state);
+}
+
 export function spawnEntity(
   state: GameState,
   kind: EntityKind,
@@ -25,16 +38,18 @@ export function spawnEntity(
   };
 
   state.entities.push(entity);
+  getEntityIndex(state).set(entity.id, entity);
   return entity;
 }
 
 export function killEntity(state: GameState, id: number): void {
   const idx = state.entities.findIndex(e => e.id === id);
   if (idx !== -1) state.entities.splice(idx, 1);
+  state.entityById?.delete(id);
 }
 
 export function getEntity(state: GameState, id: number): Entity | undefined {
-  return state.entities.find(e => e.id === id);
+  return getEntityIndex(state).get(id);
 }
 
 /** All entities whose footprint overlaps tile (tx, ty). */

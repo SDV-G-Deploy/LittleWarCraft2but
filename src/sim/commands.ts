@@ -128,28 +128,40 @@ export function separateUnits(state: GameState): void {
   if (state.tick % 3 !== 0) return; // run every 3 ticks (~150 ms)
 
   const units = state.entities.filter(e => isUnitKind(e.kind));
+  const stationaryByTile = new Map<string, Entity[]>();
 
-  for (let i = 0; i < units.length; i++) {
-    const a = units[i];
-    if (!isStationary(a)) continue;
+  for (const unit of units) {
+    if (!isStationary(unit)) continue;
+    const key = `${unit.pos.x},${unit.pos.y}`;
+    const stack = stationaryByTile.get(key);
+    if (stack) stack.push(unit);
+    else stationaryByTile.set(key, [unit]);
+  }
 
-    for (let j = i + 1; j < units.length; j++) {
-      const b = units[j];
-      if (a.pos.x !== b.pos.x || a.pos.y !== b.pos.y) continue;
-      if (!isStationary(b)) continue;
+  const occupied = new Set(units.map(unit => `${unit.pos.x},${unit.pos.y}`));
 
-      // Both units are stationary on the same tile — nudge b to nearest free tile
+  for (const stack of stationaryByTile.values()) {
+    if (stack.length <= 1) continue;
+
+    for (let i = 1; i < stack.length; i++) {
+      const unit = stack[i]!;
+      occupied.delete(`${unit.pos.x},${unit.pos.y}`);
+
       for (const d of NUDGE_DIRS) {
-        const nx = b.pos.x + d.x;
-        const ny = b.pos.y + d.y;
+        const nx = unit.pos.x + d.x;
+        const ny = unit.pos.y + d.y;
         if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H) continue;
         if (!state.tiles[ny][nx].passable) continue;
         if (isTileBlockedByEntity(state, nx, ny)) continue;
-        if (units.some((u, k) => k !== j && u.pos.x === nx && u.pos.y === ny)) continue;
-        b.pos.x = nx;
-        b.pos.y = ny;
+        const nextKey = `${nx},${ny}`;
+        if (occupied.has(nextKey)) continue;
+        unit.pos.x = nx;
+        unit.pos.y = ny;
+        occupied.add(nextKey);
         break;
       }
+
+      occupied.add(`${unit.pos.x},${unit.pos.y}`);
     }
   }
 }

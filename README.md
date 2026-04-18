@@ -100,6 +100,11 @@ Examples:
 - self-host infra example: `infra/compose.yaml`
 - coturn env example: `infra/.env.example`
 
+TURN note for Docker deployments:
+- keep `--external-ip` set to the public host IP advertised to browsers
+- keep `--relay-ip=0.0.0.0` inside the container unless the container actually owns the public IP
+- open UDP/TCP `3478` plus the full relay range `49160-49200`
+
 ## Roadmap
 
 See [ROADMAP.md](./ROADMAP.md) for:

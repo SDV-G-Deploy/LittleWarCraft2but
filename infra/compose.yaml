@@ -33,7 +33,7 @@ services:
       - --user=${TURN_USERNAME}:${TURN_PASSWORD}
       - --external-ip=${TURN_EXTERNAL_IP}
       - --listening-ip=0.0.0.0
-      - --relay-ip=${TURN_EXTERNAL_IP}
+      - --relay-ip=0.0.0.0
       - --listening-port=3478
       - --min-port=49160
       - --max-port=49200
