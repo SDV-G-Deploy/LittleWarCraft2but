@@ -198,7 +198,7 @@ function drawEntityInfo(
   }
 
   // ── Rally point (townhall / barracks, player-owned) ────────────────────────
-  if ((e.kind === 'townhall' || e.kind === 'barracks') && e.owner === 0) {
+  if ((e.kind === 'townhall' || e.kind === 'barracks') && e.owner === myOwner) {
     ctx.font = '10px monospace';
     if (e.rallyPoint) {
       ctx.fillStyle = '#ffe840';

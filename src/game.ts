@@ -1,7 +1,7 @@
 import { SIM_TICK_MS, TILE_SIZE, CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL,
          isUnitKind, isWorkerKind, type EntityKind, type Race, type MapId } from './types';
 import { createWorld } from './sim/world';
-import { spawnEntity, entitiesAt, killEntity } from './sim/entities';
+import { spawnEntity, killEntity } from './sim/entities';
 import { processCommand, issueMoveCommand, separateUnits, autoAttackPass } from './sim/commands';
 import { issueAttackCommand } from './sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, computePopCaps } from './sim/economy';
@@ -46,11 +46,13 @@ export function startGame(
   resetRenderCache();
 
   const aiRace = options.playerRace === 'human' ? 'orc' : 'human';
-  const mapData = options.mapId === 2 ? buildMap02() : buildMap01();
-  const state   = createWorld(mapData, [options.playerRace, aiRace]);
-  const cam     = createCamera(
-    Math.max(0, mapData.playerStart.x - 8),
-    Math.max(0, mapData.playerStart.y - 6),
+  const mapData   = options.mapId === 2 ? buildMap02() : buildMap01();
+  const state     = createWorld(mapData, [options.playerRace, aiRace]);
+  // Camera starts at MY base: owner-0 → playerStart, owner-1 → aiStart
+  const myStart   = (options.myOwner ?? 0) === 0 ? mapData.playerStart : mapData.aiStart;
+  const cam       = createCamera(
+    Math.max(0, myStart.x - 8),
+    Math.max(0, myStart.y - 6),
   );
   const keys  = createKeyState();
   const mouse = createMouseState(canvas);
@@ -126,7 +128,7 @@ export function startGame(
       e.preventDefault();
       const slot = parseInt(e.key);
       const ids  = [...selectedIds].filter(id =>
-        state.entities.some(en => en.id === id && en.owner === 0),
+        state.entities.some(en => en.id === id && en.owner === myOwner),
       );
       controlGroups.set(slot, ids);
       return;
@@ -482,7 +484,7 @@ export function startGame(
       while (simAccum >= SIM_TICK_MS) { simTick(); simAccum -= SIM_TICK_MS; }
     }
 
-    render(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, selectedIds);
+    render(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, selectedIds, myOwner);
     drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT);
     if (placementMode) {
       const { tx, ty } = screenToTile(mouse.x, mouse.y, cam);

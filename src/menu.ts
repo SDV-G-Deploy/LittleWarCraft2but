@@ -101,20 +101,25 @@ export function runMenu(
     joinCode:   '',
   };
 
-  // ── Auto-join from URL param (?room=CODE) ──────────────────────────────────
+  // ── Auto-join from URL param (?room=CODE&race=X&map=N) ───────────────────
   const urlParams = new URLSearchParams(window.location.search);
   const urlRoom   = urlParams.get('room');
   const urlRace   = (urlParams.get('race') as Race | null) ?? 'human';
   const urlMap    = parseInt(urlParams.get('map') ?? '1') as MapId;
   if (urlRoom) {
+    // playerRace here = owner-0's race (the HOST's race) — same on both clients
+    // so createWorld([playerRace, aiRace]) produces the same state everywhere
     ms.screen     = 'online';
     ms.netRole    = 'guest';
-    ms.playerRace = urlRace === 'orc' ? 'human' : 'orc'; // guest gets opposite race
+    ms.playerRace = urlRace;   // keep host's race — DO NOT flip
     ms.mapId      = urlMap;
     ms.joinCode   = urlRoom;
     ms.netSession = createSession('guest', urlRoom);
-    ms.netSession.onStatusChange = () => {
-      if (ms.netSession?.status === 'ready') startOnlineGame();
+    // Guest starts game when host sends config (confirms race/map)
+    ms.netSession.onConfig = (cfg) => {
+      ms.playerRace = cfg.race as Race;
+      ms.mapId      = cfg.mapId as MapId;
+      startOnlineGame();
     };
   }
 
@@ -162,7 +167,9 @@ export function runMenu(
       case 'host_game': {
         ms.netSession?.destroy();
         ms.netRole    = 'host';
-        ms.netSession = createSession('host');
+        // Pass config so host sends it to guest on connection open
+        ms.netSession = createSession('host', undefined, { race: ms.playerRace, mapId: ms.mapId });
+        // Host starts game as soon as guest connects (status = 'ready')
         ms.netSession.onStatusChange = () => {
           if (ms.netSession?.status === 'ready') startOnlineGame();
         };
@@ -173,8 +180,11 @@ export function runMenu(
         ms.netSession?.destroy();
         ms.netRole    = 'guest';
         ms.netSession = createSession('guest', ms.joinCode);
-        ms.netSession.onStatusChange = () => {
-          if (ms.netSession?.status === 'ready') startOnlineGame();
+        // Guest starts game only after receiving host config (race + map)
+        ms.netSession.onConfig = (cfg) => {
+          ms.playerRace = cfg.race as Race;
+          ms.mapId      = cfg.mapId as MapId;
+          startOnlineGame();
         };
         break;
       }

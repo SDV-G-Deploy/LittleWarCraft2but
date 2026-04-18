@@ -1,14 +1,15 @@
 /**
  * session.ts
- * PeerJS wrapper implementing a simple input-lockstep protocol.
+ * PeerJS wrapper with input-buffering and a one-shot config handshake.
  *
- * Protocol:
- *   Each sim tick both peers exchange a TickPacket { tick, cmds }.
- *   The sim only advances once BOTH sides' packets for that tick arrive.
- *   Latency ≤ one tick-period (50 ms at 20 Hz) feels instant on LAN / same country.
+ * Handshake (runs once, before any game ticks):
+ *   Host sends { type:'config', race, mapId } immediately on channel open.
+ *   Guest fires onConfig(cfg), menu updates its state, then calls startOnlineGame().
+ *   This ensures both sides build GameState with the same races[] array.
  *
- * Host flow:  new NetSession('host')        → wait for peer.on('connection')
- * Guest flow: new NetSession('guest', code) → peer.connect(code)
+ * Game ticks:
+ *   push(cmd)          – buffer a command for the current tick
+ *   exchange(tick)     – flush local buffer, send to peer, return peer cmds or null
  */
 
 import Peer, { DataConnection } from 'peerjs';
@@ -24,47 +25,48 @@ export type SessionStatus =
   | 'disconnected'  // peer left
   | 'error';
 
+/** Config the host sends to guest on channel open. */
+export interface SessionConfig {
+  race:  string;   // host's playerRace  (races[0])
+  mapId: number;
+}
+
 export interface NetSession {
-  readonly role:   'host' | 'guest';
-  readonly code:   string;          // 6-char room code (= host's peer ID)
-  status:          SessionStatus;
-  statusMsg:       string;
+  role:    'host' | 'guest';
+  code:    string;          // room code = host's PeerJS ID
+  status:  SessionStatus;
+  statusMsg: string;
+
   onStatusChange?: () => void;
+  /** Guest only: fired when host config arrives. Start game from here. */
+  onConfig?: (cfg: SessionConfig) => void;
 
-  /** Buffer a command to be sent this tick. */
   push(cmd: NetCmd): void;
-
-  /**
-   * Called once per sim tick.
-   * - Sends local commands buffered since last call to the peer.
-   * - Returns the peer's commands for this tick, or null if not yet received.
-   *   When null: caller should stall (don't advance the sim).
-   */
   exchange(tick: number): NetCmd[] | null;
-
   destroy(): void;
 }
+
+// ─── Internal message types ───────────────────────────────────────────────────
+
+type WireMessage =
+  | { type: 'config'; race: string; mapId: number }
+  | TickPacket & { type?: undefined };  // tick packets have no 'type' field
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
 export function createSession(
-  role: 'host' | 'guest',
-  hostCode?: string,               // required when role === 'guest'
+  role:       'host' | 'guest',
+  hostCode?:  string,          // required when role === 'guest'
+  hostConfig?: SessionConfig,  // required when role === 'host'
 ): NetSession {
 
-  // ── State ──────────────────────────────────────────────────────────────────
   let conn: DataConnection | null = null;
   let localBuf: NetCmd[] = [];
-
-  // tick → cmds received from peer
   const remoteQueue = new Map<number, NetCmd[]>();
-
-  // local cmds we already sent (keyed by tick) — for re-send on stall
-  const localSent   = new Map<number, NetCmd[]>();
 
   const session: NetSession = {
     role,
-    code:      hostCode ?? '',   // filled in once peer opens
+    code:      role === 'guest' ? (hostCode ?? '') : '',
     status:    'init',
     statusMsg: 'Initialising…',
 
@@ -73,11 +75,9 @@ export function createSession(
     exchange(tick) {
       const toSend = localBuf;
       localBuf = [];
-      localSent.set(tick, toSend);
 
       if (conn?.open) {
-        const pkt: TickPacket = { tick, cmds: toSend };
-        conn.send(pkt);
+        conn.send({ tick, cmds: toSend } satisfies TickPacket);
       }
 
       const remote = remoteQueue.get(tick);
@@ -94,8 +94,7 @@ export function createSession(
     },
   };
 
-  // ── PeerJS setup ───────────────────────────────────────────────────────────
-  // Always auto-generate IDs; PeerJS constructor signature requires (id?, options?)
+  // ── PeerJS setup ─────────────────────────────────────────────────────────────
   const peer = new Peer({
     host:   '0.peerjs.com',
     port:   443,
@@ -108,14 +107,27 @@ export function createSession(
     conn = c;
 
     c.on('open', () => {
+      // Host sends its config to guest as soon as the channel is ready
+      if (role === 'host' && hostConfig) {
+        c.send({ type: 'config', race: hostConfig.race, mapId: hostConfig.mapId } satisfies WireMessage);
+      }
       session.status    = 'ready';
       session.statusMsg = 'Connected!';
       session.onStatusChange?.();
     });
 
     c.on('data', (raw) => {
-      const pkt = raw as TickPacket;
-      if (typeof pkt.tick === 'number' && Array.isArray(pkt.cmds)) {
+      const msg = raw as WireMessage;
+
+      // Config packet (guest only — host already has it)
+      if (msg.type === 'config') {
+        session.onConfig?.({ race: msg.race, mapId: msg.mapId });
+        return;
+      }
+
+      // Tick packet
+      if (typeof (msg as TickPacket).tick === 'number' && Array.isArray((msg as TickPacket).cmds)) {
+        const pkt = msg as TickPacket;
         remoteQueue.set(pkt.tick, pkt.cmds);
       }
     });
@@ -134,18 +146,15 @@ export function createSession(
   }
 
   peer.on('open', (id) => {
-    // Expose the code (always the host's ID)
-    (session as { code: string }).code = role === 'host' ? id : hostCode!;
-
     if (role === 'host') {
+      session.code      = id;
       session.status    = 'waiting';
       session.statusMsg = `Room code: ${id}`;
       session.onStatusChange?.();
 
-      peer.on('connection', (c) => {
-        setupConn(c);
-      });
+      peer.on('connection', (c) => setupConn(c));
     } else {
+      // Guest: session.code is already the host's code
       session.status    = 'connecting';
       session.statusMsg = 'Connecting to host…';
       session.onStatusChange?.();

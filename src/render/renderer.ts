@@ -68,6 +68,7 @@ export function render(
   viewW: number,
   viewH: number,
   selectedIds: Set<number>,
+  myOwner: 0 | 1 = 0,
 ): void {
   const sp = getSprites();
 
@@ -77,10 +78,10 @@ export function render(
 
   drawTiles(ctx, sp, state, cam, viewW, viewH);
   drawCorpses(ctx, sp, state, cam);
-  drawEntities(ctx, sp, state, cam, selectedIds);
+  drawEntities(ctx, sp, state, cam, selectedIds, myOwner);
   drawRallyPoints(ctx, state, cam, selectedIds);
   drawFog(ctx, state, cam, viewW, viewH);
-  drawHUD(ctx, state);
+  drawHUD(ctx, state, myOwner);
 }
 
 // ─── Minimap ──────────────────────────────────────────────────────────────────
@@ -241,12 +242,16 @@ function drawCorpses(
  *  - Enemy units: visible only in 'visible' fog cells
  *  - Enemy buildings: visible once explored (remembered after scouting)
  */
-function entityVisible(state: GameState, e: Entity): boolean {
-  if (e.owner === 0 && e.kind !== 'goldmine') return true;
-  const cx  = Math.min(MAP_W - 1, Math.max(0, e.pos.x + Math.floor(e.tileW / 2)));
-  const cy  = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
-  const fog = state.fog[cy][cx];
-  if (e.owner === 1 && isUnitKind(e.kind)) return fog === 'visible';
+function entityVisible(state: GameState, e: Entity, myOwner: 0 | 1): boolean {
+  // Player's own entities (not goldmines) are always visible
+  if (e.owner === myOwner && e.kind !== 'goldmine') return true;
+  const cx    = Math.min(MAP_W - 1, Math.max(0, e.pos.x + Math.floor(e.tileW / 2)));
+  const cy    = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
+  const fog   = state.fog[cy][cx];
+  const enemy = e.owner !== myOwner;
+  // Enemy units only visible in actively-visible cells
+  if (enemy && isUnitKind(e.kind)) return fog === 'visible';
+  // Everything else (buildings, mines) visible once explored
   return fog !== 'unseen';
 }
 
@@ -256,11 +261,12 @@ function drawEntities(
   state: GameState,
   cam: Camera,
   selectedIds: Set<number>,
+  myOwner: 0 | 1 = 0,
 ): void {
   // Draw buildings first, units on top
   for (const pass of [false, true] as const) {
     for (const e of state.entities) {
-      if (!entityVisible(state, e)) continue;
+      if (!entityVisible(state, e, myOwner)) continue;
       const isUnit = isUnitKind(e.kind);
       if (isUnit !== pass) continue;
 
@@ -484,8 +490,8 @@ function drawFog(
 
 // ─── HUD ──────────────────────────────────────────────────────────────────────
 
-function drawHUD(ctx: CanvasRenderingContext2D, state: GameState): void {
-  const popFull = state.pop[0] >= state.popCap[0];
+function drawHUD(ctx: CanvasRenderingContext2D, state: GameState, myOwner: 0 | 1 = 0): void {
+  const popFull = state.pop[myOwner] >= state.popCap[myOwner];
   // Backdrop
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.fillRect(4, 4, 320, 22);
@@ -498,7 +504,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, state: GameState): void {
   // Text
   ctx.fillStyle = '#ffe97a';
   ctx.font = 'bold 13px monospace';
-  ctx.fillText(`${state.gold[0]}g`, 24, 20);
+  ctx.fillText(`${state.gold[myOwner]}g`, 24, 20);
   // Pop icon (small person silhouette)
   ctx.fillStyle = popFull ? '#ff5555' : '#55dd55';
   ctx.beginPath();
@@ -506,7 +512,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.fill();
   ctx.fillRect(90, 15, 8, 8);
   ctx.fillStyle = popFull ? '#ff8888' : '#88ff88';
-  ctx.fillText(`${state.pop[0]} / ${state.popCap[0]}`, 106, 20);
+  ctx.fillText(`${state.pop[myOwner]} / ${state.popCap[myOwner]}`, 106, 20);
   // Tick (small clock icon)
   ctx.fillStyle = '#888880';
   ctx.font = '11px monospace';
