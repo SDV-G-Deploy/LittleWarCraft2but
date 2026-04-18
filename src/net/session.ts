@@ -324,7 +324,13 @@ export function createSession(
     port:   443,
     path:   '/',
     secure: true,
-    debug:  0,
+    debug:  1,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ],
+    },
   });
 
   function setupConn(c: DataConnection) {
