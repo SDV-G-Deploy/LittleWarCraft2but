@@ -71,12 +71,16 @@ export function startGame(
   const myRC      = RACES[state.races[myOwner]];
 
   /**
-   * Emit a command: apply it locally NOW and buffer it to send to peer.
-   * In offline (vs-AI) mode: just apply locally.
+   * Emit a command.
+   * Offline: apply immediately.
+   * Online: queue for delayed, symmetric mini-lockstep execution.
    */
   function emit(cmd: NetCmd): void {
-    applyNetCmds(state, [cmd], myOwner);
-    net?.push(cmd);
+    if (net) {
+      net.push(cmd);
+    } else {
+      applyNetCmds(state, [cmd], myOwner);
+    }
   }
 
   // Mutable reference so onKeyDown always calls the cleanup-wrapped version
@@ -406,10 +410,12 @@ export function startGame(
 
   // ── Sim tick ───────────────────────────────────────────────────────────────
   function simTick(): void {
-    // Apply incoming peer commands for this tick (online mode)
+    // Online mini-lockstep: advance only when this tick is ready on both sides.
     if (net) {
-      const remote = net.exchange(state.tick);
-      if (remote) applyNetCmds(state, remote, peerOwner);
+      const exchange = net.exchange(state.tick);
+      if (!exchange.ready) return;
+      if (exchange.local.length > 0) applyNetCmds(state, exchange.local, myOwner);
+      if (exchange.remote.length > 0) applyNetCmds(state, exchange.remote, peerOwner);
     }
 
     state.tick++;
