@@ -164,9 +164,26 @@ export function processTrain(state: GameState, building: Entity): void {
   const sy = building.pos.y + building.tileH;
   const spawnPos = findSpawnTile(state, sx, sy);
   const newUnit  = spawnEntity(state, cmd.unit, building.owner as 0 | 1, spawnPos);
+  const owner = building.owner as 0 | 1;
+
+  let openingPressureAttackMove = false;
+  let openingTempoQueueBoost = false;
 
   if (building.openingPlan && state.tick <= SIM_HZ * 240) {
     newUnit.openingPlan = building.openingPlan;
+
+    if (!state.openingCommitmentClaimed[owner]) {
+      if (building.openingPlan === 'eco' && isWorkerKind(newUnit.kind)) {
+        state.gold[owner] += 40;
+        state.openingCommitmentClaimed[owner] = true;
+      } else if (building.openingPlan === 'tempo' && isUnitKind(newUnit.kind) && !isWorkerKind(newUnit.kind)) {
+        openingTempoQueueBoost = true;
+        state.openingCommitmentClaimed[owner] = true;
+      } else if (building.openingPlan === 'pressure' && isUnitKind(newUnit.kind) && !isWorkerKind(newUnit.kind)) {
+        openingPressureAttackMove = true;
+        state.openingCommitmentClaimed[owner] = true;
+      }
+    }
   }
 
   // Walk to rally point immediately if one is set
@@ -178,7 +195,7 @@ export function processTrain(state: GameState, building: Entity): void {
         type: 'move',
         path,
         stepTick: state.tick,
-        attackMove: false,
+        attackMove: openingPressureAttackMove,
         goal: { ...rp },
         lastPos: { ...spawnPos },
         lastProgressTick: state.tick,
@@ -191,6 +208,9 @@ export function processTrain(state: GameState, building: Entity): void {
     const next = cmd.queue.shift()!;
     cmd.unit      = next;
     cmd.ticksLeft = STATS[next]!.buildTicks;
+    if (openingTempoQueueBoost) {
+      cmd.ticksLeft = Math.max(1, Math.floor(cmd.ticksLeft * 0.65));
+    }
   } else {
     building.cmd = null;
   }

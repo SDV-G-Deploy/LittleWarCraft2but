@@ -120,6 +120,8 @@ function isNetCmd(v: unknown): v is NetCmd {
       return isInt(cmd.workerId) && typeof cmd.building === 'string' && VALID_BUILDINGS.has(cmd.building as EntityKind) && isInt(cmd.tx) && isInt(cmd.ty);
     case 'stop':
       return isIdArray(cmd.ids);
+    case 'set_plan':
+      return isInt(cmd.buildingId) && typeof cmd.plan === 'string' && (cmd.plan === 'eco' || cmd.plan === 'tempo' || cmd.plan === 'pressure');
     case 'rally':
       return isInt(cmd.buildingId) && isInt(cmd.tx) && isInt(cmd.ty);
     case 'demolish':

@@ -21,6 +21,7 @@ export type NetCmd =
   | { k: 'train';   buildingId: number; unit: EntityKind }
   | { k: 'build';   workerId: number; building: EntityKind; tx: number; ty: number }
   | { k: 'stop';    ids: number[] }
+  | { k: 'set_plan'; buildingId: number; plan: OpeningPlan }
   | { k: 'rally';   buildingId: number; tx: number; ty: number; plan?: OpeningPlan }
   | { k: 'demolish';buildingId: number }
   | { k: 'resume';  workerId: number; siteId: number };
@@ -134,6 +135,13 @@ export function applyNetCmds(
         for (const id of sortUnitIds(cmd.ids)) {
           const e = state.entities.find(en => en.id === id && en.owner === owner);
           if (e) e.cmd = null;
+        }
+        break;
+      }
+      case 'set_plan': {
+        const b = state.entities.find(en => en.id === cmd.buildingId && en.owner === owner);
+        if (b && (b.kind === 'townhall' || b.kind === 'barracks')) {
+          b.openingPlan = cmd.plan;
         }
         break;
       }

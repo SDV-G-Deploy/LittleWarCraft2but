@@ -429,7 +429,7 @@ export function startGame(
         const building = state.entities.find(e =>
           e.id === id && e.owner === myOwner && (e.kind === 'townhall' || e.kind === 'barracks'));
         if (!building) continue;
-        building.openingPlan = pendingPlan;
+        emit({ k: 'set_plan', buildingId: building.id, plan: pendingPlan });
         if (building.rallyPoint) {
           emit({ k: 'rally', buildingId: building.id, tx: building.rallyPoint.x, ty: building.rallyPoint.y, plan: pendingPlan });
         }

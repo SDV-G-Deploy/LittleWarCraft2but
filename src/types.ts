@@ -131,4 +131,5 @@ export interface GameState {
   mapName?: string;
   mapDescription?: string;
   contestedMineBonusUntilTick: number;
+  openingCommitmentClaimed: [boolean, boolean];
 }
