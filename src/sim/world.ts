@@ -13,7 +13,7 @@ export function createWorld(mapData: MapData, races: [Race, Race]): GameState {
     entities: [],
     corpses:  [],
     nextId:   1,
-    gold:     [500, 200],
+    gold:     [500, 500],
     pop:      [0, 0],
     popCap:   [4, 4],
     races,

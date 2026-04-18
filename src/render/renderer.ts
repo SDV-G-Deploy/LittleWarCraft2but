@@ -79,7 +79,7 @@ export function render(
   drawTiles(ctx, sp, state, cam, viewW, viewH);
   drawCorpses(ctx, sp, state, cam);
   drawEntities(ctx, sp, state, cam, selectedIds, myOwner);
-  drawRallyPoints(ctx, state, cam, selectedIds);
+  drawRallyPoints(ctx, state, cam, selectedIds, myOwner);
   drawFog(ctx, state, cam, viewW, viewH);
   drawHUD(ctx, state, myOwner);
 }
@@ -96,6 +96,7 @@ export function drawMinimap(
   cam: Camera,
   viewW: number,
   viewH_game: number,
+  myOwner: 0 | 1 = 0,
 ): void {
   if (!minimapTerrain) minimapTerrain = buildMinimapTerrain(state);
 
@@ -135,7 +136,7 @@ export function drawMinimap(
       const fog = state.fog[Math.min(MAP_H - 1, e.pos.y)][Math.min(MAP_W - 1, e.pos.x)];
       if (fog === 'unseen') continue;
       ctx.fillStyle = '#ffe840';
-    } else if (e.owner === 1) {
+    } else if (e.owner !== myOwner) {
       // Enemy: obey fog rules (same as entityVisible in main render)
       const cy  = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
       const cx  = Math.min(MAP_W - 1, Math.max(0, e.pos.x + Math.floor(e.tileW / 2)));
@@ -144,7 +145,7 @@ export function drawMinimap(
       if (!isUnitKind(e.kind) && fog === 'unseen') continue;
       ctx.fillStyle = '#ff4444';
     } else {
-      ctx.fillStyle = '#4488ff'; // player
+      ctx.fillStyle = '#4488ff'; // own units
     }
 
     // Units → 2×2 dot; buildings → scaled to footprint
@@ -413,9 +414,10 @@ function drawRallyPoints(
   state: GameState,
   cam: Camera,
   selectedIds: Set<number>,
+  myOwner: 0 | 1,
 ): void {
   for (const e of state.entities) {
-    if (e.owner !== 0) continue;
+    if (e.owner !== myOwner) continue;
     if (!e.rallyPoint) continue;
     if (e.kind !== 'townhall' && e.kind !== 'barracks') continue;
     if (!selectedIds.has(e.id)) continue; // only show for selected buildings

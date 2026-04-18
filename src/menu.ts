@@ -24,6 +24,7 @@ interface MenuState {
   netRole?:    'host' | 'guest';
   netSession?: NetSession;
   joinCode:    string;      // text being typed in the join field
+  guestRace:   Race;        // race the joining player picks
 }
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
@@ -99,28 +100,17 @@ export function runMenu(
     playerRace: 'human',
     mapId:      1,
     joinCode:   '',
+    guestRace:  'orc',
   };
 
-  // ── Auto-join from URL param (?room=CODE&race=X&map=N) ───────────────────
+  // ── Auto-fill join code from URL param (?room=CODE) ─────────────────────
+  // Pre-fill the room code but don't auto-connect — guest picks their own
+  // race first, then clicks JOIN.
   const urlParams = new URLSearchParams(window.location.search);
   const urlRoom   = urlParams.get('room');
-  const urlRace   = (urlParams.get('race') as Race | null) ?? 'human';
-  const urlMap    = parseInt(urlParams.get('map') ?? '1') as MapId;
   if (urlRoom) {
-    // playerRace here = owner-0's race (the HOST's race) — same on both clients
-    // so createWorld([playerRace, aiRace]) produces the same state everywhere
-    ms.screen     = 'online';
-    ms.netRole    = 'guest';
-    ms.playerRace = urlRace;   // keep host's race — DO NOT flip
-    ms.mapId      = urlMap;
-    ms.joinCode   = urlRoom;
-    ms.netSession = createSession('guest', urlRoom);
-    // Guest starts game when host sends config (confirms race/map)
-    ms.netSession.onConfig = (cfg) => {
-      ms.playerRace = cfg.race as Race;
-      ms.mapId      = cfg.mapId as MapId;
-      startOnlineGame();
-    };
+    ms.screen   = 'online';
+    ms.joinCode = urlRoom;
   }
 
   let buttons: MenuButton[] = [];
@@ -167,11 +157,11 @@ export function runMenu(
       case 'host_game': {
         ms.netSession?.destroy();
         ms.netRole    = 'host';
-        // Pass config so host sends it to guest on connection open
         ms.netSession = createSession('host', undefined, { race: ms.playerRace, mapId: ms.mapId });
-        // Host starts game as soon as guest connects (status = 'ready')
-        ms.netSession.onStatusChange = () => {
-          if (ms.netSession?.status === 'ready') startOnlineGame();
+        // Host starts game after receiving guest's hello (which includes guest race)
+        ms.netSession.onConfig = (cfg) => {
+          ms.guestRace = cfg.guestRace as Race;
+          startOnlineGame();
         };
         break;
       }
@@ -179,10 +169,12 @@ export function runMenu(
         if (ms.joinCode.length < 4) break;
         ms.netSession?.destroy();
         ms.netRole    = 'guest';
-        ms.netSession = createSession('guest', ms.joinCode);
-        // Guest starts game only after receiving host config (race + map)
+        // Pass guest's chosen race so it's sent in the hello message
+        ms.netSession = createSession('guest', ms.joinCode, undefined, ms.guestRace);
+        // Guest starts game after receiving full config from host
         ms.netSession.onConfig = (cfg) => {
           ms.playerRace = cfg.race as Race;
+          ms.guestRace  = cfg.guestRace as Race;
           ms.mapId      = cfg.mapId as MapId;
           startOnlineGame();
         };
@@ -191,6 +183,8 @@ export function runMenu(
       default: {
         if (action.startsWith('set_race_')) {
           ms.playerRace = action.slice(9) as Race;
+        } else if (action.startsWith('set_join_race_')) {
+          ms.guestRace = action.slice(14) as Race;
         } else if (action.startsWith('set_map_')) {
           ms.mapId = parseInt(action.slice(8)) as MapId;
         } else if (action.startsWith('copy_link:')) {
@@ -230,7 +224,8 @@ export function runMenu(
     origRemove();
     const myOwner: 0 | 1 = ms.netRole === 'host' ? 0 : 1;
     onStart({
-      playerRace: ms.playerRace,
+      playerRace: ms.playerRace,   // host's race → races[0]
+      guestRace:  ms.guestRace,    // guest's race → races[1]
       mapId:      ms.mapId,
       net:        ms.netSession,
       myOwner,
@@ -740,9 +735,9 @@ export function runMenu(
       ctx.fillText(sess.statusMsg, hx + hw / 2, hy + hh + 18);
 
       if (sess.status === 'waiting') {
-        // Build shareable URL
+        // Build shareable URL — race/map are negotiated in-protocol now
         const origin = window.location.origin + window.location.pathname;
-        const link   = `${origin}?room=${sess.code}&race=${ms.playerRace}&map=${ms.mapId}`;
+        const link   = `${origin}?room=${sess.code}`;
         ctx.fillStyle = WHITE;
         ctx.font      = '11px monospace';
         ctx.fillText('Share link:', hx + hw / 2, hy + hh + 36);
@@ -773,11 +768,30 @@ export function runMenu(
 
     ctx.fillStyle = GREY;
     ctx.font      = '11px monospace';
-    ctx.fillText('Enter the room code from', jx + jw / 2, jy + 50);
-    ctx.fillText('the host, or open their link.', jx + jw / 2, jy + 65);
+    ctx.fillText('Pick your race, enter room code,', jx + jw / 2, jy + 50);
+    ctx.fillText('then click JOIN.', jx + jw / 2, jy + 65);
+
+    // Race picker inside join panel
+    const joinRaces: Race[] = ['human', 'orc'];
+    for (let i = 0; i < 2; i++) {
+      const rc  = RACES[joinRaces[i]];
+      const bx  = jx + 10 + i * 112;
+      const by  = jy + 76;
+      const sel = ms.guestRace === joinRaces[i];
+      ctx.fillStyle = sel ? `${rc.accentColor}44` : 'rgba(0,0,0,0.2)';
+      ctx.fillRect(bx, by, 102, 26);
+      ctx.strokeStyle = sel ? rc.accentColor : '#444';
+      ctx.lineWidth   = 1;
+      ctx.strokeRect(bx + 0.5, by + 0.5, 101, 25);
+      ctx.fillStyle  = sel ? rc.accentColor : GREY;
+      ctx.font       = 'bold 12px monospace';
+      ctx.textAlign  = 'center';
+      ctx.fillText(rc.name, bx + 51, by + 17);
+      newBtns.push({ x: bx, y: by, w: 102, h: 26, label: rc.name, action: `set_join_race_${joinRaces[i]}` });
+    }
 
     // Code input display
-    const codeY = jy + 95;
+    const codeY = jy + 110;
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.fillRect(jx + 12, codeY, jw - 24, 32);
     ctx.strokeStyle = '#88bbff';
@@ -788,7 +802,7 @@ export function runMenu(
 
     ctx.fillStyle = GREY;
     ctx.font      = '10px monospace';
-    ctx.fillText('(keyboard — backspace to delete)', jx + jw / 2, jy + 142);
+    ctx.fillText('(keyboard — backspace to delete)', jx + jw / 2, jy + 152);
 
     const joinBtn: MenuButton = { x: jx + 20, y: jy + jh - 44, w: jw - 40, h: 34, label: 'JOIN GAME', action: 'join_game', accent: '#88bbff' };
     newBtns.push(joinBtn);

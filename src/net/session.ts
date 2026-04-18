@@ -25,10 +25,11 @@ export type SessionStatus =
   | 'disconnected'  // peer left
   | 'error';
 
-/** Config the host sends to guest on channel open. */
+/** Full config agreed by both sides before the game starts. */
 export interface SessionConfig {
-  race:  string;   // host's playerRace  (races[0])
-  mapId: number;
+  race:      string;   // host's race  → races[0]
+  guestRace: string;   // guest's race → races[1]
+  mapId:     number;
 }
 
 export interface NetSession {
@@ -38,7 +39,9 @@ export interface NetSession {
   statusMsg: string;
 
   onStatusChange?: () => void;
-  /** Guest only: fired when host config arrives. Start game from here. */
+  /** Fired on BOTH sides once the full config is established.
+   *  Host: fires after receiving guest's hello message.
+   *  Guest: fires after receiving host's config reply. */
   onConfig?: (cfg: SessionConfig) => void;
 
   push(cmd: NetCmd): void;
@@ -49,15 +52,17 @@ export interface NetSession {
 // ─── Internal message types ───────────────────────────────────────────────────
 
 type WireMessage =
-  | { type: 'config'; race: string; mapId: number }
+  | { type: 'hello';  race: string }                                     // guest → host
+  | { type: 'config'; race: string; guestRace: string; mapId: number }   // host → guest
   | TickPacket & { type?: undefined };  // tick packets have no 'type' field
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
 export function createSession(
-  role:       'host' | 'guest',
-  hostCode?:  string,          // required when role === 'guest'
-  hostConfig?: SessionConfig,  // required when role === 'host'
+  role:         'host' | 'guest',
+  hostCode?:    string,                           // required when role === 'guest'
+  hostConfig?:  Pick<SessionConfig, 'race' | 'mapId'>,  // required when role === 'host'
+  guestRace?:   string,                           // required when role === 'guest'
 ): NetSession {
 
   let conn: DataConnection | null = null;
@@ -110,21 +115,35 @@ export function createSession(
     conn = c;
 
     c.on('open', () => {
-      // Host sends its config to guest as soon as the channel is ready
-      if (role === 'host' && hostConfig) {
-        c.send({ type: 'config', race: hostConfig.race, mapId: hostConfig.mapId } satisfies WireMessage);
+      if (role === 'guest') {
+        // Guest announces its chosen race first; host replies with full config
+        c.send({ type: 'hello', race: guestRace ?? 'human' } satisfies WireMessage);
+        session.statusMsg = 'Connected! Sending race…';
+      } else {
+        session.statusMsg = 'Guest connected!';
       }
-      session.status    = 'ready';
-      session.statusMsg = 'Connected!';
+      session.status = 'ready';
       session.onStatusChange?.();
     });
 
     c.on('data', (raw) => {
       const msg = raw as WireMessage;
 
-      // Config packet (guest only — host already has it)
-      if (msg.type === 'config') {
-        session.onConfig?.({ race: msg.race, mapId: msg.mapId });
+      // Host receives guest's race → replies with full config → both start
+      if (msg.type === 'hello' && role === 'host' && hostConfig) {
+        const fullCfg: SessionConfig = {
+          race:      hostConfig.race,
+          guestRace: msg.race,
+          mapId:     hostConfig.mapId,
+        };
+        c.send({ type: 'config', ...fullCfg } satisfies WireMessage);
+        session.onConfig?.(fullCfg);
+        return;
+      }
+
+      // Guest receives full config from host
+      if (msg.type === 'config' && role === 'guest') {
+        session.onConfig?.({ race: msg.race, guestRace: msg.guestRace, mapId: msg.mapId });
         return;
       }
 

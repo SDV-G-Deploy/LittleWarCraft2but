@@ -27,7 +27,8 @@ const UI_HEIGHT   = 96; // must match render/ui.ts PANEL_H
 // ─── Options ──────────────────────────────────────────────────────────────────
 
 export interface GameOptions {
-  playerRace: Race;
+  playerRace: Race;         // host's race → races[0] (same on both clients)
+  guestRace?: Race;         // guest's race → races[1]; defaults to opposite if omitted
   mapId:      MapId;
   net?:       NetSession;   // present → online 1v1, no AI
   myOwner?:   0 | 1;        // which owner this client controls (default 0)
@@ -45,7 +46,8 @@ export function startGame(
   // Reset cached render data from any prior game
   resetRenderCache();
 
-  const aiRace = options.playerRace === 'human' ? 'orc' : 'human';
+  // In online mode guestRace is set from the handshake; offline defaults to opposite
+  const aiRace: Race = options.guestRace ?? (options.playerRace === 'human' ? 'orc' : 'human');
   const mapData   = options.mapId === 2 ? buildMap02() : buildMap01();
   const state     = createWorld(mapData, [options.playerRace, aiRace]);
   // Camera starts at MY base: owner-0 → playerStart, owner-1 → aiStart
@@ -487,7 +489,7 @@ export function startGame(
     }
 
     render(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, selectedIds, myOwner);
-    drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT);
+    drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, myOwner);
     if (placementMode) {
       const { tx, ty } = screenToTile(mouse.x, mouse.y, cam);
       drawGhostBuilding(ctx, state, cam, placementMode.building, tx, ty);
