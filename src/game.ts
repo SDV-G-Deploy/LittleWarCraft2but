@@ -56,8 +56,10 @@ export function startGame(
     Math.max(0, myStart.x - 8),
     Math.max(0, myStart.y - 6),
   );
-  const keys  = createKeyState();
-  const mouse = createMouseState(canvas);
+  const keysInput  = createKeyState();
+  const mouseInput = createMouseState(canvas);
+  const keys = keysInput.state;
+  const mouse = mouseInput.state;
 
   const playerRC = RACES[options.playerRace];
   const aiRC     = RACES[aiRace];
@@ -517,6 +519,8 @@ export function startGame(
   backToMenu = () => {
     running = false;
     net?.destroy();
+    keysInput.destroy();
+    mouseInput.destroy();
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup',   onKeyUp);
     window.removeEventListener('resize',  resize);

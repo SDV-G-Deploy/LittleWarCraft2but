@@ -5,26 +5,40 @@ export interface KeyState {
   ArrowRight: boolean;
 }
 
+export interface KeyInput {
+  state: KeyState;
+  destroy: () => void;
+}
+
 const TRACKED = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
-export function createKeyState(): KeyState {
+export function createKeyState(): KeyInput {
   const state: KeyState = {
     ArrowUp: false, ArrowDown: false,
     ArrowLeft: false, ArrowRight: false,
   };
 
-  window.addEventListener('keydown', (e) => {
+  const onKeyDown = (e: KeyboardEvent) => {
     if (TRACKED.has(e.key)) {
       (state as unknown as Record<string, boolean>)[e.key] = true;
       e.preventDefault(); // stop page scroll
     }
-  });
+  };
 
-  window.addEventListener('keyup', (e) => {
+  const onKeyUp = (e: KeyboardEvent) => {
     if (TRACKED.has(e.key)) {
       (state as unknown as Record<string, boolean>)[e.key] = false;
     }
-  });
+  };
 
-  return state;
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+
+  return {
+    state,
+    destroy() {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    },
+  };
 }

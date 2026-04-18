@@ -22,23 +22,34 @@ export interface MouseState {
   activeDrag: { x1: number; y1: number; x2: number; y2: number } | null;
 }
 
-export function createMouseState(canvas: HTMLCanvasElement): MouseState {
+export interface MouseInput {
+  state: MouseState;
+  destroy: () => void;
+}
+
+export function createMouseState(canvas: HTMLCanvasElement): MouseInput {
   const state: MouseState = {
     x: 0, y: 0, buttons: 0, onCanvas: false, shiftHeld: false,
     clicks: [], dragSelects: [], activeDrag: null,
   };
 
-  window.addEventListener('keydown', (e) => { if (e.key === 'Shift') state.shiftHeld = true; });
-  window.addEventListener('keyup',   (e) => { if (e.key === 'Shift') state.shiftHeld = false; });
+  const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Shift') state.shiftHeld = true; };
+  const onKeyUp   = (e: KeyboardEvent) => { if (e.key === 'Shift') state.shiftHeld = false; };
+
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
 
   let downX = 0;
   let downY = 0;
   let leftHeld = false;
 
-  canvas.addEventListener('mouseenter', () => { state.onCanvas = true; });
-  canvas.addEventListener('mouseleave', () => { state.onCanvas = false; state.buttons = 0; state.activeDrag = null; leftHeld = false; });
+  const onMouseEnter = () => { state.onCanvas = true; };
+  const onMouseLeave = () => { state.onCanvas = false; state.buttons = 0; state.activeDrag = null; leftHeld = false; };
 
-  canvas.addEventListener('mousemove', (e) => {
+  canvas.addEventListener('mouseenter', onMouseEnter);
+  canvas.addEventListener('mouseleave', onMouseLeave);
+
+  const onMouseMove = (e: MouseEvent) => {
     const r = canvas.getBoundingClientRect();
     state.x = e.clientX - r.left;
     state.y = e.clientY - r.top;
@@ -54,9 +65,11 @@ export function createMouseState(canvas: HTMLCanvasElement): MouseState {
         };
       }
     }
-  });
+  };
 
-  canvas.addEventListener('mousedown', (e) => {
+  canvas.addEventListener('mousemove', onMouseMove);
+
+  const onMouseDown = (e: MouseEvent) => {
     const r = canvas.getBoundingClientRect();
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
@@ -67,9 +80,11 @@ export function createMouseState(canvas: HTMLCanvasElement): MouseState {
     } else if (e.button === 2) {
       state.clicks.push({ x, y, button: 2 });
     }
-  });
+  };
 
-  canvas.addEventListener('mouseup', (e) => {
+  canvas.addEventListener('mousedown', onMouseDown);
+
+  const onMouseUp = (e: MouseEvent) => {
     state.buttons = e.buttons;
     if (e.button === 0 && leftHeld) {
       const r = canvas.getBoundingClientRect();
@@ -84,9 +99,25 @@ export function createMouseState(canvas: HTMLCanvasElement): MouseState {
       }
       leftHeld = false;
     }
-  });
+  };
 
-  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  canvas.addEventListener('mouseup', onMouseUp);
 
-  return state;
+  const onContextMenu = (e: MouseEvent) => e.preventDefault();
+
+  canvas.addEventListener('contextmenu', onContextMenu);
+
+  return {
+    state,
+    destroy() {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      canvas.removeEventListener('mouseenter', onMouseEnter);
+      canvas.removeEventListener('mouseleave', onMouseLeave);
+      canvas.removeEventListener('mousemove', onMouseMove);
+      canvas.removeEventListener('mousedown', onMouseDown);
+      canvas.removeEventListener('mouseup', onMouseUp);
+      canvas.removeEventListener('contextmenu', onContextMenu);
+    },
+  };
 }

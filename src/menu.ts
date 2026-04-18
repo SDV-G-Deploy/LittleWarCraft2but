@@ -160,7 +160,7 @@ export function runMenu(
         ms.netSession = createSession('host', undefined, { race: ms.playerRace, mapId: ms.mapId });
         // Host starts game after receiving guest's hello (which includes guest race)
         ms.netSession.onConfig = (cfg) => {
-          ms.guestRace = cfg.guestRace as Race;
+          ms.guestRace = cfg.guestRace;
           startOnlineGame();
         };
         break;
@@ -173,9 +173,9 @@ export function runMenu(
         ms.netSession = createSession('guest', ms.joinCode, undefined, ms.guestRace);
         // Guest starts game after receiving full config from host
         ms.netSession.onConfig = (cfg) => {
-          ms.playerRace = cfg.race as Race;
-          ms.guestRace  = cfg.guestRace as Race;
-          ms.mapId      = cfg.mapId as MapId;
+          ms.playerRace = cfg.race;
+          ms.guestRace  = cfg.guestRace;
+          ms.mapId      = cfg.mapId;
           startOnlineGame();
         };
         break;
@@ -208,6 +208,7 @@ export function runMenu(
   window.addEventListener('keydown', onKeyDown);
   const origRemove = () => {
     canvas.removeEventListener('click', onClick);
+    canvas.removeEventListener('mousemove', onMouseMove);
     window.removeEventListener('resize', resize);
     window.removeEventListener('keydown', onKeyDown);
   };
@@ -284,11 +285,12 @@ export function runMenu(
   // ── Hover detection ────────────────────────────────────────────────────────
   let mouseX = 0;
   let mouseY = 0;
-  canvas.addEventListener('mousemove', (e) => {
+  const onMouseMove = (e: MouseEvent) => {
     const r = canvas.getBoundingClientRect();
     mouseX = e.clientX - r.left;
     mouseY = e.clientY - r.top;
-  });
+  };
+  canvas.addEventListener('mousemove', onMouseMove);
 
   function isHovered(btn: MenuButton): boolean {
     return mouseX >= btn.x && mouseX <= btn.x + btn.w &&
