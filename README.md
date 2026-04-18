@@ -89,6 +89,12 @@ Supported Vite env vars:
 - `VITE_PEER_SECURE`
 - `VITE_ICE_SERVERS` as a JSON array string
 
+Online menu now supports two runtime test modes:
+- `SERVER` uses the self-hosted PeerJS/TURN config from the build env
+- `DIRECT` uses public PeerJS (`0.peerjs.com`) plus browser STUN fallback
+
+Share links preserve the selected mode via `?mode=public` when needed.
+
 Examples:
 - client env example: `.env.example`
 - self-host infra example: `infra/compose.yaml`

@@ -24,6 +24,13 @@ interface RuntimePeerConfig {
   secure: boolean;
 }
 
+export type NetMode = 'public' | 'selfhost';
+
+interface RuntimeNetConfig {
+  peer: RuntimePeerConfig;
+  iceServers: RTCIceServer[];
+}
+
 function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
   if (value == null || value.trim() === '') return fallback;
   const normalized = value.trim().toLowerCase();
@@ -68,7 +75,22 @@ function parseIceServers(raw: string | undefined): RTCIceServer[] | null {
   }
 }
 
-function getRuntimePeerConfig(): { peer: RuntimePeerConfig; iceServers: RTCIceServer[] } {
+function getPublicNetConfig(): RuntimeNetConfig {
+  return {
+    peer: {
+      host: '0.peerjs.com',
+      port: 443,
+      path: '/',
+      secure: true,
+    },
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ],
+  };
+}
+
+function getSelfHostedNetConfig(): RuntimeNetConfig {
   const host = (import.meta.env.VITE_PEER_HOST as string | undefined)?.trim() || defaultPeerHost();
   const secure = parseBooleanEnv(import.meta.env.VITE_PEER_SECURE as string | undefined, defaultPeerSecure());
   const port = parseNumberEnv(import.meta.env.VITE_PEER_PORT as string | undefined, secure ? 443 : 9000);
@@ -82,6 +104,10 @@ function getRuntimePeerConfig(): { peer: RuntimePeerConfig; iceServers: RTCIceSe
     peer: { host, port, path, secure },
     iceServers,
   };
+}
+
+function getRuntimePeerConfig(mode: NetMode): RuntimeNetConfig {
+  return mode === 'public' ? getPublicNetConfig() : getSelfHostedNetConfig();
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -113,6 +139,7 @@ export interface NetSession {
   code:    string;          // room code = host's PeerJS ID
   status:  SessionStatus;
   statusMsg: string;
+  netMode: NetMode;
 
   onStatusChange?: () => void;
   /** Fired on BOTH sides once the full config is established.
@@ -222,6 +249,7 @@ export function createSession(
   hostCode?:    string,                           // required when role === 'guest'
   hostConfig?:  Pick<SessionConfig, 'race' | 'mapId'>,  // required when role === 'host'
   guestRace?:   Race,                           // required when role === 'guest'
+  netMode:      NetMode = 'selfhost',
 ): NetSession {
 
   const safeHostConfig = hostConfig && isRace(hostConfig.race) && isMapId(hostConfig.mapId)
@@ -326,6 +354,7 @@ export function createSession(
     code:      role === 'guest' ? (hostCode ?? '') : '',
     status:    'init',
     statusMsg: 'Initialising…',
+    netMode,
 
     push(cmd) {
       if (localBuf.length < MAX_LOCAL_CMDS_PER_TICK) localBuf.push(cmd);
@@ -386,7 +415,7 @@ export function createSession(
   };
 
   // ── PeerJS setup ─────────────────────────────────────────────────────────────
-  const runtimeNet = getRuntimePeerConfig();
+  const runtimeNet = getRuntimePeerConfig(netMode);
   const peer = new Peer({
     host:   runtimeNet.peer.host,
     port:   runtimeNet.peer.port,

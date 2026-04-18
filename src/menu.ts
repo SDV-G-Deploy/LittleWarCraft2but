@@ -10,7 +10,7 @@ import { RACES } from './data/races';
 import { buildMap01 } from './data/maps/map01';
 import { buildMap02 } from './data/maps/map02';
 import { createSession } from './net/session';
-import type { NetSession } from './net/session';
+import type { NetSession, NetMode } from './net/session';
 
 // ─── State machine ────────────────────────────────────────────────────────────
 
@@ -25,6 +25,7 @@ interface MenuState {
   netSession?: NetSession;
   joinCode:    string;      // text being typed in the join field
   guestRace:   Race;        // race the joining player picks
+  netMode:     NetMode;
 }
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
@@ -101,6 +102,7 @@ export function runMenu(
     mapId:      1,
     joinCode:   '',
     guestRace:  'orc',
+    netMode:    'selfhost',
   };
 
   // ── Auto-fill join code from URL param (?room=CODE) ─────────────────────
@@ -108,6 +110,10 @@ export function runMenu(
   // race first, then clicks JOIN.
   const urlParams = new URLSearchParams(window.location.search);
   const urlRoom   = urlParams.get('room');
+  const urlMode   = urlParams.get('mode');
+  if (urlMode === 'public' || urlMode === 'selfhost') {
+    ms.netMode = urlMode;
+  }
   if (urlRoom) {
     ms.screen   = 'online';
     ms.joinCode = urlRoom;
@@ -157,7 +163,7 @@ export function runMenu(
       case 'host_game': {
         ms.netSession?.destroy();
         ms.netRole    = 'host';
-        ms.netSession = createSession('host', undefined, { race: ms.playerRace, mapId: ms.mapId });
+        ms.netSession = createSession('host', undefined, { race: ms.playerRace, mapId: ms.mapId }, undefined, ms.netMode);
         // Host starts game after receiving guest's hello (which includes guest race)
         ms.netSession.onConfig = (cfg) => {
           ms.guestRace = cfg.guestRace;
@@ -170,7 +176,7 @@ export function runMenu(
         ms.netSession?.destroy();
         ms.netRole    = 'guest';
         // Pass guest's chosen race so it's sent in the hello message
-        ms.netSession = createSession('guest', ms.joinCode, undefined, ms.guestRace);
+        ms.netSession = createSession('guest', ms.joinCode, undefined, ms.guestRace, ms.netMode);
         // Guest starts game after receiving full config from host
         ms.netSession.onConfig = (cfg) => {
           ms.playerRace = cfg.race;
@@ -187,6 +193,11 @@ export function runMenu(
           ms.guestRace = action.slice(14) as Race;
         } else if (action.startsWith('set_map_')) {
           ms.mapId = parseInt(action.slice(8)) as MapId;
+        } else if (action.startsWith('set_net_mode_')) {
+          ms.netMode = action.slice(13) as NetMode;
+          ms.netSession?.destroy();
+          ms.netSession = undefined;
+          ms.netRole = undefined;
         } else if (action.startsWith('copy_link:')) {
           navigator.clipboard?.writeText(action.slice(10)).catch(() => {});
         }
@@ -680,8 +691,40 @@ export function runMenu(
     ctx.font      = '13px monospace';
     ctx.fillText('Host a game and share the link, or enter a code to join.', cx, cy - 130);
 
+    ctx.font = '11px monospace';
+    ctx.fillStyle = GREY;
+    ctx.fillText('Connection mode', cx, cy - 106);
+
+    const modeY = cy - 92;
+    const modeDefs: Array<{ mode: NetMode; label: string; accent: string }> = [
+      { mode: 'selfhost', label: 'SERVER', accent: '#44ddaa' },
+      { mode: 'public', label: 'DIRECT', accent: '#88bbff' },
+    ];
+    for (let i = 0; i < modeDefs.length; i++) {
+      const def = modeDefs[i];
+      const bx = cx - 110 + i * 120;
+      const by = modeY;
+      const sel = ms.netMode === def.mode;
+      ctx.fillStyle = sel ? `${def.accent}44` : 'rgba(0,0,0,0.2)';
+      ctx.fillRect(bx, by, 100, 28);
+      ctx.strokeStyle = sel ? def.accent : '#444';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx + 0.5, by + 0.5, 99, 27);
+      ctx.fillStyle = sel ? def.accent : GREY;
+      ctx.font = 'bold 12px monospace';
+      ctx.fillText(def.label, bx + 50, by + 18);
+      newBtns.push({ x: bx, y: by, w: 100, h: 28, label: def.label, action: `set_net_mode_${def.mode}` });
+    }
+
+    ctx.fillStyle = GREY;
+    ctx.font = '10px monospace';
+    const modeHint = ms.netMode === 'selfhost'
+      ? 'SERVER = self-hosted PeerJS + TURN from build config'
+      : 'DIRECT = public PeerJS + browser STUN fallback';
+    ctx.fillText(modeHint, cx, cy - 50);
+
     // ── HOST panel ─────────────────────────────────────────────────────────────
-    const hx = cx - 280; const hy = cy - 100; const hw = 240; const hh = 200;
+    const hx = cx - 280; const hy = cy - 20; const hw = 240; const hh = 200;
     ctx.fillStyle = 'rgba(255,255,255,0.04)';
     ctx.fillRect(hx, hy, hw, hh);
     ctx.strokeStyle = '#44ddaa';
@@ -749,7 +792,7 @@ export function runMenu(
       if (sess.status === 'waiting') {
         // Build shareable URL — race/map are negotiated in-protocol now
         const origin = window.location.origin + window.location.pathname;
-        const link   = `${origin}?room=${sess.code}`;
+        const link   = `${origin}?room=${sess.code}${ms.netMode === 'public' ? '&mode=public' : ''}`;
         ctx.fillStyle = WHITE;
         ctx.font      = '11px monospace';
         ctx.fillText('Share link:', hx + hw / 2, hy + hh + 36);
@@ -766,7 +809,7 @@ export function runMenu(
     }
 
     // ── JOIN panel ─────────────────────────────────────────────────────────────
-    const jx = cx + 40; const jy = cy - 100; const jw = 240; const jh = 200;
+    const jx = cx + 40; const jy = cy - 20; const jw = 240; const jh = 200;
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,255,255,0.04)';
     ctx.fillRect(jx, jy, jw, jh);
