@@ -478,8 +478,18 @@ export function startGame(
   function simTick(): void {
     // Online mini-lockstep: advance only when this tick is ready on both sides.
     if (net) {
+      if (net.status === 'disconnected' && gameResult === 'playing') {
+        gameResult = 'win';
+        return;
+      }
+
       const exchange = net.exchange(state.tick);
-      if (!exchange.ready) return;
+      if (!exchange.ready) {
+        if (net.status === 'disconnected' && gameResult === 'playing') {
+          gameResult = 'win';
+        }
+        return;
+      }
       if (myOwner === 0) {
         if (exchange.local.length > 0) applyNetCmds(state, exchange.local, 0);
         if (exchange.remote.length > 0) applyNetCmds(state, exchange.remote, 1);

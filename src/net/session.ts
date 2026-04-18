@@ -213,14 +213,15 @@ export function createSession(
   function enqueueRemotePacket(pkt: TickPacket): void {
     remoteAnnouncedUpToTick = Math.max(remoteAnnouncedUpToTick, pkt.tick);
 
-    if (pkt.cmds.length === 0) return;
-
     const prev = remoteQueue.get(pkt.tick);
     if (prev) {
-      prev.push(...pkt.cmds);
-    } else {
-      remoteQueue.set(pkt.tick, [...pkt.cmds]);
+      queuedRemoteCmdCount -= prev.length;
+      remoteQueue.delete(pkt.tick);
     }
+
+    if (pkt.cmds.length === 0) return;
+
+    remoteQueue.set(pkt.tick, [...pkt.cmds]);
     queuedRemoteCmdCount += pkt.cmds.length;
 
     while (remoteQueue.size > MAX_QUEUED_REMOTE_TICKS || queuedRemoteCmdCount > MAX_QUEUED_REMOTE_CMDS) {
