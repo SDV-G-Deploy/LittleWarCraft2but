@@ -21,6 +21,9 @@ Current state:
 - main multiplayer determinism blocker from review was fixed
 - follow-up lockstep packet/disconnect issues were fixed too
 - recent determinism-sensitive changes were verified with targeted review passes
+- self-hosted online infra is live on `w2.kislota.today`
+- PeerJS/TURN production wiring is aligned for `SERVER` mode manual tests
+- DIRECT fallback remains available for comparison/fallback checks
 - network safety is no longer the main design bottleneck
 - gameplay variety is back to being the main design focus
 
@@ -94,6 +97,7 @@ Online menu now supports two runtime test modes:
 - `DIRECT` uses public PeerJS (`0.peerjs.com`) plus browser STUN fallback
 
 Share links preserve the selected mode via `?mode=public` when needed.
+Room-code input is normalized before join, so copied codes/URLs with accidental surrounding whitespace do not cause avoidable guest connect failures.
 
 Examples:
 - client env example: `.env.example`
@@ -111,6 +115,15 @@ TURN note for Docker deployments:
 - keep `--external-ip` set to the public host IP advertised to browsers
 - keep `--relay-ip=0.0.0.0` inside the container unless the container actually owns the public IP
 - open UDP/TCP `3478` plus the full relay range `49160-49200`
+
+Current production expectations:
+- `https://w2.kislota.today/peerjs/id` should respond successfully
+- `SERVER` defaults should resolve to:
+  - `VITE_PEER_HOST=w2.kislota.today`
+  - `VITE_PEER_PORT=443`
+  - `VITE_PEER_PATH=/`
+  - `VITE_PEER_SECURE=true`
+- safe next step is real manual `SERVER` mode testing and fixing only concrete findings
 
 ## Roadmap
 
