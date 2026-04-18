@@ -100,6 +100,13 @@ Examples:
 - self-host infra example: `infra/compose.yaml`
 - coturn env example: `infra/.env.example`
 
+PeerJS deployment note:
+- production self-host terminates TLS at `https://w2.kislota.today`
+- nginx proxies `/peerjs/*` to PeerJS while the server keeps `path=/`
+- client must keep `VITE_PEER_PATH=/` to avoid `/peerjs/peerjs/id`
+- with the default PeerJS key (`peerjs`), client path `/` maps to requests like `/peerjs/id`
+- DIRECT mode remains available as a fallback and still uses public PeerJS + browser STUN
+
 TURN note for Docker deployments:
 - keep `--external-ip` set to the public host IP advertised to browsers
 - keep `--relay-ip=0.0.0.0` inside the container unless the container actually owns the public IP
