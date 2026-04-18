@@ -18,10 +18,12 @@ export interface SpriteCache {
   worker:   [HTMLCanvasElement, HTMLCanvasElement];
   footman:  [HTMLCanvasElement, HTMLCanvasElement];
   archer:   [HTMLCanvasElement, HTMLCanvasElement];
+  knight:   [HTMLCanvasElement, HTMLCanvasElement];
   // Orc units
   peon:     [HTMLCanvasElement, HTMLCanvasElement];
   grunt:    [HTMLCanvasElement, HTMLCanvasElement];
   troll:    [HTMLCanvasElement, HTMLCanvasElement];
+  ogreFighter: [HTMLCanvasElement, HTMLCanvasElement];
   // Human buildings  [0]=player  [1]=AI
   townhall: [HTMLCanvasElement, HTMLCanvasElement];
   barracks: [HTMLCanvasElement, HTMLCanvasElement];
@@ -522,6 +524,65 @@ function makeArcher(T: number, owner: 0 | 1): HTMLCanvasElement {
   ctx.fillStyle = INK;
   ctx.fillRect(cx - 2, 10, 1, 1);
   ctx.fillRect(cx + 1, 10, 1, 1);
+
+  return c;
+}
+
+function makeKnight(T: number, owner: 0 | 1): HTMLCanvasElement {
+  const [c, ctx] = oc(T, T);
+  const cx = T / 2;
+
+  unitShadow(ctx, T);
+
+  ctx.fillStyle = TC_D[owner];
+  ctx.fillRect(cx - 6, 18, 5, 9);
+  ctx.fillRect(cx + 1, 18, 5, 9);
+  ctx.fillStyle = MT_M;
+  ctx.fillRect(cx - 7, 26, 7, 3);
+  ctx.fillRect(cx, 26, 7, 3);
+
+  ctx.fillStyle = TC_D[owner];
+  ctx.fillRect(cx - 13, 13, 7, 11);
+  ctx.fillStyle = TC_L[owner];
+  ctx.fillRect(cx - 12, 14, 5, 9);
+  ctx.fillStyle = MT_HL;
+  ctx.fillRect(cx - 10, 17, 2, 2);
+
+  ctx.fillStyle = MT_M;
+  ctx.beginPath();
+  ctx.moveTo(cx - 7, 12);
+  ctx.lineTo(cx + 8, 12);
+  ctx.lineTo(cx + 7, 23);
+  ctx.lineTo(cx - 6, 23);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = TC_M[owner];
+  ctx.fillRect(cx - 4, 14, 9, 3);
+  ctx.fillStyle = GD_L;
+  ctx.fillRect(cx - 1, 20, 3, 2);
+
+  ctx.fillStyle = MT_HL;
+  ctx.fillRect(cx + 9, 4, 2, 14);
+  ctx.fillStyle = GD_L;
+  ctx.fillRect(cx + 8, 13, 4, 2);
+  ctx.fillStyle = WD_M;
+  ctx.fillRect(cx + 9, 15, 2, 4);
+
+  ctx.fillStyle = MT_M;
+  ctx.beginPath();
+  ctx.arc(cx + 1, 8, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = MT_HL;
+  ctx.beginPath();
+  ctx.arc(cx - 1, 6, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = TC_HL[owner];
+  ctx.fillRect(cx, 2, 2, 5);
+  ctx.fillStyle = MT_D;
+  ctx.fillRect(cx + 1, 9, 2, 6);
+  ctx.fillStyle = INK;
+  ctx.fillRect(cx - 3, 10, 2, 1);
+  ctx.fillRect(cx + 3, 10, 2, 1);
 
   return c;
 }
@@ -1170,6 +1231,72 @@ function makeTroll(T: number, owner: 0 | 1): HTMLCanvasElement {
   return c;
 }
 
+function makeOgreFighter(T: number, owner: 0 | 1): HTMLCanvasElement {
+  const [c, ctx] = oc(T, T);
+  const cx = T / 2;
+
+  unitShadow(ctx, T);
+
+  ctx.fillStyle = ORC_LEATHER;
+  ctx.fillRect(cx - 6, 18, 5, 9);
+  ctx.fillRect(cx + 2, 18, 5, 9);
+  ctx.fillStyle = '#1c0c04';
+  ctx.fillRect(cx - 7, 26, 7, 3);
+  ctx.fillRect(cx + 1, 26, 7, 3);
+
+  ctx.fillStyle = TC_D[owner];
+  ctx.fillRect(cx - 14, 13, 7, 12);
+  ctx.fillStyle = TC_M[owner];
+  ctx.fillRect(cx - 13, 14, 5, 10);
+  ctx.fillStyle = MT_M;
+  ctx.fillRect(cx - 11, 17, 2, 2);
+
+  ctx.fillStyle = TC_D[owner];
+  ctx.beginPath();
+  ctx.moveTo(cx - 8, 11);
+  ctx.lineTo(cx + 9, 11);
+  ctx.lineTo(cx + 8, 23);
+  ctx.lineTo(cx - 7, 23);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = TC_M[owner];
+  ctx.fillRect(cx - 5, 13, 11, 3);
+
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(cx + 8, 5, 3, 17);
+  ctx.fillStyle = MT_M;
+  ctx.beginPath();
+  ctx.moveTo(cx + 8, 6);
+  ctx.lineTo(cx + 18, 3);
+  ctx.lineTo(cx + 18, 14);
+  ctx.lineTo(cx + 8, 15);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = MT_HL;
+  ctx.fillRect(cx + 9, 4, 8, 2);
+
+  ctx.fillStyle = ORC_SKIN_D;
+  ctx.beginPath();
+  ctx.arc(cx + 1, 8, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = MT_D;
+  ctx.beginPath();
+  ctx.arc(cx + 1, 6, 8, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = ORC_SKIN_M;
+  ctx.beginPath();
+  ctx.arc(cx + 1, 10, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = ORC_TUSK;
+  ctx.fillRect(cx - 4, 13, 3, 5);
+  ctx.fillRect(cx + 3, 13, 3, 5);
+  ctx.fillStyle = '#ff2020';
+  ctx.fillRect(cx - 2, 10, 2, 2);
+  ctx.fillRect(cx + 3, 10, 2, 2);
+
+  return c;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ORC BUILDINGS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1448,10 +1575,12 @@ export function buildSpriteCache(T: number): SpriteCache {
     worker:   [makeWorker(T, 0), makeWorker(T, 1)],
     footman:  [makeFootman(T, 0), makeFootman(T, 1)],
     archer:   [makeArcher(T, 0), makeArcher(T, 1)],
+    knight:   [makeKnight(T, 0), makeKnight(T, 1)],
     // Orc units
     peon:     [makePeon(T, 0),  makePeon(T, 1)],
     grunt:    [makeGrunt(T, 0), makeGrunt(T, 1)],
     troll:    [makeTroll(T, 0), makeTroll(T, 1)],
+    ogreFighter: [makeOgreFighter(T, 0), makeOgreFighter(T, 1)],
     // Human buildings
     townhall: [makeTownhall(T, 0), makeTownhall(T, 1)],
     barracks: [makeBarracks(T, 0), makeBarracks(T, 1)],

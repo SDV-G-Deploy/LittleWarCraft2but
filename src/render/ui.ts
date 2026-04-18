@@ -219,6 +219,7 @@ function drawEntityInfo(
     e.kind === rc.worker  ? rc.workerLabel  :
     e.kind === rc.soldier ? rc.soldierLabel :
     e.kind === rc.ranged  ? rc.rangedLabel  :
+    e.kind === rc.heavy   ? rc.heavyLabel   :
     e.kind === 'townhall' ? rc.hallLabel    :
     e.kind === 'barracks' ? rc.barrLabel    :
     e.kind === 'farm'     ? rc.farmLabel    :
@@ -253,7 +254,8 @@ function drawEntityInfo(
     ); y += LINE;
 
     const roleLabel =
-      e.kind === rc.soldier ? 'Role: frontline anchor' :
+      e.kind === rc.heavy ? 'Role: elite frontline anchor' :
+      e.kind === rc.soldier ? 'Role: frontline core' :
       e.kind === rc.ranged ? 'Role: backline pressure' :
       isWorkerKind(e.kind) ? 'Role: eco / build' :
       null;
@@ -525,20 +527,27 @@ function collectButtons(
   if (e.kind === 'barracks') {
     const soldierCost = STATS[rc.soldier]?.cost ?? 80;
     const rangedCost  = STATS[rc.ranged]?.cost  ?? 100;
+    const heavyCost   = STATS[rc.heavy]?.cost   ?? 170;
     const myUnits = state.entities.filter(en => en.owner === myOwner && isUnitKind(en.kind));
     const soldierCount = myUnits.filter(en => en.kind === rc.soldier).length;
     const rangedCount = myUnits.filter(en => en.kind === rc.ranged).length;
+    const heavyCount = myUnits.filter(en => en.kind === rc.heavy).length;
     const queue = e.cmd?.type === 'train' ? [e.cmd.unit, ...e.cmd.queue] : [];
     const queuedSoldiers = queue.filter(kind => kind === rc.soldier).length;
     const queuedRanged = queue.filter(kind => kind === rc.ranged).length;
-    const frontlineLead = soldierCount + queuedSoldiers - (rangedCount + queuedRanged);
-    const wantsFrontline = frontlineLead <= 1;
-    const wantsRanged = rangedCount + queuedRanged < Math.max(1, Math.floor((soldierCount + queuedSoldiers) / 2));
+    const queuedHeavy = queue.filter(kind => kind === rc.heavy).length;
+    const frontlineMass = soldierCount + queuedSoldiers;
+    const anchorCount = heavyCount + queuedHeavy;
+    const wantsFrontline = frontlineMass - (rangedCount + queuedRanged) <= 1;
+    const wantsRanged = rangedCount + queuedRanged < Math.max(1, Math.floor((frontlineMass + anchorCount) / 2));
+    const wantsHeavy = anchorCount < 2 && frontlineMass >= 2;
 
     addButton(`${rc.soldierLabel} [T]\n[${soldierCost}g]`, `train:${rc.soldier}`,
       state.gold[myOwner] < soldierCost);
     addButton(`${rc.rangedLabel} [A]\n[${rangedCost}g]`, `train:${rc.ranged}`,
       state.gold[myOwner] < rangedCost);
+    addButton(`${rc.heavyLabel} [H]\n[${heavyCost}g]`, `train:${rc.heavy}`,
+      state.gold[myOwner] < heavyCost);
     if (state.gold[myOwner] >= soldierCost) {
       addButton(
         wantsFrontline ? 'Tempo branch\nfrontline now' : 'Frontline add\nhold the line',
@@ -549,6 +558,12 @@ function collectButtons(
       addButton(
         wantsRanged ? 'Pressure branch\nranged timing' : 'Backline add\nkeep pressure up',
         `plan:pressure|train:${rc.ranged}`,
+      );
+    }
+    if (state.gold[myOwner] >= heavyCost) {
+      addButton(
+        wantsHeavy ? 'Anchor add\n1-2 elite frontliners' : 'Heavy add\nreinforce frontline',
+        `plan:tempo|train:${rc.heavy}`,
       );
     }
   }

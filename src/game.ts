@@ -227,6 +227,7 @@ export function startGame(
       if (firstSel.kind === 'barracks') {
         if (e.key === 't' || e.key === 'T') { emit({ k: 'train', buildingId: firstSel.id, unit: myRC.soldier }); return; }
         if (e.key === 'a' || e.key === 'A') { emit({ k: 'train', buildingId: firstSel.id, unit: myRC.ranged  }); return; }
+        if (e.key === 'h' || e.key === 'H') { emit({ k: 'train', buildingId: firstSel.id, unit: myRC.heavy   }); return; }
       }
     }
 

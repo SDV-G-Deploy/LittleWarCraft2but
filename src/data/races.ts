@@ -12,10 +12,12 @@ export interface RaceConfig {
   worker:       EntityKind;
   soldier:      EntityKind;
   ranged:       EntityKind;
+  heavy:        EntityKind;
   // Display labels (shown in UI panel and menu)
   workerLabel:  string;   // "Peasant" / "Peon"
   soldierLabel: string;   // "Footman" / "Grunt"
   rangedLabel:  string;   // "Archer"  / "Troll"
+  heavyLabel:   string;   // "Knight"  / "Ogre Fighter"
   hallLabel:    string;   // "Town Hall" / "Great Hall"
   barrLabel:    string;   // "Barracks" / "War Mill"
   farmLabel:    string;   // "Farm"     / "Pig Farm"
@@ -31,14 +33,16 @@ export const RACES: Record<Race, RaceConfig> = {
     worker:       'worker',
     soldier:      'footman',
     ranged:       'archer',
+    heavy:        'knight',
     workerLabel:  'Peasant',
     soldierLabel: 'Footman',
     rangedLabel:  'Archer',
+    heavyLabel:   'Knight',
     hallLabel:    'Town Hall',
     barrLabel:    'Barracks',
     farmLabel:    'Farm',
     tagline:      'For the Alliance!',
-    description:  'Balanced and disciplined. Archers provide long-range\nsupport while Footmen hold the line.',
+    description:  'Balanced and disciplined. Footmen hold, Archers support,\nand Knights anchor elite frontlines.',
     accentColor:  '#4488ff',
   },
   orc: {
@@ -46,14 +50,16 @@ export const RACES: Record<Race, RaceConfig> = {
     worker:       'peon',
     soldier:      'grunt',
     ranged:       'troll',
+    heavy:        'ogreFighter',
     workerLabel:  'Peon',
     soldierLabel: 'Grunt',
     rangedLabel:  'Troll',
+    heavyLabel:   'Ogre Fighter',
     hallLabel:    'Great Hall',
     barrLabel:    'War Mill',
     farmLabel:    'Pig Farm',
     tagline:      'Lok\'tar Ogar!',
-    description:  'Brutal and powerful. Grunts hit harder but cost more.\nTrolls hurl axes at range.',
+    description:  'Brutal and powerful. Grunts brawl, Trolls pressure from range,\nand Ogre Fighters smash the front.',
     accentColor:  '#cc4422',
   },
 };

@@ -308,12 +308,14 @@ function drawUnit(
 
   // Sprite (covers both races)
   const spriteSheet =
-    e.kind === 'worker'  ? sp.worker  :
-    e.kind === 'footman' ? sp.footman :
-    e.kind === 'archer'  ? sp.archer  :
-    e.kind === 'peon'    ? sp.peon    :
-    e.kind === 'grunt'   ? sp.grunt   :
-                           sp.troll;
+    e.kind === 'worker'       ? sp.worker       :
+    e.kind === 'footman'      ? sp.footman      :
+    e.kind === 'archer'       ? sp.archer       :
+    e.kind === 'knight'       ? sp.knight       :
+    e.kind === 'peon'         ? sp.peon         :
+    e.kind === 'grunt'        ? sp.grunt        :
+    e.kind === 'troll'        ? sp.troll        :
+                               sp.ogreFighter;
   const sprite = spriteSheet[e.owner as 0 | 1];
   ctx.drawImage(sprite, sx, sy, TILE_SIZE, TILE_SIZE);
 
@@ -335,6 +337,11 @@ function drawUnit(
     ctx.beginPath();
     ctx.arc(sx + TILE_SIZE / 2, sy + TILE_SIZE / 2, TILE_SIZE * 0.22, 0, Math.PI * 2);
     ctx.stroke();
+  }
+  if (e.kind === 'knight' || e.kind === 'ogreFighter') {
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx + 6.5, sy + 6.5, TILE_SIZE - 13, TILE_SIZE - 13);
   }
 }
 

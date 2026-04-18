@@ -36,7 +36,7 @@ export function tickAI(state: GameState, ai: AIController): void {
   const myBarracks = es.find(e  => e.owner === 1 && e.kind === 'barracks');
   const myWorkers  = es.filter(e => e.owner === 1 && e.kind === rc.worker);
   const mySoldiers = es.filter(e => e.owner === 1 &&
-    (e.kind === rc.soldier || e.kind === rc.ranged));
+    (e.kind === rc.soldier || e.kind === rc.ranged || e.kind === rc.heavy));
   const farmCount  = es.filter(e => e.owner === 1 && e.kind === 'farm').length;
 
   // Flags: is a worker already tasked with building X?
@@ -76,9 +76,12 @@ export function tickAI(state: GameState, ai: AIController): void {
       if (myBarracks) {
         const soldierCount = mySoldiers.filter(u => u.kind === rc.soldier).length;
         const rangedCount  = mySoldiers.filter(u => u.kind === rc.ranged).length;
-        const wantRanged   = rangedCount < Math.floor(soldierCount / 2) &&
+        const heavyCount   = mySoldiers.filter(u => u.kind === rc.heavy).length;
+        const wantHeavy    = heavyCount < 2 && soldierCount >= 2 &&
+                             state.gold[1] >= (STATS[rc.heavy]?.cost ?? 170);
+        const wantRanged   = !wantHeavy && rangedCount < Math.floor((soldierCount + heavyCount) / 2) &&
                              state.gold[1] >= (STATS[rc.ranged]?.cost ?? 100);
-        issueTrainCommand(state, myBarracks, wantRanged ? rc.ranged : rc.soldier);
+        issueTrainCommand(state, myBarracks, wantHeavy ? rc.heavy : wantRanged ? rc.ranged : rc.soldier);
       }
       if (!buildingFarm && state.popCap[1] - state.pop[1] <= 2 && farmCount < 3) {
         const w = freeWorker(myWorkers);

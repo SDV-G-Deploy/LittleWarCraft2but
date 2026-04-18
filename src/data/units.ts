@@ -35,6 +35,12 @@ export const STATS: Partial<Record<EntityKind, UnitStats>> = {
     attackTicks: Math.round(SIM_HZ * 1.4),
     tileW: 1, tileH: 1,
   },
+  knight: {
+    hp: 125, damage: 14, armor: 5, range: 1,
+    speed: 4, sight: 5, cost: 165, buildTicks: SIM_HZ * 21,
+    attackTicks: Math.round(SIM_HZ * 1.5),
+    tileW: 1, tileH: 1,
+  },
   // ── Orc units ────────────────────────────────────────────────────────────────
   peon: {
     // Same utility as worker, different visual — same cost/stats for balance
@@ -55,6 +61,12 @@ export const STATS: Partial<Record<EntityKind, UnitStats>> = {
     hp: 36,  damage: 10, armor: 0, range: 4,
     speed: 4, sight: 7, cost: 95, buildTicks: SIM_HZ * 17,
     attackTicks: Math.round(SIM_HZ * 1.4),
+    tileW: 1, tileH: 1,
+  },
+  ogreFighter: {
+    hp: 150, damage: 16, armor: 4, range: 1,
+    speed: 3, sight: 5, cost: 180, buildTicks: SIM_HZ * 23,
+    attackTicks: Math.round(SIM_HZ * 1.8),
     tileW: 1, tileH: 1,
   },
   // ── Buildings (shared by both races, sprite varies by owner's race) ──────────

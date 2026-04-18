@@ -49,16 +49,16 @@ export type Race = 'human' | 'orc';
 export type Owner = 0 | 1; // 0 = player, 1 = AI
 
 export type EntityKind =
-  | 'worker'  | 'footman' | 'archer'             // human units
-  | 'peon'    | 'grunt'   | 'troll'              // orc units
-  | 'townhall' | 'barracks' | 'farm' | 'wall'    // shared buildings (sprite varies by race)
-  | 'goldmine'                                    // resource node
-  | 'construction';                               // building-in-progress scaffold
+  | 'worker'  | 'footman' | 'archer' | 'knight'         // human units
+  | 'peon'    | 'grunt'   | 'troll'  | 'ogreFighter'    // orc units
+  | 'townhall' | 'barracks' | 'farm' | 'wall'           // shared buildings (sprite varies by race)
+  | 'goldmine'                                           // resource node
+  | 'construction';                                      // building-in-progress scaffold
 
 /** Mobile combat/worker units — all races combined */
 export const UNIT_KINDS = new Set<EntityKind>([
-  'worker', 'footman', 'archer',
-  'peon',   'grunt',   'troll',
+  'worker', 'footman', 'archer', 'knight',
+  'peon',   'grunt',   'troll',  'ogreFighter',
 ]);
 export function isUnitKind(kind: EntityKind): boolean { return UNIT_KINDS.has(kind); }
 

@@ -358,7 +358,7 @@ export function runMenu(
         lines: [
           'Workers (Peasant / Peon) gather gold from mines.',
           'Build Farms to raise your population cap.',
-          'Build a Barracks to train frontline and ranged units.',
+          'Build a Barracks to train frontline, ranged, and heavy anchor units.',
         ],
       },
       {
@@ -382,7 +382,7 @@ export function runMenu(
         lines: [
           'Right-click an enemy to attack.',
           'Hold A then right-click on the map to issue an attack-move order.',
-          'Melee units hold the front, ranged units pressure from behind.',
+          'Basic melee holds the front, heavies anchor key fights, ranged units pressure from behind.',
         ],
       },
       {
@@ -392,7 +392,7 @@ export function runMenu(
           'Left-click / drag          — select units',
           'Right-click                — move / attack / gather / set rally',
           'V  — train worker (Town Hall selected)',
-          'T / A  — train frontline / ranged (Barracks selected)',
+          'T / A / H  — train frontline / ranged / heavy (Barracks selected)',
           'B / F / W  — build Barracks / Farm / Wall (Worker selected)',
           '1–9  — control groups   (Ctrl+# to assign, # to recall)',
           'S  — stop selected units',
@@ -489,6 +489,7 @@ export function runMenu(
         { label: rc.workerLabel,  desc: 'Eco, build, and gathering' },
         { label: rc.soldierLabel, desc: 'Frontline melee unit' },
         { label: rc.rangedLabel,  desc: 'Backline pressure unit' },
+        { label: rc.heavyLabel,   desc: 'Elite frontline anchor' },
       ];
       let uy = cardY + 84;
       for (const u of units) {
