@@ -1,5 +1,5 @@
 import type { Entity, GameState } from '../types';
-import { SIM_HZ, isUnitKind, isRangedUnit } from '../types';
+import { MAP_H, MAP_W, SIM_HZ, isUnitKind, isRangedUnit } from '../types';
 import { ticksPerStep } from '../data/units';
 import { getResolvedArmor, getResolvedAttackTicks, getResolvedDamage, getResolvedRange } from '../balance/resolver';
 import { resolveAttackBonus } from '../balance/modifiers';
@@ -34,6 +34,23 @@ function distToEntity(ax: number, ay: number, target: Entity): number {
   return chebyshev(ax, ay, nx, ny);
 }
 
+function isLOSBlockingTile(state: GameState, tx: number, ty: number): boolean {
+  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return false;
+
+  // Fast path: this tile has no static footprint occupancy at all.
+  if ((state.blockedTiles?.[ty * MAP_W + tx] ?? 0) === 0) return false;
+
+  // Slow path only on occupied tiles: preserve gameplay semantics exactly.
+  for (const e of state.entities) {
+    if (isUnitKind(e.kind) || e.kind === 'wall' || e.kind === 'goldmine') continue;
+    if (tx >= e.pos.x && tx < e.pos.x + e.tileW &&
+        ty >= e.pos.y && ty < e.pos.y + e.tileH) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Bresenham line-of-sight check. Returns false if a non-wall building
  * occupies any tile between (ax,ay) and (bx,by).
@@ -51,14 +68,8 @@ function hasLOS(state: GameState, ax: number, ay: number, bx: number, by: number
     if (e2 <= dx) { err += dx; y += sy; }
     if (x === bx && y === by) break; // reached target tile — stop
 
-    // Check if this intermediate tile holds a blocking building
-    for (const e of state.entities) {
-      if (isUnitKind(e.kind) || e.kind === 'wall' || e.kind === 'goldmine') continue;
-      if (x >= e.pos.x && x < e.pos.x + e.tileW &&
-          y >= e.pos.y && y < e.pos.y + e.tileH) {
-        return false;
-      }
-    }
+    // Check if this intermediate tile holds a LOS-blocking building.
+    if (isLOSBlockingTile(state, x, y)) return false;
   }
   return true;
 }
