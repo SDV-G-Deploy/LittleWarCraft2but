@@ -217,3 +217,5 @@ See [ROADMAP.md](./ROADMAP.md) for:
 - next planned phases
 - review rules for determinism-sensitive changes
 - suggested commit themes
+
+Archived balance-system planning drafts are kept in `docs/planning/archive/`.
