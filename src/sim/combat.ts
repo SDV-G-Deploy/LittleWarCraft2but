@@ -1,4 +1,4 @@
-import type { Entity, GameState } from '../types';
+import type { Entity, GameState, ProjectileVisualEvent } from '../types';
 import { MAP_H, MAP_W, SIM_HZ, isUnitKind, isRangedUnit } from '../types';
 import { ticksPerStep } from '../data/units';
 import { getResolvedArmor, getResolvedAttackTicks, getResolvedDamage, getResolvedRange } from '../balance/resolver';
@@ -88,6 +88,35 @@ function hasLOSToEntity(state: GameState, attacker: Entity, target: Entity, rang
   return false;
 }
 
+function pushAttackVisual(state: GameState, attacker: Entity, target: Entity): void {
+  if (!state.recentAttackEvents) state.recentAttackEvents = [];
+  state.recentAttackEvents.push({
+    attackerId: attacker.id,
+    targetId: target.id,
+    tick: state.tick,
+    ranged: isRangedUnit(attacker.kind),
+  });
+
+  if (!isRangedUnit(attacker.kind)) return;
+
+  if (!state.recentProjectileEvents) state.recentProjectileEvents = [];
+  const projectile: ProjectileVisualEvent = {
+    attackerId: attacker.id,
+    targetId: target.id,
+    start: {
+      x: attacker.pos.x + attacker.tileW / 2,
+      y: attacker.pos.y + attacker.tileH / 2,
+    },
+    end: {
+      x: target.pos.x + target.tileW / 2,
+      y: target.pos.y + target.tileH / 2,
+    },
+    startTick: state.tick,
+    durationTicks: 5,
+  };
+  state.recentProjectileEvents.push(projectile);
+}
+
 // ─── Process ─────────────────────────────────────────────────────────────────
 
 export function processAttack(state: GameState, entity: Entity): void {
@@ -113,6 +142,7 @@ export function processAttack(state: GameState, entity: Entity): void {
     const armor     = getResolvedArmor(target);
     const attackBonus = resolveAttackBonus({ state, attacker: entity, target });
     const netDmg    = Math.max(1, dmg - armor + attackBonus);
+    pushAttackVisual(state, entity, target);
     target.hp      -= netDmg;
     target.underAttackTick = state.tick;
     cmd.cooldownTick = state.tick + getResolvedAttackTicks(entity.kind, state.races[entity.owner]);

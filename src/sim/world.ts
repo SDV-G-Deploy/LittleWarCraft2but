@@ -23,5 +23,7 @@ export function createWorld(mapData: MapData, races: [Race, Race]): GameState {
     contestedMineBonusUntilTick: SIM_HZ * 64,
     openingPlanSelected: [null, null],
     openingCommitmentClaimed: [false, false],
+    recentAttackEvents: [],
+    recentProjectileEvents: [],
   };
 }

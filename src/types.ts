@@ -139,4 +139,22 @@ export interface GameState {
   contestedMineBonusUntilTick: number;
   openingPlanSelected: [OpeningPlan | null, OpeningPlan | null];
   openingCommitmentClaimed: [boolean, boolean];
+  recentAttackEvents?: AttackVisualEvent[];
+  recentProjectileEvents?: ProjectileVisualEvent[];
+}
+
+export interface AttackVisualEvent {
+  attackerId: number;
+  targetId: number;
+  tick: number;
+  ranged: boolean;
+}
+
+export interface ProjectileVisualEvent {
+  attackerId: number;
+  targetId: number;
+  start: Vec2;
+  end: Vec2;
+  startTick: number;
+  durationTicks: number;
 }

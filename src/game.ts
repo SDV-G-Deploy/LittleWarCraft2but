@@ -522,6 +522,13 @@ export function startGame(
 
     state.tick++;
 
+    if (state.recentAttackEvents) {
+      state.recentAttackEvents = state.recentAttackEvents.filter(ev => state.tick - ev.tick <= 12);
+    }
+    if (state.recentProjectileEvents) {
+      state.recentProjectileEvents = state.recentProjectileEvents.filter(ev => state.tick - ev.startTick <= ev.durationTicks + 6);
+    }
+
     let p0 = profiler.now();
     for (const entity of state.entities) processCommand(state, entity);
     profiler.recordPhase('processCommand', profiler.now() - p0);

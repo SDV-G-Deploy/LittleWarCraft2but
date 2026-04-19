@@ -79,6 +79,7 @@ export function render(
   drawTiles(ctx, sp, state, cam, viewW, viewH);
   drawCorpses(ctx, sp, state, cam);
   drawEntities(ctx, sp, state, cam, selectedIds, myOwner);
+  drawCombatVisuals(ctx, state, cam, myOwner);
   drawRallyPoints(ctx, state, cam, selectedIds, myOwner);
   drawFog(ctx, state, cam, viewW, viewH);
   drawHUD(ctx, state, myOwner);
@@ -284,6 +285,93 @@ function drawEntities(
         drawBuilding(ctx, sp, e, sx, sy, pw, ph, selected, state);
       }
     }
+  }
+}
+
+function drawCombatVisuals(
+  ctx: CanvasRenderingContext2D,
+  state: GameState,
+  cam: Camera,
+  myOwner: 0 | 1,
+): void {
+  const attackEvents = state.recentAttackEvents ?? [];
+  for (const ev of attackEvents) {
+    const age = state.tick - ev.tick;
+    if (age < 0 || age > 8) continue;
+
+    const attacker = state.entities.find(e => e.id === ev.attackerId);
+    const target = state.entities.find(e => e.id === ev.targetId);
+
+    if (attacker && entityVisible(state, attacker, myOwner)) {
+      const { sx, sy } = worldToScreen(attacker.pos.x * TILE_SIZE, attacker.pos.y * TILE_SIZE, cam);
+      const alpha = Math.max(0, 1 - age / 8);
+      const pulse = 0.55 + 0.45 * (1 - age / 8);
+      ctx.save();
+      ctx.strokeStyle = ev.ranged
+        ? `rgba(255, 226, 120, ${0.55 * alpha})`
+        : `rgba(255, 150, 120, ${0.55 * alpha})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx + TILE_SIZE / 2, sy + TILE_SIZE / 2, TILE_SIZE * pulse * 0.42, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (target && entityVisible(state, target, myOwner)) {
+      const tx = target.pos.x * TILE_SIZE + (target.tileW * TILE_SIZE) / 2;
+      const ty = target.pos.y * TILE_SIZE + (target.tileH * TILE_SIZE) / 2;
+      const { sx, sy } = worldToScreen(tx, ty, cam);
+      const alpha = Math.max(0, 1 - age / 8);
+      const radius = 4 + age * 1.4;
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 245, 210, ${0.75 * alpha})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx, sy, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  const projectileEvents = state.recentProjectileEvents ?? [];
+  for (const ev of projectileEvents) {
+    const age = state.tick - ev.startTick;
+    if (age < 0 || age > ev.durationTicks + 4) continue;
+
+    const progress = Math.min(1, age / Math.max(1, ev.durationTicks));
+    const px = (ev.start.x + (ev.end.x - ev.start.x) * progress) * TILE_SIZE;
+    const py = (ev.start.y + (ev.end.y - ev.start.y) * progress) * TILE_SIZE;
+    const { sx, sy } = worldToScreen(px, py, cam);
+
+    if (progress < 1) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 232, 96, 0.95)';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(sx - 4, sy);
+      ctx.lineTo(sx + 4, sy);
+      ctx.stroke();
+      ctx.restore();
+      continue;
+    }
+
+    const impactAge = age - ev.durationTicks;
+    const impactAlpha = Math.max(0, 1 - impactAge / 4);
+    if (impactAlpha <= 0) continue;
+    ctx.save();
+    ctx.strokeStyle = `rgba(255, 240, 180, ${0.75 * impactAlpha})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(sx - 4, sy - 4);
+    ctx.lineTo(sx + 4, sy + 4);
+    ctx.moveTo(sx + 4, sy - 4);
+    ctx.lineTo(sx - 4, sy + 4);
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
