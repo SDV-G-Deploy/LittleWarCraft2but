@@ -224,6 +224,16 @@ export function processTrain(state: GameState, building: Entity): void {
 
   let openingPressureAttackMove = false;
   const openingTempoContestMove = !!cmd.openingTempoCommit && !building.rallyPoint;
+  const openingEcoHomeMove = openingPlan === 'eco'
+    && !building.rallyPoint
+    && isUnitKind(newUnit.kind)
+    && !isWorkerKind(newUnit.kind)
+    && !state.entities.some(e =>
+      e.id !== newUnit.id
+      && e.owner === owner
+      && isUnitKind(e.kind)
+      && !isWorkerKind(e.kind),
+    );
 
   if (openingPlan && isOpeningWindowActive(state.tick)) {
     newUnit.openingPlan = openingPlan;
@@ -244,6 +254,9 @@ export function processTrain(state: GameState, building: Entity): void {
   const pressureFallbackTarget = openingPressureAttackMove && !building.rallyPoint
     ? state.entities.find(e => e.owner !== owner && e.kind === 'townhall')
     : null;
+  const ecoFallbackTownHall = openingEcoHomeMove
+    ? state.entities.find(e => e.owner === owner && e.kind === 'townhall')
+    : null;
   const tempoFallbackMine = openingTempoContestMove ? bestContestedMine(state, owner) : null;
   const moveTarget = building.rallyPoint
     ? building.rallyPoint
@@ -251,6 +264,11 @@ export function processTrain(state: GameState, building: Entity): void {
       ? {
           x: tempoFallbackMine.pos.x,
           y: tempoFallbackMine.pos.y - 1,
+        }
+    : ecoFallbackTownHall
+      ? {
+          x: ecoFallbackTownHall.pos.x + Math.floor(ecoFallbackTownHall.tileW / 2),
+          y: ecoFallbackTownHall.pos.y + ecoFallbackTownHall.tileH + 1,
         }
     : pressureFallbackTarget
       ? {
