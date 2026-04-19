@@ -1,6 +1,7 @@
 import type { Entity, GameState } from '../types';
 import { SIM_HZ, isUnitKind, isRangedUnit } from '../types';
 import { STATS, ticksPerStep } from '../data/units';
+import { getResolvedArmor } from '../balance/resolver';
 import { getEntity, killEntity } from './entities';
 import { findPath } from './pathfinding';
 
@@ -99,7 +100,7 @@ export function processAttack(state: GameState, entity: Entity): void {
     if (state.tick < cmd.cooldownTick) return;
 
     const dmg       = stats?.damage ?? 0;
-    const armor     = target.statArmor ?? STATS[target.kind]?.armor ?? 0;
+    const armor     = getResolvedArmor(target);
     const workerPressureBonus = !isUnitKind(entity.kind) ? 0 : (target.kind === 'worker' || target.kind === 'peon') ? 1 : 0;
     const constructionPressureBonus = target.kind === 'construction' ? 1 : 0;
     const contestedMinePressureBonus = nearContestedMine && state.tick <= state.contestedMineBonusUntilTick && isUnitKind(entity.kind) ? 1 : 0;

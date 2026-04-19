@@ -1,6 +1,6 @@
 import type { Entity, EntityKind, Owner, GameState, Vec2 } from '../types';
 import { isUnitKind } from '../types';
-import { STATS } from '../data/units';
+import { resolveEntityStatsForOwner, applyResolvedStatsToEntity } from '../balance/resolver';
 
 export type EntityLookup = Map<number, Entity>;
 
@@ -21,8 +21,7 @@ export function spawnEntity(
   owner: Owner,
   pos: Vec2,
 ): Entity {
-  const stats = STATS[kind];
-  if (!stats) throw new Error(`No stats for ${kind}`);
+  const stats = resolveEntityStatsForOwner(kind, state.races, owner);
 
   const entity: Entity = {
     id: state.nextId++,
@@ -35,14 +34,11 @@ export function spawnEntity(
     hpMax: stats.hp,
     cmd: null,
     sightRadius: stats.sight,
+    statHpMax: stats.hp,
+    statArmor: stats.armor,
   };
 
-  const ownerRace = state.races[owner] ?? 'human';
-  if (kind === 'wall' && ownerRace === 'human') {
-    entity.hp = 260;
-    entity.hpMax = 260;
-    entity.statHpMax = 260;
-  }
+  applyResolvedStatsToEntity(entity, stats);
 
   state.entities.push(entity);
   getEntityIndex(state).set(entity.id, entity);

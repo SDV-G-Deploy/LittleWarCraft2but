@@ -3,6 +3,7 @@ import type { SessionStats, SessionStatus } from '../net/session';
 import { SIM_HZ, TILE_SIZE, isUnitKind, isWorkerKind } from '../types';
 import { STATS } from '../data/units';
 import { RACES, ownerRace } from '../data/races';
+import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedHpMax } from '../balance/resolver';
 import type { Camera } from './camera';
 import { isValidPlacement } from '../sim/economy';
 
@@ -296,7 +297,7 @@ function drawEntityInfo(
   x: number,
   myOwner: 0 | 1 = 0,
 ): void {
-  const stats = STATS[e.kind];
+  const stats = resolveEntityStatsForEntity(state, e);
   const rc    = ownerRace(state.races, e.owner);
 
   // ── Race-aware display name ─────────────────────────────────────────────────
@@ -323,7 +324,7 @@ function drawEntityInfo(
   // ── HP ─────────────────────────────────────────────────────────────────────
   ctx.fillStyle = '#aaa';
   ctx.font = '11px monospace';
-  ctx.fillText(`HP: ${e.hp} / ${e.hpMax}`, x, y); y += LINE;
+  ctx.fillText(`HP: ${e.hp} / ${getResolvedHpMax(e)}`, x, y); y += LINE;
 
   // ── Combat stats (mobile units only) ───────────────────────────────────────
   if (stats && stats.speed > 0) {
@@ -595,7 +596,7 @@ function collectButtons(
 
   // ── Production buildings ────────────────────────────────────────────────────
   if (e.kind === 'townhall') {
-    const workerCost = STATS[rc.worker]?.cost ?? 50;
+    const workerCost = resolveEntityStatsForOwner(rc.worker, state.races, myOwner).cost.gold;
     const barracksCost = STATS['barracks']?.cost ?? 360;
     const workerBusy = e.cmd?.type === 'train';
     const selectedPlan = getSelectedOpeningPlan(state, myOwner);
@@ -606,9 +607,9 @@ function collectButtons(
     }
   }
   if (e.kind === 'barracks') {
-    const soldierCost = STATS[rc.soldier]?.cost ?? 80;
-    const rangedCost  = STATS[rc.ranged]?.cost  ?? 100;
-    const heavyCost   = STATS[rc.heavy]?.cost   ?? 170;
+    const soldierCost = resolveEntityStatsForOwner(rc.soldier, state.races, myOwner).cost.gold;
+    const rangedCost  = resolveEntityStatsForOwner(rc.ranged, state.races, myOwner).cost.gold;
+    const heavyCost   = resolveEntityStatsForOwner(rc.heavy, state.races, myOwner).cost.gold;
     const myUnits = state.entities.filter(en => en.owner === myOwner && isUnitKind(en.kind));
     const soldierCount = myUnits.filter(en => en.kind === rc.soldier).length;
     const rangedCount = myUnits.filter(en => en.kind === rc.ranged).length;
