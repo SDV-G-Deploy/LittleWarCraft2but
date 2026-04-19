@@ -42,6 +42,11 @@ Current state:
   - A* open-set heap with deterministic tie-break
   - move/repath dedupe and cheaper move-goal path selection
   - cheaper deterministic target-acquisition scans for auto-attack and attack-move
+- feedback/clarity pass landed for playtest readability:
+  - production panel for Town Hall / Barracks now shows current unit, big progress, explicit percent, visible queue slots, and clear idle state
+  - melee and ranged attacks now emit lightweight on-field attack / hit flashes
+  - archer / troll shots now render simple readability-first projectile cues
+- latest pass stayed in UI/render-first scope; no netcode or hit-timing rewrite was introduced
 - next performance target should be LOS checks via grid/blocker cache, not risky dynamic unit occupancy
 
 ## Core direction
@@ -212,6 +217,7 @@ Determinism note:
 - the opening-choice change is UI-first and uses the same existing synced `set_plan` path, so it does not add a new sim divergence surface
 - the exact move feedback marker is render-only command feedback and does not affect simulation or online state
 - the opening contrast pass only reuses existing synced sim state (`openingPlanSelected`, `openingCommitmentClaimed`, unit-local `openingPlan`) and does not introduce new nondeterministic inputs
+- the latest clarity pass keeps combat timing unchanged and uses lightweight visual-event state only for presentation, so no new network-model rewrite surface was introduced
 
 ## Roadmap
 

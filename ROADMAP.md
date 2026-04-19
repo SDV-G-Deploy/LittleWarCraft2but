@@ -41,6 +41,10 @@ Update it when a phase is completed, reframed, or split.
   - move/repath dedupe and cooldown
   - cheaper move-goal candidate selection with reused chosen path
   - streamlined deterministic target-acquisition scans for auto-attack / attack-move
+- feedback / clarity micro-pass completed:
+  - production panel for Town Hall / Barracks now clearly shows current unit, progress, percent, queue slots, and idle state
+  - lightweight on-field attack and hit flashes added for melee and ranged combat readability
+  - archer / troll ranged attacks now render simple readability-first projectile cues
 
 ### Verified
 - build green after each recent pass
@@ -200,6 +204,10 @@ Suggested commit themes:
 ## Phase G. Feedback / clarity pass
 Goal: make the richer game easier to read at a glance and reduce silent failure.
 
+Status:
+- first readability micro-pass is done for production visibility and combat readability
+- next follow-up here should come from fresh playtest notes, not speculative UI expansion
+
 Focus ideas:
 - failed action feedback:
   - not enough gold
@@ -276,6 +284,14 @@ A good restart prompt for future `/new` sessions should mention:
 - opening and combat modifiers were migrated into balance modules
 - `npm run balance:report` exists for quick snapshot checks
 - current strategic priority is gameplay variety through player decisions and action diversity
+- latest readability micro-pass landed:
+  - production panel readability for Town Hall / Barracks
+  - attack / hit feedback pulses
+  - simple ranged projectile visuals
+- determinism guardrail result from latest pass:
+  - no net architecture change
+  - no hit-timing rewrite
+  - visual-event data only, for presentation
 - perf hardening pass set 1 already landed and is pushed:
   - blocked static occupancy grid
   - deterministic A* heap
@@ -286,4 +302,4 @@ A good restart prompt for future `/new` sessions should mention:
   - tick-based throttling only
   - explicit heap/path tie-breaks
   - no risky dynamic unit occupancy yet
-- next concrete target for `/new`: LOS through grid/blocker cache in `src/sim/combat.ts`, then build, then targeted review if behavior changed materially
+- next concrete target for `/new`: review fresh playtest feedback after this clarity pass and choose the smallest high-value follow-up, keeping scope out of risky net/determinism rewrites; if shifting back to perf work, LOS through grid/blocker cache in `src/sim/combat.ts` remains the clean next target
