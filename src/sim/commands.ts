@@ -7,6 +7,8 @@ import { processGather, processTrain, processBuild } from './economy';
 import { isTileBlockedByEntity } from './entities';
 import { profiler } from './profiler';
 
+type TargetPredicate = (target: Entity) => boolean;
+
 /** Issue a move-to-tile command on an entity. Replaces current command.
  *  Pass attackMove=true to make the unit auto-attack enemies seen en route. */
 const MOVE_STUCK_TICKS = 14;
@@ -164,6 +166,31 @@ function canAttemptRepath(state: GameState, entity: Entity): boolean {
   return !entity.cmd || entity.cmd.type !== 'move' || state.tick - entity.cmd.lastProgressTick >= MOVE_REPATH_COOLDOWN_TICKS;
 }
 
+function acquireNearestTarget(
+  state: GameState,
+  unit: Entity,
+  predicate: TargetPredicate,
+): Entity | null {
+  const sight = unit.sightRadius;
+  let best: Entity | null = null;
+  let bestDistSq = sight * sight + 1;
+
+  for (const target of state.entities) {
+    if (target.owner === unit.owner) continue;
+    if (!predicate(target)) continue;
+    const dx = target.pos.x - unit.pos.x;
+    const dy = target.pos.y - unit.pos.y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq > sight * sight) continue;
+    if (distSq < bestDistSq) {
+      best = target;
+      bestDistSq = distSq;
+    }
+  }
+
+  return best;
+}
+
 const NUDGE_DIRS = [
   { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 },
   { x: 1, y: 1 }, { x: -1, y: 1 }, { x: 1, y: -1 }, { x: -1, y: -1 },
@@ -227,15 +254,11 @@ export function autoAttackPass(state: GameState): void {
     if (!isUnitKind(unit.kind)) continue;
     if (unit.cmd !== null) continue; // already has orders
 
-    let best: Entity | null = null;
-    let bestD = Infinity;
-    for (const t of state.entities) {
-      if (t.owner === unit.owner) continue;
-      if (t.kind === 'goldmine') continue;
-      if (isRangedUnit(unit.kind) && !isUnitKind(t.kind)) continue; // archers skip buildings
-      const d = Math.hypot(t.pos.x - unit.pos.x, t.pos.y - unit.pos.y);
-      if (d <= unit.sightRadius && d < bestD) { bestD = d; best = t; }
-    }
+    const best = acquireNearestTarget(state, unit, (target) => {
+      if (target.kind === 'goldmine') return false;
+      if (isRangedUnit(unit.kind) && !isUnitKind(target.kind)) return false;
+      return true;
+    });
     if (best) issueAttackCommand(unit, best.id, state.tick);
   }
   profiler.recordAutoAttack(profiler.now() - t0);
@@ -251,14 +274,11 @@ export function processCommand(state: GameState, entity: Entity): void {
 
       // Attack-move: intercept any enemy that enters sight range while walking
       if (cmd.attackMove) {
-        let best: Entity | null = null;
-        let bestD = Infinity;
-        for (const t of state.entities) {
-          if (t.owner === entity.owner || t.kind === 'goldmine') continue;
-          if (isRangedUnit(entity.kind) && !isUnitKind(t.kind)) continue;
-          const d = Math.hypot(t.pos.x - entity.pos.x, t.pos.y - entity.pos.y);
-          if (d <= entity.sightRadius && d < bestD) { bestD = d; best = t; }
-        }
+        const best = acquireNearestTarget(state, entity, (target) => {
+          if (target.kind === 'goldmine') return false;
+          if (isRangedUnit(entity.kind) && !isUnitKind(target.kind)) return false;
+          return true;
+        });
         if (best) { issueAttackCommand(entity, best.id, state.tick); return; }
       }
 
