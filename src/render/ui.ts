@@ -179,9 +179,9 @@ function drawOpeningChoiceOverlay(
 
   const btnY = y + 60;
   const labels = [
-    { label: 'Eco\n1st worker gets +20 gold', action: 'plan:eco' },
+    { label: 'Eco\n1st worker trip pays +20g, gathers bigger', action: 'plan:eco' },
     { label: 'Tempo\n1st military trains 35% faster', action: 'plan:tempo' },
-    { label: 'Pressure\n1st military auto-commits forward', action: 'plan:pressure' },
+    { label: 'Pressure\n1st military commits forward and hits harder', action: 'plan:pressure' },
   ];
   const buttonW = 180;
   const buttonH = 42;
@@ -269,13 +269,13 @@ function openingPlanText(plan: OpeningPlan): { title: string; body: string; risk
     case 'eco':
       return {
         title: 'Economy opening',
-        body: 'First worker gets +20 gold once, for safer early saturation',
+        body: 'First worker cash-in gives +20 gold and a fatter first mining trip',
         risk: 'Risk: give up initiative if pressure arrives first',
       };
     case 'pressure':
       return {
         title: 'Pressure opening',
-        body: 'First military unit attack-moves to rally and gets +20% speed for 5s',
+        body: 'First military unit attack-moves forward, gets +20% speed for 5s, and hits harder early',
         risk: 'Risk: fragile if you overextend without control',
       };
     case 'tempo':

@@ -5,6 +5,8 @@ import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity } from './ent
 import { findPath } from './pathfinding';
 
 const ECO_OPENING_BONUS_GOLD = 20;
+const ECO_OPENING_GATHER_BONUS = 2;
+const ECO_OPENING_GATHER_BONUS_CAP = 3;
 const PRESSURE_OPENING_SPEED_BOOST_MULT = 1.2;
 const PRESSURE_OPENING_SPEED_BOOST_TICKS = SIM_HZ * 5;
 const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 10;
@@ -84,7 +86,16 @@ export function processGather(state: GameState, entity: Entity): void {
     }
     case 'gathering': {
       if (state.tick - cmd.waitTicks < GATHER_TICKS) return;
-      const take = Math.min(GATHER_AMOUNT, mine.goldReserve ?? 0);
+      const owner = entity.owner as 0 | 1;
+      const openingPlan = state.openingPlanSelected[owner];
+      const ecoGatherBonus =
+        openingPlan === 'eco' &&
+        state.tick <= OPENING_PLAN_LOCK_TICKS &&
+        !state.openingCommitmentClaimed[owner] &&
+        isWorkerKind(entity.kind)
+          ? ECO_OPENING_GATHER_BONUS
+          : 0;
+      const take = Math.min(GATHER_AMOUNT + ecoGatherBonus, mine.goldReserve ?? 0);
       mine.goldReserve = (mine.goldReserve ?? 0) - take;
       entity.carryGold = take;
       cmd.phase = 'returning'; ec._gatherPath = undefined;
@@ -101,7 +112,19 @@ export function processGather(state: GameState, entity: Entity): void {
         ec._gatherPath = raw ?? [];
       }
       if (ec._gatherPath.length === 0) {
-        state.gold[entity.owner as 0 | 1] += entity.carryGold ?? 0;
+        const owner = entity.owner as 0 | 1;
+        state.gold[owner] += entity.carryGold ?? 0;
+        if (
+          state.openingPlanSelected[owner] === 'eco' &&
+          state.tick <= OPENING_PLAN_LOCK_TICKS &&
+          !state.openingCommitmentClaimed[owner] &&
+          isWorkerKind(entity.kind)
+        ) {
+          entity.openingPlan = 'eco';
+          entity.carryGold = Math.min(ECO_OPENING_GATHER_BONUS_CAP, (entity.carryGold ?? 0) + ECO_OPENING_GATHER_BONUS);
+          state.gold[owner] += ECO_OPENING_BONUS_GOLD;
+          state.openingCommitmentClaimed[owner] = true;
+        }
         entity.carryGold = 0;
         cmd.phase = 'tomine'; ec._gatherPath = undefined;
         return;
@@ -194,10 +217,10 @@ export function processTrain(state: GameState, building: Entity): void {
 
     if (!state.openingCommitmentClaimed[owner]) {
       if (openingPlan === 'eco' && isWorkerKind(newUnit.kind)) {
-        state.gold[owner] += ECO_OPENING_BONUS_GOLD;
-        state.openingCommitmentClaimed[owner] = true;
+        newUnit.openingPlan = 'eco';
       } else if (openingPlan === 'pressure' && isUnitKind(newUnit.kind) && !isWorkerKind(newUnit.kind)) {
         openingPressureAttackMove = true;
+        newUnit.openingPlan = 'pressure';
         state.openingCommitmentClaimed[owner] = true;
       }
     }

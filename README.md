@@ -19,6 +19,7 @@ Recent completed passes:
 - start-of-match opening chooser overlay made explicit, visible, and auto-defaulted to Eco after 10s
 - opening-choice UX polish: backdrop, intro pulse, and short "Opening locked" confirmation state
 - precise single-unit move feedback marker to show the exact commanded destination tile
+- gameplay micro-pass: stronger opening contrast via fatter first Eco cash-in and harder early Pressure hit
 
 Current state:
 - build green
@@ -87,9 +88,9 @@ At the very start of the match, a large opening-choice overlay appears immediate
 - this choice is now presented directly at match start, not hidden behind Town Hall selection
 
 The game now has three intended early plans:
-- **Eco**: your first worker gets a one-time `+20 gold` boost, helping faster early saturation and safer growth
+- **Eco**: your first worker now gets a stronger first cash-in, with `+20 gold` plus a slightly bigger first mining trip, helping faster early saturation and safer growth
 - **Tempo**: your first military timing arrives earlier, giving faster field presence at the cost of a weaker income curve
-- **Pressure**: your first military unit commits forward immediately, using attack-move toward rally and a short speed boost for sharper first contact
+- **Pressure**: your first military unit commits forward immediately, using attack-move toward rally, a short speed boost, and a brief early damage edge for sharper first contact
 
 Practical reading:
 - **Eco** is the safer default when you want economy first
@@ -179,10 +180,16 @@ Movement bug review result:
 - because the spiral spread starts at offset `(0,0)` and then assigns later offsets by sorted unit id, a single selected unit could receive a nearby offset destination instead of the exact clicked tile
 - fix: preserve spread assignment for multi-unit move commands only, while single-unit move commands now target the exact clicked tile first and do not fan out through fallback spread positions unless part of a group order
 
+Opening contrast micro-pass:
+- Eco now converts its first worker payoff into a clearer early economy spike instead of only a small invisible bonus
+- Pressure now gets a brief early damage edge on its committed first military unit, so the branch lands harder in first contact instead of reading mostly as a pathing gimmick
+- Tempo stays the clean timing branch, preserving its identity as the low-complexity middle option
+
 Determinism note:
 - the movement fix stays inside net command application and keeps deterministic ordering intact
 - the opening-choice change is UI-first and uses the same existing synced `set_plan` path, so it does not add a new sim divergence surface
 - the exact move feedback marker is render-only command feedback and does not affect simulation or online state
+- the opening contrast pass only reuses existing synced sim state (`openingPlanSelected`, `openingCommitmentClaimed`, unit-local `openingPlan`) and does not introduce new nondeterministic inputs
 
 ## Roadmap
 

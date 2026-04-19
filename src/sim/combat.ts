@@ -103,7 +103,8 @@ export function processAttack(state: GameState, entity: Entity): void {
     const workerPressureBonus = !isUnitKind(entity.kind) ? 0 : (target.kind === 'worker' || target.kind === 'peon') ? 1 : 0;
     const constructionPressureBonus = target.kind === 'construction' ? 1 : 0;
     const contestedMinePressureBonus = nearContestedMine && state.tick <= state.contestedMineBonusUntilTick && isUnitKind(entity.kind) ? 1 : 0;
-    const netDmg    = Math.max(1, dmg - armor + workerPressureBonus + constructionPressureBonus + contestedMinePressureBonus);
+    const openingPressureBonus = entity.openingPlan === 'pressure' && isUnitKind(entity.kind) && state.tick <= SIM_HZ * 18 ? 1 : 0;
+    const netDmg    = Math.max(1, dmg - armor + workerPressureBonus + constructionPressureBonus + contestedMinePressureBonus + openingPressureBonus);
     target.hp      -= netDmg;
     target.underAttackTick = state.tick;
     cmd.cooldownTick = state.tick + (STATS[entity.kind]?.attackTicks ?? SIM_HZ);
