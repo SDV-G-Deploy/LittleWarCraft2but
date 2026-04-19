@@ -17,6 +17,7 @@ const BTN_PAD    = 8;
 const PORTRAIT_W = 80;
 const MAX_BTN_COLS = 6;
 const OPENING_PLAN_LOCK_TICKS = getOpeningPlanLockTicks();
+const PRODUCTION_SLOTS = 5;
 
 export interface UiButton {
   x: number; y: number;
@@ -270,6 +271,97 @@ function openingPlanText(plan: OpeningPlan): { title: string; body: string; risk
   return getOpeningPlanPresentation(plan);
 }
 
+function formatQueueLabel(kind: EntityKind, owner: 0 | 1, state: GameState): string {
+  const rc = ownerRace(state.races, owner);
+  return kind === rc.worker ? rc.workerLabel
+    : kind === rc.soldier ? rc.soldierLabel
+    : kind === rc.ranged ? rc.rangedLabel
+    : kind === rc.heavy ? rc.heavyLabel
+    : kind;
+}
+
+function drawProductionPanel(
+  ctx: CanvasRenderingContext2D,
+  e: Entity,
+  state: GameState,
+  x: number,
+  y: number,
+): number {
+  const blockX = x;
+  const blockY = y - 2;
+  const blockW = 300;
+  const blockH = 44;
+  const innerX = blockX + 8;
+  const queueStartX = blockX + 195;
+  const slotY = blockY + 17;
+
+  ctx.fillStyle = 'rgba(110,160,255,0.12)';
+  ctx.fillRect(blockX, blockY, blockW, blockH);
+  ctx.strokeStyle = 'rgba(120,180,255,0.42)';
+  ctx.strokeRect(blockX + 0.5, blockY + 0.5, blockW - 1, blockH - 1);
+
+  ctx.fillStyle = '#9fd0ff';
+  ctx.font = 'bold 11px monospace';
+  ctx.fillText('PRODUCTION', innerX, blockY + 10);
+
+  if (e.cmd?.type === 'train') {
+    const trainBuildTicks = getResolvedBuildTicks(e.cmd.unit, state.races[e.owner]);
+    const pct = Math.max(0, Math.min(100, Math.round(100 * (1 - e.cmd.ticksLeft / trainBuildTicks))));
+    const currentLabel = formatQueueLabel(e.cmd.unit, e.owner, state);
+
+    ctx.fillStyle = '#f3fbff';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText(currentLabel.toUpperCase(), innerX, blockY + 24);
+    ctx.fillStyle = '#cfe7ff';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText(`${pct}%`, blockX + 160, blockY + 24);
+
+    drawProgressBar(ctx, innerX, blockY + 30, 170, '#52a7ff', pct);
+
+    const visibleQueue = e.cmd.queue.slice(0, PRODUCTION_SLOTS);
+    for (let i = 0; i < PRODUCTION_SLOTS; i++) {
+      const sx = queueStartX + i * 19;
+      const queued = visibleQueue[i];
+      ctx.fillStyle = queued ? 'rgba(112,164,255,0.30)' : 'rgba(255,255,255,0.08)';
+      ctx.fillRect(sx, slotY, 15, 15);
+      ctx.strokeStyle = queued ? 'rgba(170,210,255,0.65)' : 'rgba(255,255,255,0.15)';
+      ctx.strokeRect(sx + 0.5, slotY + 0.5, 14, 14);
+      if (queued) {
+        const label = formatQueueLabel(queued, e.owner, state);
+        ctx.fillStyle = '#f7fbff';
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(label[0]?.toUpperCase() ?? '?', sx + 8, slotY + 11);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    const extra = Math.max(0, e.cmd.queue.length - PRODUCTION_SLOTS);
+    if (extra > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.62)';
+      ctx.font = 'bold 10px monospace';
+      ctx.fillText(`+${extra}`, queueStartX + PRODUCTION_SLOTS * 19 + 3, slotY + 11);
+    }
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,0.86)';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText('IDLE', innerX, blockY + 24);
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.font = '10px monospace';
+    ctx.fillText('No unit in production', innerX, blockY + 36);
+
+    for (let i = 0; i < PRODUCTION_SLOTS; i++) {
+      const sx = queueStartX + i * 19;
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(sx, slotY, 15, 15);
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.strokeRect(sx + 0.5, slotY + 0.5, 14, 14);
+    }
+  }
+
+  return y + blockH + 2;
+}
+
 function drawEntityInfo(
   ctx: CanvasRenderingContext2D,
   e: Entity,
@@ -280,6 +372,7 @@ function drawEntityInfo(
 ): void {
   const stats = resolveEntityStatsForEntity(state, e);
   const rc    = ownerRace(state.races, e.owner);
+  const isProductionBuilding = (e.kind === 'townhall' || e.kind === 'barracks') && e.owner === myOwner;
 
   // ── Race-aware display name ─────────────────────────────────────────────────
   const displayName =
@@ -301,6 +394,10 @@ function drawEntityInfo(
   ctx.fillStyle = '#eee';
   ctx.font = 'bold 13px monospace';
   ctx.fillText(displayName.toUpperCase(), x, y); y += LINE + 1;
+
+  if (isProductionBuilding) {
+    y = drawProductionPanel(ctx, e, state, x, y);
+  }
 
   // ── HP ─────────────────────────────────────────────────────────────────────
   ctx.fillStyle = '#aaa';
@@ -481,20 +578,6 @@ function drawEntityInfo(
   }
 
   // ── Training progress ───────────────────────────────────────────────────────
-  if (e.cmd?.type === 'train') {
-    const trainBuildTicks = getResolvedBuildTicks(e.cmd.unit, state.races[e.owner]);
-    const pct   = Math.round(100 * (1 - e.cmd.ticksLeft / trainBuildTicks));
-    ctx.fillStyle = '#88ccff';
-    ctx.font = '11px monospace';
-    ctx.fillText(`Training: ${e.cmd.unit} ${pct}%`, x, y); y += LINE - 2;
-    drawProgressBar(ctx, x, y, 150, '#4488ff', pct); y += 8;
-    if (e.cmd.queue.length > 0) {
-      ctx.fillStyle = '#aaa';
-      ctx.font = '10px monospace';
-      ctx.fillText(`Queue: ${e.cmd.queue.join(', ')}`, x, y);
-    }
-  }
-
   // ── Build progress (shown on the worker) ───────────────────────────────────
   if (e.cmd?.type === 'build') {
     ctx.font = '11px monospace';
