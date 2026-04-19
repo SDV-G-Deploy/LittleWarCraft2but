@@ -17,17 +17,17 @@ export function buildMap04(): MapData {
     map[i][0] = T(); map[i][63] = T();
   }
 
-  // Vertical river splits left-right halves, three narrow fords.
+  // Vertical river splits left-right halves, three fords.
   fill(map, 27, 1, 10, 62, W);
   fill(map, 27, 10, 10, 4, G);
-  fill(map, 27, 30, 10, 4, G);
+  fill(map, 27, 29, 10, 6, G); // widened middle crossing to reduce hard-lock choke abuse
   fill(map, 27, 50, 10, 4, G);
 
   // Funnel approaches to crossings.
   fill(map, 22, 16, 5, 10, T);
   fill(map, 37, 38, 5, 10, T);
-  fill(map, 22, 38, 5, 9, T);
-  fill(map, 37, 16, 5, 9, T);
+  fill(map, 22, 39, 5, 8, T);
+  fill(map, 37, 17, 5, 8, T);
 
   fill(map, 8, 20, 2, 2, M);
   fill(map, 8, 42, 2, 2, M);

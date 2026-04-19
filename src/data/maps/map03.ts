@@ -23,6 +23,9 @@ export function buildMap03(): MapData {
   fill(map, 50, 50, 8, 7, T);
   fill(map, 23, 10, 4, 4, T);
   fill(map, 37, 50, 4, 4, T);
+  // Light mid-map clutter so center is contested but not completely empty.
+  fill(map, 25, 28, 3, 2, T);
+  fill(map, 36, 34, 3, 2, T);
 
   fill(map, 12, 44, 2, 2, M);
   fill(map, 18, 50, 2, 2, M);

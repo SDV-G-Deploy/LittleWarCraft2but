@@ -22,11 +22,11 @@ export function buildMap06(): MapData {
   fill(map, 22, 26, 4, 12, T);
   fill(map, 38, 26, 4, 12, T);
 
-  // Carve entry gates.
-  fill(map, 30, 22, 4, 4, G);
-  fill(map, 30, 38, 4, 4, G);
-  fill(map, 22, 30, 4, 4, G);
-  fill(map, 38, 30, 4, 4, G);
+  // Carve entry gates (slightly wider for less binary hold/lock gameplay).
+  fill(map, 29, 22, 6, 4, G);
+  fill(map, 29, 38, 6, 4, G);
+  fill(map, 22, 29, 4, 6, G);
+  fill(map, 38, 29, 4, 6, G);
 
   // Slight flank clutter so center is still the fastest route.
   fill(map, 8, 28, 5, 8, T);
@@ -38,7 +38,6 @@ export function buildMap06(): MapData {
   fill(map, 50, 12, 2, 2, M);
   fill(map, 31, 31, 2, 2, M);
   fill(map, 28, 31, 2, 2, M);
-  fill(map, 34, 31, 2, 2, M);
 
   return {
     tiles: map,
@@ -51,7 +50,6 @@ export function buildMap06(): MapData {
       { x: 50, y: 12 },
       { x: 31, y: 31 },
       { x: 28, y: 31 },
-      { x: 34, y: 31 },
     ],
     name: 'Crown Pit',
     description: 'Rich center ring creates a hard contest point.\nHold gates, then break into the pit.',
