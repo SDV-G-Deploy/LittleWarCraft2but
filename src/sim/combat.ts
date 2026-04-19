@@ -2,6 +2,7 @@ import type { Entity, GameState } from '../types';
 import { SIM_HZ, isUnitKind, isRangedUnit } from '../types';
 import { ticksPerStep } from '../data/units';
 import { getResolvedArmor, getResolvedAttackTicks, getResolvedDamage, getResolvedRange } from '../balance/resolver';
+import { resolveAttackBonus } from '../balance/modifiers';
 import { getEntity, killEntity } from './entities';
 import { findPath } from './pathfinding';
 
@@ -78,21 +79,6 @@ export function processAttack(state: GameState, entity: Entity): void {
   const dist   = distToEntity(entity.pos.x, entity.pos.y, target);
   const losOk  = range <= 1 || hasLOS(state, entity.pos.x, entity.pos.y, target.pos.x, target.pos.y);
 
-  const myTownHall = state.entities.find(e => e.owner === entity.owner && e.kind === 'townhall');
-  const enemyTownHall = state.entities.find(e => e.owner !== entity.owner && e.kind === 'townhall');
-  const nearContestedMine = target.kind === 'goldmine' ? false : state.entities.some(e => {
-    if (e.kind !== 'goldmine' || (e.goldReserve ?? 0) <= 0) return false;
-    const myDist = myTownHall ? Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y) : Infinity;
-    const enemyDist = enemyTownHall ? Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y) : Infinity;
-    const isContested = (e.pos.x > 16 && e.pos.x < 48) || Math.abs(myDist - enemyDist) <= 8;
-    if (!isContested) return false;
-    const targetCx = target.pos.x + target.tileW / 2;
-    const targetCy = target.pos.y + target.tileH / 2;
-    const mineCx = e.pos.x + e.tileW / 2;
-    const mineCy = e.pos.y + e.tileH / 2;
-    return Math.hypot(targetCx - mineCx, targetCy - mineCy) <= 7;
-  });
-
   if (dist <= range && losOk) {
     // ── In range with LOS: attack ───────────────────────────────────────────
     cmd.chasePath = [];
@@ -100,11 +86,8 @@ export function processAttack(state: GameState, entity: Entity): void {
 
     const dmg       = getResolvedDamage(entity.kind, state.races[entity.owner]);
     const armor     = getResolvedArmor(target);
-    const workerPressureBonus = !isUnitKind(entity.kind) ? 0 : (target.kind === 'worker' || target.kind === 'peon') ? 1 : 0;
-    const constructionPressureBonus = target.kind === 'construction' ? 1 : 0;
-    const contestedMinePressureBonus = nearContestedMine && state.tick <= state.contestedMineBonusUntilTick && isUnitKind(entity.kind) ? 1 : 0;
-    const openingPressureBonus = entity.openingPlan === 'pressure' && isUnitKind(entity.kind) && state.tick <= SIM_HZ * 18 ? 1 : 0;
-    const netDmg    = Math.max(1, dmg - armor + workerPressureBonus + constructionPressureBonus + contestedMinePressureBonus + openingPressureBonus);
+    const attackBonus = resolveAttackBonus({ state, attacker: entity, target });
+    const netDmg    = Math.max(1, dmg - armor + attackBonus);
     target.hp      -= netDmg;
     target.underAttackTick = state.tick;
     cmd.cooldownTick = state.tick + getResolvedAttackTicks(entity.kind, state.races[entity.owner]);
