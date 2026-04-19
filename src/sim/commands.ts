@@ -13,6 +13,7 @@ const MOVE_STUCK_TICKS = 14;
 const MOVE_REPATH_LIMIT = 5;
 const MOVE_FALLBACK_RADIUS = 3;
 const MOVE_REPATH_COOLDOWN_TICKS = 8;
+const MOVE_GOAL_PATH_TRIALS = 3;
 
 function isTileOccupiedByOtherUnit(state: GameState, entity: Entity, tx: number, ty: number): boolean {
   return state.entities.some(other =>
@@ -59,30 +60,61 @@ function goalsNear(a: Vec2, b: Vec2): boolean {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)) <= 1;
 }
 
-function findNearbyMoveGoal(state: GameState, entity: Entity, tx: number, ty: number): Vec2 | null {
+function candidateGoalScore(origin: Vec2, preferred: Vec2, candidate: Vec2): number {
+  const preferredDist = Math.max(Math.abs(preferred.x - candidate.x), Math.abs(preferred.y - candidate.y));
+  const originDist = Math.max(Math.abs(origin.x - candidate.x), Math.abs(origin.y - candidate.y));
+  return preferredDist * 1000 + originDist;
+}
+
+function buildMoveGoalCandidates(tx: number, ty: number): Vec2[] {
   const clamped = clampGoalToMap(tx, ty);
   const candidates: Vec2[] = [clamped];
   for (let r = 1; r <= MOVE_FALLBACK_RADIUS; r++) {
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
         if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-        candidates.push(clampGoalToMap(clamped.x + dx, clamped.y + dy));
+        const candidate = clampGoalToMap(clamped.x + dx, clamped.y + dy);
+        if (!candidates.some(existing => existing.x === candidate.x && existing.y === candidate.y)) {
+          candidates.push(candidate);
+        }
       }
     }
   }
+  return candidates;
+}
 
-  let best: Vec2 | null = null;
+function findNearbyMoveGoal(state: GameState, entity: Entity, tx: number, ty: number): { goal: Vec2; path: Vec2[] } | null {
+  const clamped = clampGoalToMap(tx, ty);
+  const candidates = buildMoveGoalCandidates(tx, ty)
+    .sort((a, b) => candidateGoalScore(entity.pos, clamped, a) - candidateGoalScore(entity.pos, clamped, b));
+
+  let best: { goal: Vec2; path: Vec2[] } | null = null;
   let bestScore = Infinity;
-  for (const c of candidates) {
+  const maxTrials = Math.min(MOVE_GOAL_PATH_TRIALS, candidates.length);
+  for (let i = 0; i < maxTrials; i++) {
+    const c = candidates[i]!;
     const path = findPath(state, entity.pos.x, entity.pos.y, c.x, c.y);
     if (!path) continue;
     const goalDist = Math.max(Math.abs(clamped.x - c.x), Math.abs(clamped.y - c.y));
     const score = goalDist * 1000 + path.length;
+    if (path.length === 0 && entity.pos.x === c.x && entity.pos.y === c.y) {
+      return { goal: c, path };
+    }
     if (!best || score < bestScore) {
-      best = c;
+      best = { goal: c, path };
       bestScore = score;
     }
   }
+
+  if (best) return best;
+
+  for (let i = maxTrials; i < candidates.length; i++) {
+    const c = candidates[i]!;
+    const path = findPath(state, entity.pos.x, entity.pos.y, c.x, c.y);
+    if (!path) continue;
+    return { goal: c, path };
+  }
+
   return best;
 }
 
@@ -101,18 +133,15 @@ export function issueMoveCommand(
     return true;
   }
 
-  const goal = findNearbyMoveGoal(state, entity, tx, ty);
-  if (!goal) return false;
-
-  const path = findPath(state, entity.pos.x, entity.pos.y, goal.x, goal.y);
-  if (!path || path.length === 0) return false;
+  const movePlan = findNearbyMoveGoal(state, entity, tx, ty);
+  if (!movePlan || movePlan.path.length === 0) return false;
 
   entity.cmd = {
     type: 'move',
-    path,
+    path: movePlan.path,
     stepTick: state.tick,
     attackMove,
-    goal,
+    goal: movePlan.goal,
     lastPos: { ...entity.pos },
     lastProgressTick: state.tick,
     repathCount: 0,
@@ -249,18 +278,15 @@ export function processCommand(state: GameState, entity: Entity): void {
         cmd.lastProgressTick = state.tick;
       } else if (state.tick - cmd.lastProgressTick >= MOVE_STUCK_TICKS && cmd.repathCount < MOVE_REPATH_LIMIT && canAttemptRepath(state, entity)) {
         profiler.recordMoveStuck();
-        const fallbackGoal = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
-        const newPath = fallbackGoal
-          ? findPath(state, entity.pos.x, entity.pos.y, fallbackGoal.x, fallbackGoal.y)
-          : null;
+        const movePlan = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
         cmd.lastProgressTick = state.tick;
         cmd.lastPos = { ...entity.pos };
         cmd.repathCount++;
-        const repathOk = !!(fallbackGoal && newPath && newPath.length > 0);
+        const repathOk = !!(movePlan && movePlan.path.length > 0);
         profiler.recordMoveRepath(repathOk);
         if (repathOk) {
-          cmd.goal = fallbackGoal!;
-          cmd.path = newPath!;
+          cmd.goal = movePlan!.goal;
+          cmd.path = movePlan!.path;
           cmd.stepTick = state.tick;
         }
       }
@@ -270,16 +296,13 @@ export function processCommand(state: GameState, entity: Entity): void {
       const next = cmd.path[0]!;
       if (isTileOccupiedByOtherUnit(state, entity, next.x, next.y)) {
         if (cmd.repathCount < MOVE_REPATH_LIMIT && canAttemptRepath(state, entity)) {
-          const fallbackGoal = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
-          const newPath = fallbackGoal
-            ? findPath(state, entity.pos.x, entity.pos.y, fallbackGoal.x, fallbackGoal.y)
-            : null;
+          const movePlan = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
           cmd.repathCount++;
-          const repathOk = !!(fallbackGoal && newPath && newPath.length > 0);
+          const repathOk = !!(movePlan && movePlan.path.length > 0);
           profiler.recordMoveRepath(repathOk);
           if (repathOk) {
-            cmd.goal = fallbackGoal!;
-            cmd.path = newPath!;
+            cmd.goal = movePlan!.goal;
+            cmd.path = movePlan!.path;
             cmd.stepTick = state.tick;
             return;
           }
@@ -295,16 +318,13 @@ export function processCommand(state: GameState, entity: Entity): void {
         if (sidestep) {
           entity.pos.x = sidestep.x;
           entity.pos.y = sidestep.y;
-          const fallbackGoal = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
-          const newPath = fallbackGoal
-            ? findPath(state, entity.pos.x, entity.pos.y, fallbackGoal.x, fallbackGoal.y)
-            : null;
+          const movePlan = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
           cmd.stepTick = state.tick;
           cmd.lastPos = { ...entity.pos };
           cmd.lastProgressTick = state.tick;
-          if (fallbackGoal && newPath && newPath.length > 0) {
-            cmd.goal = fallbackGoal;
-            cmd.path = newPath;
+          if (movePlan && movePlan.path.length > 0) {
+            cmd.goal = movePlan.goal;
+            cmd.path = movePlan.path;
             cmd.repathCount = 0;
           } else {
             cmd.path = [];
