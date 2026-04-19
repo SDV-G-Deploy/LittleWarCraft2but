@@ -216,7 +216,7 @@ export const BASE_ENTITY_BLUEPRINTS: Record<EntityKind, EntityBlueprint> = {
     range: 6,
     speed: 0,
     sight: 8,
-    cost: { gold: 250 },
+    cost: { gold: 275 },
     buildTicks: SIM_HZ * 28,
     attackTicks: Math.round(SIM_HZ * 1.0),
     tileW: 2,

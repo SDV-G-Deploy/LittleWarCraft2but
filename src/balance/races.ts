@@ -59,7 +59,7 @@ export const RACE_BALANCE_PROFILES: Record<Race, RaceBalanceProfile> = {
     },
     entityOverrides: {
       tower: {
-        hp: 600,
+        hp: 560,
         damage: 12,
         armor: 3,
         range: 5,
