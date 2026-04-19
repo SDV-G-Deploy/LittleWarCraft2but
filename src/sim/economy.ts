@@ -2,15 +2,20 @@ import type { Entity, EntityKind, GameState, Vec2 } from '../types';
 import { GATHER_TICKS, GATHER_AMOUNT, MAP_W, MAP_H, SIM_HZ, isUnitKind, isWorkerKind } from '../types';
 import { ticksPerStep } from '../data/units';
 import { getResolvedBuildTicks, getResolvedCost, getResolvedTileSize } from '../balance/resolver';
+import {
+  applyTempoTrainTicks,
+  getEcoFirstReturnBonusGold,
+  getEcoGatherBonus,
+  getEcoGatherBonusCap,
+  getPressureSpeedBoostMult,
+  getPressureSpeedBoostTicks,
+  isOpeningWindowActive,
+  shouldApplyEcoFirstReturnBonus,
+  shouldApplyTempoFirstMilitaryTrainBonus,
+  shouldPressureAttackMoveCommit,
+} from '../balance/openings';
 import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity } from './entities';
 import { findPath } from './pathfinding';
-
-const ECO_OPENING_BONUS_GOLD = 20;
-const ECO_OPENING_GATHER_BONUS = 2;
-const ECO_OPENING_GATHER_BONUS_CAP = 3;
-const PRESSURE_OPENING_SPEED_BOOST_MULT = 1.2;
-const PRESSURE_OPENING_SPEED_BOOST_TICKS = SIM_HZ * 5;
-const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 10;
 
 // ─── Population ───────────────────────────────────────────────────────────────
 
@@ -89,13 +94,7 @@ export function processGather(state: GameState, entity: Entity): void {
       if (state.tick - cmd.waitTicks < GATHER_TICKS) return;
       const owner = entity.owner as 0 | 1;
       const openingPlan = state.openingPlanSelected[owner];
-      const ecoGatherBonus =
-        openingPlan === 'eco' &&
-        state.tick <= OPENING_PLAN_LOCK_TICKS &&
-        !state.openingCommitmentClaimed[owner] &&
-        isWorkerKind(entity.kind)
-          ? ECO_OPENING_GATHER_BONUS
-          : 0;
+      const ecoGatherBonus = getEcoGatherBonus(openingPlan, state.openingCommitmentClaimed[owner], state.tick, entity);
       const take = Math.min(GATHER_AMOUNT + ecoGatherBonus, mine.goldReserve ?? 0);
       mine.goldReserve = (mine.goldReserve ?? 0) - take;
       entity.carryGold = take;
@@ -115,15 +114,10 @@ export function processGather(state: GameState, entity: Entity): void {
       if (ec._gatherPath.length === 0) {
         const owner = entity.owner as 0 | 1;
         state.gold[owner] += entity.carryGold ?? 0;
-        if (
-          state.openingPlanSelected[owner] === 'eco' &&
-          state.tick <= OPENING_PLAN_LOCK_TICKS &&
-          !state.openingCommitmentClaimed[owner] &&
-          isWorkerKind(entity.kind)
-        ) {
+        if (shouldApplyEcoFirstReturnBonus(state.openingPlanSelected[owner], state.openingCommitmentClaimed[owner], state.tick, entity)) {
           entity.openingPlan = 'eco';
-          entity.carryGold = Math.min(ECO_OPENING_GATHER_BONUS_CAP, (entity.carryGold ?? 0) + ECO_OPENING_GATHER_BONUS);
-          state.gold[owner] += ECO_OPENING_BONUS_GOLD;
+          entity.carryGold = Math.min(getEcoGatherBonusCap(), (entity.carryGold ?? 0) + getEcoGatherBonus('eco', false, state.tick, entity));
+          state.gold[owner] += getEcoFirstReturnBonusGold();
           state.openingCommitmentClaimed[owner] = true;
         }
         entity.carryGold = 0;
@@ -163,14 +157,8 @@ export function issueTrainCommand(
   const openingPlan = state.openingPlanSelected[owner];
   let ticksLeft = getResolvedBuildTicks(unit, state.races[building.owner as 0 | 1]);
 
-  if (
-    openingPlan === 'tempo' &&
-    state.tick <= OPENING_PLAN_LOCK_TICKS &&
-    !state.openingCommitmentClaimed[owner] &&
-    isUnitKind(unit) &&
-    !isWorkerKind(unit)
-  ) {
-    ticksLeft = Math.max(1, Math.floor(ticksLeft * 0.65));
+  if (shouldApplyTempoFirstMilitaryTrainBonus(openingPlan, state.openingCommitmentClaimed[owner], state.tick, unit)) {
+    ticksLeft = applyTempoTrainTicks(ticksLeft);
     state.openingCommitmentClaimed[owner] = true;
   }
 
@@ -213,13 +201,13 @@ export function processTrain(state: GameState, building: Entity): void {
 
   let openingPressureAttackMove = false;
 
-  if (openingPlan && state.tick <= OPENING_PLAN_LOCK_TICKS) {
+  if (openingPlan && isOpeningWindowActive(state.tick)) {
     newUnit.openingPlan = openingPlan;
 
     if (!state.openingCommitmentClaimed[owner]) {
       if (openingPlan === 'eco' && isWorkerKind(newUnit.kind)) {
         newUnit.openingPlan = 'eco';
-      } else if (openingPlan === 'pressure' && isUnitKind(newUnit.kind) && !isWorkerKind(newUnit.kind)) {
+      } else if (shouldPressureAttackMoveCommit(openingPlan, state.openingCommitmentClaimed[owner], state.tick, newUnit)) {
         openingPressureAttackMove = true;
         newUnit.openingPlan = 'pressure';
         state.openingCommitmentClaimed[owner] = true;
@@ -250,9 +238,9 @@ export function processTrain(state: GameState, building: Entity): void {
         path,
         stepTick: state.tick,
         attackMove: openingPressureAttackMove,
-        speedMult: openingPressureAttackMove ? PRESSURE_OPENING_SPEED_BOOST_MULT : undefined,
+        speedMult: openingPressureAttackMove ? getPressureSpeedBoostMult() : undefined,
         speedMultUntilTick: openingPressureAttackMove
-          ? (state.tick + PRESSURE_OPENING_SPEED_BOOST_TICKS)
+          ? (state.tick + getPressureSpeedBoostTicks())
           : undefined,
         goal: { ...rp },
         lastPos: { ...spawnPos },
@@ -266,13 +254,8 @@ export function processTrain(state: GameState, building: Entity): void {
     const next = cmd.queue.shift()!;
     cmd.unit      = next;
     cmd.ticksLeft = getResolvedBuildTicks(next, state.races[owner]);
-    if (
-      openingPlan === 'tempo' &&
-      state.tick <= OPENING_PLAN_LOCK_TICKS &&
-      !state.openingCommitmentClaimed[owner] &&
-      !isWorkerKind(next)
-    ) {
-      cmd.ticksLeft = Math.max(1, Math.floor(cmd.ticksLeft * 0.65));
+    if (shouldApplyTempoFirstMilitaryTrainBonus(openingPlan, state.openingCommitmentClaimed[owner], state.tick, next)) {
+      cmd.ticksLeft = applyTempoTrainTicks(cmd.ticksLeft);
       state.openingCommitmentClaimed[owner] = true;
     }
   } else {

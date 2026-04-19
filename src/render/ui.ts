@@ -4,6 +4,7 @@ import { SIM_HZ, TILE_SIZE, isUnitKind, isWorkerKind } from '../types';
 import { STATS } from '../data/units';
 import { RACES, ownerRace } from '../data/races';
 import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedTileSize } from '../balance/resolver';
+import { getOpeningPlanLockTicks, getOpeningPlanPresentation } from '../balance/openings';
 import type { Camera } from './camera';
 import { isValidPlacement } from '../sim/economy';
 
@@ -15,7 +16,7 @@ const BTN_H      = 32;
 const BTN_PAD    = 8;
 const PORTRAIT_W = 80;
 const MAX_BTN_COLS = 6;
-const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 10;
+const OPENING_PLAN_LOCK_TICKS = getOpeningPlanLockTicks();
 
 export interface UiButton {
   x: number; y: number;
@@ -180,9 +181,9 @@ function drawOpeningChoiceOverlay(
 
   const btnY = y + 60;
   const labels = [
-    { label: 'Eco\n1st worker trip pays +20g, gathers bigger', action: 'plan:eco' },
-    { label: 'Tempo\n1st military trains 35% faster', action: 'plan:tempo' },
-    { label: 'Pressure\n1st military commits forward and hits harder', action: 'plan:pressure' },
+    { label: getOpeningPlanPresentation('eco').buttonLabel, action: 'plan:eco' },
+    { label: getOpeningPlanPresentation('tempo').buttonLabel, action: 'plan:tempo' },
+    { label: getOpeningPlanPresentation('pressure').buttonLabel, action: 'plan:pressure' },
   ];
   const buttonW = 180;
   const buttonH = 42;
@@ -266,27 +267,7 @@ function getSelectedOpeningPlan(state: GameState, owner: 0 | 1): OpeningPlan | n
 }
 
 function openingPlanText(plan: OpeningPlan): { title: string; body: string; risk: string } {
-  switch (plan) {
-    case 'eco':
-      return {
-        title: 'Economy opening',
-        body: 'First worker cash-in gives +20 gold and a fatter first mining trip',
-        risk: 'Risk: give up initiative if pressure arrives first',
-      };
-    case 'pressure':
-      return {
-        title: 'Pressure opening',
-        body: 'First military unit attack-moves forward, gets +20% speed for 5s, and hits harder early',
-        risk: 'Risk: fragile if you overextend without control',
-      };
-    case 'tempo':
-    default:
-      return {
-        title: 'Tempo opening',
-        body: 'First military unit trains 35% faster once, for earlier field timing',
-        risk: 'Risk: if timing whiffs, eco falls behind',
-      };
-  }
+  return getOpeningPlanPresentation(plan);
 }
 
 function drawEntityInfo(
