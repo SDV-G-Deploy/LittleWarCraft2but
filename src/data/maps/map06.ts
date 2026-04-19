@@ -37,8 +37,8 @@ export function buildMap06(): MapData {
   fill(map, 8, 28, 5, 8, T);
   fill(map, 51, 28, 5, 8, T);
 
-  map[28][32] = P();
-  map[35][31] = P();
+  map[26][32] = P();
+  map[37][31] = P();
 
   fill(map, 12, 12, 2, 2, M);
   fill(map, 50, 50, 2, 2, M);
