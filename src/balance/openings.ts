@@ -33,7 +33,7 @@ export const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 10;
 export const OPENING_PLAN_DEFINITIONS: Record<OpeningPlan, OpeningPlanDefinition> = {
   eco: {
     id: 'eco',
-    description: 'First worker cash-in gives bonus gold and bigger first gather.',
+    description: 'First worker cash-in gives bonus gold and bigger first gather, with Human home-defense payoff.',
     lockTicks: OPENING_PLAN_LOCK_TICKS,
     eco: {
       firstReturnBonusGold: 20,
@@ -42,21 +42,21 @@ export const OPENING_PLAN_DEFINITIONS: Record<OpeningPlan, OpeningPlanDefinition
     },
     ui: {
       title: 'Economy opening',
-      body: 'First worker cash-in gives +20 gold and a fatter first mining trip',
+      body: 'First worker cash-in gives +20 gold and a fatter first mining trip (Human: early home defense hits harder)',
       risk: 'Risk: give up initiative if pressure arrives first',
       buttonLabel: 'Eco\n1st worker trip pays +20g, gathers bigger',
     },
   },
   tempo: {
     id: 'tempo',
-    description: 'First military unit trains faster for earlier field timing.',
+    description: 'First military unit trains faster for earlier field timing, with Human contested-mine timing payoff.',
     lockTicks: OPENING_PLAN_LOCK_TICKS,
     tempo: {
       firstMilitaryTrainMultiplier: 0.65,
     },
     ui: {
       title: 'Tempo opening',
-      body: 'First military unit trains 35% faster once, for earlier field timing',
+      body: 'First military unit trains 35% faster once (Human: better early contested-mine timing fights)',
       risk: 'Risk: if timing whiffs, eco falls behind',
       buttonLabel: 'Tempo\n1st military trains 35% faster',
     },

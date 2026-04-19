@@ -101,6 +101,10 @@ Current branch status:
 - v1 established eco / tempo / pressure framing and opening intent support
 - v2 added a small mechanical payoff around contested mines during the early opening window
 - opening and combat logic now live in dedicated balance modules, so next step should be playtest-guided gameplay tuning, not another support-layer pass
+- opening branch pass v3 added human-first branch differentiation:
+  - eco now has a Human home-defense damage window after commitment
+  - tempo now has a Human contested-mine timing damage window after commitment
+  - pressure remains the forward-commit branch
 
 Focus ideas:
 - economy vs army timing

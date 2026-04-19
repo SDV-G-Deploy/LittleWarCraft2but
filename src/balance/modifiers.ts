@@ -17,6 +17,20 @@ function isWorkerTarget(target: Entity): boolean {
   return target.kind === 'worker' || target.kind === 'peon';
 }
 
+function isHumanMilitaryUnit(entity: Entity): boolean {
+  return entity.kind === 'footman' || entity.kind === 'archer' || entity.kind === 'knight';
+}
+
+function isNearOwnTownHall(state: GameState, entity: Entity, radius: number): boolean {
+  const ownTownHall = state.entities.find(e => e.owner === entity.owner && e.kind === 'townhall');
+  if (!ownTownHall) return false;
+  const ex = entity.pos.x + entity.tileW / 2;
+  const ey = entity.pos.y + entity.tileH / 2;
+  const tx = ownTownHall.pos.x + ownTownHall.tileW / 2;
+  const ty = ownTownHall.pos.y + ownTownHall.tileH / 2;
+  return Math.hypot(ex - tx, ey - ty) <= radius;
+}
+
 function isNearContestedMine(state: GameState, attacker: Entity, target: Entity): boolean {
   if (target.kind === 'goldmine') return false;
 
@@ -66,6 +80,34 @@ export const ATTACK_MODIFIER_RULES: AttackModifierRule[] = [
       attacker.openingPlan === 'pressure' &&
       isUnitKind(attacker.kind) &&
       state.tick <= SIM_HZ * 18
+        ? 1
+        : 0
+    ),
+  },
+  {
+    id: 'human_eco_home_guard_bonus',
+    description: 'Human eco opening units deal +1 while defending close to own Town Hall early.',
+    apply: ({ state, attacker }) => (
+      state.races[attacker.owner] === 'human' &&
+      state.openingPlanSelected[attacker.owner] === 'eco' &&
+      state.openingCommitmentClaimed[attacker.owner] &&
+      isHumanMilitaryUnit(attacker) &&
+      state.tick <= SIM_HZ * 26 &&
+      isNearOwnTownHall(state, attacker, 11)
+        ? 1
+        : 0
+    ),
+  },
+  {
+    id: 'human_tempo_contest_bonus',
+    description: 'Human tempo opening units deal +1 near contested mines in the opening timing window.',
+    apply: ({ state, attacker, target }) => (
+      state.races[attacker.owner] === 'human' &&
+      state.openingPlanSelected[attacker.owner] === 'tempo' &&
+      state.openingCommitmentClaimed[attacker.owner] &&
+      isHumanMilitaryUnit(attacker) &&
+      state.tick <= SIM_HZ * 30 &&
+      isNearContestedMine(state, attacker, target)
         ? 1
         : 0
     ),
