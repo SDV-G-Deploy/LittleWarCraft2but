@@ -211,7 +211,15 @@ export function processCommand(state: GameState, entity: Entity): void {
         if (best) { issueAttackCommand(entity, best.id, state.tick); return; }
       }
 
-      const tps = ticksPerStep(entity.kind);
+      const baseTps = ticksPerStep(entity.kind);
+      const speedBoostActive =
+        typeof cmd.speedMult === 'number' &&
+        cmd.speedMult > 1 &&
+        typeof cmd.speedMultUntilTick === 'number' &&
+        state.tick <= cmd.speedMultUntilTick;
+      const tps = speedBoostActive
+        ? Math.max(1, Math.floor(baseTps / cmd.speedMult!))
+        : baseTps;
       if (state.tick - cmd.stepTick < tps) return;
 
       if (entity.pos.x !== cmd.lastPos.x || entity.pos.y !== cmd.lastPos.y) {

@@ -373,13 +373,15 @@ export function runMenu(
           'Workers (Peasant / Peon) gather gold from mines.',
           'Build Farms to raise your population cap.',
           'Build a Barracks to train frontline, ranged, and heavy anchor units.',
+          'Worker cost: 55g, train time: 9s. Barracks cost: 360g, build time: 34s.',
         ],
       },
       {
         heading: 'Map Pressure',
         lines: [
           'Contested mines matter most early. Fight for them before greedy mining.',
-          'During the opening clash window, fights near contested mines hit harder.',
+          'Opening clash window lasts about 64s. Near contested mines, pressure fights hit harder there.',
+          'Pressure opening sends your first military unit forward on attack-move with +20% move speed for 5s.',
           'Walls are cheap tools for holding a line or buying time.',
         ],
       },
@@ -403,6 +405,15 @@ export function runMenu(
           '1–9  — control groups   (Ctrl+# to assign, # to recall)',
           'S  — stop selected units',
           'R  — return to menu (after game ends)',
+        ],
+      },
+      {
+        heading: 'Openings',
+        lines: [
+          'Select your opening branch early by selecting Town Hall and clicking Eco/Tempo/Pressure.',
+          'Eco: your first worker gets +20 gold once. Best for faster early saturation.',
+          'Tempo: your first military unit trains 35% faster once. Best for earlier field presence.',
+          'Pressure: your first military unit attack-moves to rally and gets +20% move speed for 5s.',
         ],
       },
       {

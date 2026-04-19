@@ -347,7 +347,7 @@ export function startGame(
               e.id === id && e.owner === myOwner &&
               (e.kind === 'townhall' || e.kind === 'barracks'),
             );
-            if (bldg) emit({ k: 'rally', buildingId: bldg.id, tx, ty, plan: bldg.openingPlan });
+            if (bldg) emit({ k: 'rally', buildingId: bldg.id, tx, ty });
           }
         }
 
@@ -431,9 +431,6 @@ export function startGame(
           e.id === id && e.owner === myOwner && (e.kind === 'townhall' || e.kind === 'barracks'));
         if (!building) continue;
         emit({ k: 'set_plan', buildingId: building.id, plan: pendingPlan });
-        if (building.rallyPoint) {
-          emit({ k: 'rally', buildingId: building.id, tx: building.rallyPoint.x, ty: building.rallyPoint.y, plan: pendingPlan });
-        }
       }
       if (!pendingAction) return;
     }

@@ -14,6 +14,7 @@ const BTN_H      = 32;
 const BTN_PAD    = 8;
 const PORTRAIT_W = 80;
 const MAX_BTN_COLS = 6;
+const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 240;
 
 export interface UiButton {
   x: number; y: number;
@@ -159,24 +160,8 @@ function drawPortrait(
   ctx.textAlign = 'left';
 }
 
-function inferOpeningPlan(state: GameState, owner: 0 | 1, entity?: Entity | null): OpeningPlan {
-  if (entity?.openingPlan) return entity.openingPlan;
-
-  const ownerEntities = state.entities.filter(en => en.owner === owner);
-  const townHall = ownerEntities.find(en => en.kind === 'townhall');
-  const barracks = ownerEntities.find(en => en.kind === 'barracks');
-  const workers = ownerEntities.filter(en => isWorkerKind(en.kind)).length;
-  const army = ownerEntities.filter(en => isUnitKind(en.kind) && !isWorkerKind(en.kind));
-  const ranged = army.filter(en => en.kind === ownerRace(state.races, owner).ranged).length;
-  const gold = state.gold[owner];
-
-  if (barracks?.openingPlan) return barracks.openingPlan;
-  if (townHall?.openingPlan) return townHall.openingPlan;
-  if (!barracks && workers < 4) return 'eco';
-  if (barracks && ranged > 0) return 'pressure';
-  if (!barracks && gold >= 300) return 'tempo';
-  if (army.length >= 3 && ranged * 2 >= army.length) return 'pressure';
-  return 'tempo';
+function getSelectedOpeningPlan(state: GameState, owner: 0 | 1): OpeningPlan | null {
+  return state.openingPlanSelected[owner];
 }
 
 function openingPlanText(plan: OpeningPlan): { title: string; body: string; risk: string } {
@@ -184,20 +169,20 @@ function openingPlanText(plan: OpeningPlan): { title: string; body: string; risk
     case 'eco':
       return {
         title: 'Economy opening',
-        body: 'Safer worker growth, slower first map presence',
+        body: 'First worker gets +20 gold once, for safer early saturation',
         risk: 'Risk: give up initiative if pressure arrives first',
       };
     case 'pressure':
       return {
         title: 'Pressure opening',
-        body: 'Forward rally and sharper ranged route pressure',
+        body: 'First military unit attack-moves to rally and gets +20% speed for 5s',
         risk: 'Risk: fragile if you overextend without control',
       };
     case 'tempo':
     default:
       return {
         title: 'Tempo opening',
-        body: 'Earlier army timing, weaker income curve',
+        body: 'First military unit trains 35% faster once, for earlier field timing',
         risk: 'Risk: if timing whiffs, eco falls behind',
       };
   }
@@ -352,13 +337,24 @@ function drawEntityInfo(
 
   // ── Opening branch framing (townhall / barracks, player-owned) ─────────────
   if ((e.kind === 'townhall' || e.kind === 'barracks') && e.owner === myOwner) {
-    const openingPlan = inferOpeningPlan(state, myOwner, e);
-    const openingCopy = openingPlanText(openingPlan);
+    const selectedPlan = getSelectedOpeningPlan(state, myOwner);
+    const openingSpent = state.openingCommitmentClaimed[myOwner];
+    const canStillChoose = state.tick <= OPENING_PLAN_LOCK_TICKS;
+    const openingCopy = selectedPlan ? openingPlanText(selectedPlan) : null;
     ctx.fillStyle = 'rgba(136,216,255,0.58)';
     ctx.font = '10px monospace';
-    ctx.fillText(`Opening hint: ${openingCopy.title}`, x, y); y += LINE - 1;
+    ctx.fillText(`Opening: ${openingCopy ? openingCopy.title : 'not selected'}`, x, y); y += LINE - 1;
     ctx.fillStyle = 'rgba(255,255,255,0.34)';
-    ctx.fillText(openingCopy.body, x, y); y += LINE - 1;
+    ctx.fillText(
+      selectedPlan
+        ? `Bonus: ${openingSpent ? 'spent' : 'ready'}`
+        : (canStillChoose ? 'Choose branch at Town Hall to lock your opening bonus' : 'Opening lock window ended'),
+      x,
+      y,
+    ); y += LINE - 1;
+    if (openingCopy) {
+      ctx.fillText(openingCopy.body, x, y); y += LINE - 1;
+    }
   }
 
   // ── Rally point (townhall / barracks, player-owned) ────────────────────────
@@ -372,7 +368,7 @@ function drawEntityInfo(
       const myDist = myTownHall ? Math.hypot(e.rallyPoint.x - myTownHall.pos.x, e.rallyPoint.y - myTownHall.pos.y) : Infinity;
       const enemyDist = enemyTownHall ? Math.hypot(e.rallyPoint.x - enemyTownHall.pos.x, e.rallyPoint.y - enemyTownHall.pos.y) : Infinity;
       ctx.fillStyle = 'rgba(255,255,255,0.42)';
-      const openingPlan = inferOpeningPlan(state, myOwner, e);
+      const openingPlan = getSelectedOpeningPlan(state, myOwner) ?? 'tempo';
       const rallyText = Math.abs(myDist - enemyDist) <= 8
         ? (openingPlan === 'eco'
             ? 'Contested rally, you are leaving eco comfort'
@@ -394,6 +390,11 @@ function drawEntityInfo(
     } else {
       ctx.fillStyle = 'rgba(255,255,255,0.28)';
       ctx.fillText('RMB empty ground: set rally', x, y); y += LINE - 1;
+      const selectedPlan = getSelectedOpeningPlan(state, myOwner);
+      if (selectedPlan === 'pressure' && !state.openingCommitmentClaimed[myOwner]) {
+        ctx.fillStyle = 'rgba(255,200,120,0.42)';
+        ctx.fillText('Pressure fallback: first military commits toward enemy Town Hall', x, y); y += LINE - 1;
+      }
     }
   }
 
@@ -497,16 +498,18 @@ function collectButtons(
     const workerCost = STATS[rc.worker]?.cost ?? 50;
     const barracksCost = STATS['barracks']?.cost ?? 360;
     const workerBusy = e.cmd?.type === 'train';
-    const ownerEntities = state.entities.filter(en => en.owner === myOwner);
-    const barracks = ownerEntities.find(en => en.kind === 'barracks');
-    const workers = ownerEntities.filter(en => isWorkerKind(en.kind)).length;
-    const canTempo = !barracks && state.gold[myOwner] >= Math.max(0, barracksCost - 120);
-    const canPressure = !!barracks || !!e.rallyPoint;
+    const selectedPlan = getSelectedOpeningPlan(state, myOwner);
+    const canChooseOpening = !selectedPlan && state.tick <= OPENING_PLAN_LOCK_TICKS;
 
     addButton(`${rc.workerLabel} [V]\n[${workerCost}g]`, `train:${rc.worker}`,
       state.gold[myOwner] < workerCost);
-    if (!workerBusy && state.gold[myOwner] >= workerCost && workers < 4) {
+    if (!workerBusy && state.gold[myOwner] >= workerCost) {
       addButton('Worker spike\nfast eco', `train:${rc.worker}`);
+    }
+    if (canChooseOpening) {
+      addButton('Eco\n1st worker +20g', 'plan:eco');
+      addButton('Tempo\n1st military -35% time', 'plan:tempo');
+      addButton('Pressure\n1st military rally AM +20%/5s', 'plan:pressure');
     }
   }
   if (e.kind === 'barracks') {

@@ -1,5 +1,5 @@
 import type { GameState, FogState, MapData, Race } from '../types';
-import { MAP_W, MAP_H } from '../types';
+import { MAP_W, MAP_H, SIM_HZ } from '../types';
 
 export function createWorld(mapData: MapData, races: [Race, Race]): GameState {
   const fog: FogState[][] = Array.from({ length: MAP_H }, () =>
@@ -19,7 +19,8 @@ export function createWorld(mapData: MapData, races: [Race, Race]): GameState {
     races,
     mapName: mapData.name,
     mapDescription: mapData.description,
-    contestedMineBonusUntilTick: MAP_W,
+    contestedMineBonusUntilTick: SIM_HZ * 64,
+    openingPlanSelected: [null, null],
     openingCommitmentClaimed: [false, false],
   };
 }

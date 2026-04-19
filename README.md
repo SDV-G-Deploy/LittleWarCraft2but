@@ -73,6 +73,21 @@ The next meaningful gains should come from:
 
 AI should be improved only after those systems create interesting matches on their own.
 
+## How to play the opening branches
+
+The game now has three intended early plans:
+- **Eco**: your first worker gets a one-time `+20 gold` boost, helping faster early saturation and safer growth
+- **Tempo**: your first military timing arrives earlier, giving faster field presence at the cost of a weaker income curve
+- **Pressure**: your first military unit commits forward immediately, using attack-move toward rally and a short speed boost for sharper first contact
+
+Practical reading:
+- **Eco** is the safer default when you want economy first
+- **Tempo** is for taking the map a bit earlier without going all-in
+- **Pressure** is for forcing an early tactical problem, especially around contested mines
+
+Related map rule:
+- during the early opening clash window, fights near contested mines hit harder, so early pressure and greedy mining collide more clearly
+
 ## Useful commands
 
 ```bash

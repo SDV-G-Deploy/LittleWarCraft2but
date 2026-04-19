@@ -76,6 +76,8 @@ export type Command =
       path: Vec2[];
       stepTick: number;
       attackMove: boolean;
+      speedMult?: number;
+      speedMultUntilTick?: number;
       goal: Vec2;
       lastPos: Vec2;
       lastProgressTick: number;
@@ -132,5 +134,6 @@ export interface GameState {
   mapName?: string;
   mapDescription?: string;
   contestedMineBonusUntilTick: number;
+  openingPlanSelected: [OpeningPlan | null, OpeningPlan | null];
   openingCommitmentClaimed: [boolean, boolean];
 }

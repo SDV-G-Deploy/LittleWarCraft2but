@@ -4,6 +4,11 @@ import { STATS, ticksPerStep } from '../data/units';
 import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity } from './entities';
 import { findPath } from './pathfinding';
 
+const ECO_OPENING_BONUS_GOLD = 20;
+const PRESSURE_OPENING_SPEED_BOOST_MULT = 1.2;
+const PRESSURE_OPENING_SPEED_BOOST_TICKS = SIM_HZ * 5;
+const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 240;
+
 // ─── Population ───────────────────────────────────────────────────────────────
 
 /** Recompute pop / popCap for both owners — call once per sim tick. */
@@ -130,7 +135,22 @@ export function issueTrainCommand(
   }
 
   state.gold[building.owner as 0 | 1] -= cost;
-  building.cmd = { type: 'train', unit, ticksLeft: STATS[unit]!.buildTicks, queue: [] };
+  const owner = building.owner as 0 | 1;
+  const openingPlan = state.openingPlanSelected[owner];
+  let ticksLeft = STATS[unit]!.buildTicks;
+
+  if (
+    openingPlan === 'tempo' &&
+    state.tick <= OPENING_PLAN_LOCK_TICKS &&
+    !state.openingCommitmentClaimed[owner] &&
+    isUnitKind(unit) &&
+    !isWorkerKind(unit)
+  ) {
+    ticksLeft = Math.max(1, Math.floor(ticksLeft * 0.65));
+    state.openingCommitmentClaimed[owner] = true;
+  }
+
+  building.cmd = { type: 'train', unit, ticksLeft, queue: [] };
   return true;
 }
 
@@ -165,30 +185,40 @@ export function processTrain(state: GameState, building: Entity): void {
   const spawnPos = findSpawnTile(state, sx, sy);
   const newUnit  = spawnEntity(state, cmd.unit, building.owner as 0 | 1, spawnPos);
   const owner = building.owner as 0 | 1;
+  const openingPlan = state.openingPlanSelected[owner];
 
   let openingPressureAttackMove = false;
-  let openingTempoQueueBoost = false;
 
-  if (building.openingPlan && state.tick <= SIM_HZ * 240) {
-    newUnit.openingPlan = building.openingPlan;
+  if (openingPlan && state.tick <= OPENING_PLAN_LOCK_TICKS) {
+    newUnit.openingPlan = openingPlan;
 
     if (!state.openingCommitmentClaimed[owner]) {
-      if (building.openingPlan === 'eco' && isWorkerKind(newUnit.kind)) {
-        state.gold[owner] += 40;
+      if (openingPlan === 'eco' && isWorkerKind(newUnit.kind)) {
+        state.gold[owner] += ECO_OPENING_BONUS_GOLD;
         state.openingCommitmentClaimed[owner] = true;
-      } else if (building.openingPlan === 'tempo' && isUnitKind(newUnit.kind) && !isWorkerKind(newUnit.kind)) {
-        openingTempoQueueBoost = true;
-        state.openingCommitmentClaimed[owner] = true;
-      } else if (building.openingPlan === 'pressure' && isUnitKind(newUnit.kind) && !isWorkerKind(newUnit.kind)) {
+      } else if (openingPlan === 'pressure' && isUnitKind(newUnit.kind) && !isWorkerKind(newUnit.kind)) {
         openingPressureAttackMove = true;
         state.openingCommitmentClaimed[owner] = true;
       }
     }
   }
 
-  // Walk to rally point immediately if one is set
-  if (building.rallyPoint) {
-    const rp   = building.rallyPoint;
+  // Walk to rally point immediately if one is set.
+  // Pressure fallback: if rally is unset, commit toward enemy Town Hall.
+  const pressureFallbackTarget = openingPressureAttackMove && !building.rallyPoint
+    ? state.entities.find(e => e.owner !== owner && e.kind === 'townhall')
+    : null;
+  const moveTarget = building.rallyPoint
+    ? building.rallyPoint
+    : pressureFallbackTarget
+      ? {
+          x: pressureFallbackTarget.pos.x + Math.floor(pressureFallbackTarget.tileW / 2),
+          y: pressureFallbackTarget.pos.y + Math.floor(pressureFallbackTarget.tileH / 2),
+        }
+      : null;
+
+  if (moveTarget) {
+    const rp   = moveTarget;
     const path = findPath(state, spawnPos.x, spawnPos.y, rp.x, rp.y);
     if (path && path.length > 0) {
       newUnit.cmd = {
@@ -196,6 +226,10 @@ export function processTrain(state: GameState, building: Entity): void {
         path,
         stepTick: state.tick,
         attackMove: openingPressureAttackMove,
+        speedMult: openingPressureAttackMove ? PRESSURE_OPENING_SPEED_BOOST_MULT : undefined,
+        speedMultUntilTick: openingPressureAttackMove
+          ? (state.tick + PRESSURE_OPENING_SPEED_BOOST_TICKS)
+          : undefined,
         goal: { ...rp },
         lastPos: { ...spawnPos },
         lastProgressTick: state.tick,
@@ -208,8 +242,14 @@ export function processTrain(state: GameState, building: Entity): void {
     const next = cmd.queue.shift()!;
     cmd.unit      = next;
     cmd.ticksLeft = STATS[next]!.buildTicks;
-    if (openingTempoQueueBoost) {
+    if (
+      openingPlan === 'tempo' &&
+      state.tick <= OPENING_PLAN_LOCK_TICKS &&
+      !state.openingCommitmentClaimed[owner] &&
+      !isWorkerKind(next)
+    ) {
       cmd.ticksLeft = Math.max(1, Math.floor(cmd.ticksLeft * 0.65));
+      state.openingCommitmentClaimed[owner] = true;
     }
   } else {
     building.cmd = null;

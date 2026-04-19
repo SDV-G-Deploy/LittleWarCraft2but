@@ -5,7 +5,7 @@
  */
 
 import type { EntityKind, GameState, OpeningPlan } from '../types';
-import { isUnitKind, isWorkerKind } from '../types';
+import { SIM_HZ, isUnitKind, isWorkerKind } from '../types';
 import { STATS } from '../data/units';
 import { issueAttackCommand } from '../sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, issueResumeBuildCommand } from '../sim/economy';
@@ -140,8 +140,12 @@ export function applyNetCmds(
       }
       case 'set_plan': {
         const b = getEntity(state, cmd.buildingId);
-        if (b && b.owner === owner && (b.kind === 'townhall' || b.kind === 'barracks')) {
-          b.openingPlan = cmd.plan;
+        const canLockPlan = state.tick <= SIM_HZ * 240 && !state.openingPlanSelected[owner];
+        if (b && b.owner === owner && (b.kind === 'townhall' || b.kind === 'barracks') && canLockPlan) {
+          state.openingPlanSelected[owner] = cmd.plan;
+          for (const en of state.entities) {
+            if (en.owner === owner && (en.kind === 'townhall' || en.kind === 'barracks')) en.openingPlan = cmd.plan;
+          }
         }
         break;
       }
@@ -149,7 +153,9 @@ export function applyNetCmds(
         const b = getEntity(state, cmd.buildingId);
         if (b && b.owner === owner) {
           b.rallyPoint = { x: cmd.tx, y: cmd.ty };
-          if (cmd.plan) b.openingPlan = cmd.plan;
+          if (cmd.plan && !state.openingPlanSelected[owner]) {
+            state.openingPlanSelected[owner] = cmd.plan;
+          }
         }
         break;
       }
