@@ -18,6 +18,7 @@ Recent completed passes:
 - targeted move-to-tile fix for single-unit orders, preserving spread only for multi-select moves
 - start-of-match opening chooser overlay made explicit, visible, and auto-defaulted to Eco after 10s
 - opening-choice UX polish: backdrop, intro pulse, and short "Opening locked" confirmation state
+- precise single-unit move feedback marker to show the exact commanded destination tile
 
 Current state:
 - build green
@@ -181,6 +182,7 @@ Movement bug review result:
 Determinism note:
 - the movement fix stays inside net command application and keeps deterministic ordering intact
 - the opening-choice change is UI-first and uses the same existing synced `set_plan` path, so it does not add a new sim divergence surface
+- the exact move feedback marker is render-only command feedback and does not affect simulation or online state
 
 ## Roadmap
 

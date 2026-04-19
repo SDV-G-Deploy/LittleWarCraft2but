@@ -85,7 +85,8 @@ export function startGame(
       wx: (tx + 0.5) * TILE_SIZE,
       wy: (ty + 0.5) * TILE_SIZE,
       createdAt: performance.now(),
-      ttlMs: kind === 'attack' ? 420 : kind === 'error' ? 520 : 620,
+      ttlMs: kind === 'attack' ? 420 : kind === 'error' ? 520 : kind === 'moveExact' ? 700 : 620,
+      tileSize: kind === 'moveExact' ? TILE_SIZE : undefined,
     });
   }
 
@@ -94,7 +95,10 @@ export function startGame(
   }
 
   function emit(cmd: NetCmd): void {
-    if (cmd.k === 'move') pushMarker('move', cmd.tx, cmd.ty);
+    if (cmd.k === 'move') {
+      pushMarker('move', cmd.tx, cmd.ty);
+      if (cmd.ids.length === 1) pushMarker('moveExact', cmd.tx, cmd.ty);
+    }
     else if (cmd.k === 'attack') {
       const target = state.entities.find(e => e.id === cmd.targetId);
       if (target) pushMarker('attack', target.pos.x + Math.floor(target.tileW / 2), target.pos.y + Math.floor(target.tileH / 2));

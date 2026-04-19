@@ -2,7 +2,7 @@ import type { Camera } from './camera';
 import { worldToScreen } from './camera';
 import { TILE_SIZE } from '../types';
 
-export type CommandMarkerKind = 'move' | 'attack' | 'gather' | 'build' | 'rally' | 'error';
+export type CommandMarkerKind = 'move' | 'moveExact' | 'attack' | 'gather' | 'build' | 'rally' | 'error';
 
 export interface CommandMarker {
   kind: CommandMarkerKind;
@@ -10,10 +10,12 @@ export interface CommandMarker {
   wy: number;
   createdAt: number;
   ttlMs: number;
+  tileSize?: number;
 }
 
 const MARKER_COLORS: Record<CommandMarkerKind, string> = {
   move: '#66d9ff',
+  moveExact: '#b8f0ff',
   attack: '#ff6b6b',
   gather: '#ffe066',
   build: '#88ff88',
@@ -33,9 +35,10 @@ export function drawCommandMarkers(
     const t = age / marker.ttlMs;
     const alpha = 1 - t;
     const radius = 8 + t * 10;
-    const { sx, sy } = worldToScreen(marker.wx - TILE_SIZE / 2, marker.wy - TILE_SIZE / 2, cam);
-    const cx = sx + TILE_SIZE / 2;
-    const cy = sy + TILE_SIZE / 2;
+    const markerTileSize = marker.tileSize ?? TILE_SIZE;
+    const { sx, sy } = worldToScreen(marker.wx - markerTileSize / 2, marker.wy - markerTileSize / 2, cam);
+    const cx = sx + markerTileSize / 2;
+    const cy = sy + markerTileSize / 2;
 
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -56,6 +59,15 @@ export function drawCommandMarkers(
       }
     } else if (marker.kind === 'build') {
       ctx.strokeRect(cx - radius, cy - radius, radius * 2, radius * 2);
+    } else if (marker.kind === 'moveExact') {
+      const tileRadius = markerTileSize * 0.5;
+      ctx.strokeRect(cx - tileRadius, cy - tileRadius, markerTileSize, markerTileSize);
+      ctx.beginPath();
+      ctx.moveTo(cx - tileRadius, cy);
+      ctx.lineTo(cx + tileRadius, cy);
+      ctx.moveTo(cx, cy - tileRadius);
+      ctx.lineTo(cx, cy + tileRadius);
+      ctx.stroke();
     } else {
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
