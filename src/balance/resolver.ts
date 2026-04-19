@@ -92,6 +92,31 @@ export function getResolvedCost(kind: EntityKind, race?: Race | null): number {
   return resolveEntityStats(kind, race).cost.gold;
 }
 
+export function getResolvedBuildTicks(kind: EntityKind, race?: Race | null): number {
+  return resolveEntityStats(kind, race).buildTicks;
+}
+
+export function getResolvedAttackTicks(kind: EntityKind, race?: Race | null): number {
+  return resolveEntityStats(kind, race).attackTicks;
+}
+
+export function getResolvedRange(kind: EntityKind, race?: Race | null): number {
+  return resolveEntityStats(kind, race).range;
+}
+
+export function getResolvedDamage(kind: EntityKind, race?: Race | null): number {
+  return resolveEntityStats(kind, race).damage;
+}
+
+export function getResolvedSpeed(kind: EntityKind, race?: Race | null): number {
+  return resolveEntityStats(kind, race).speed;
+}
+
+export function getResolvedTileSize(kind: EntityKind, race?: Race | null): { tileW: number; tileH: number } {
+  const stats = resolveEntityStats(kind, race);
+  return { tileW: stats.tileW, tileH: stats.tileH };
+}
+
 export function ticksPerStepForResolved(kind: EntityKind, race?: Race | null): number {
   const speed = resolveEntityStats(kind, race).speed;
   if (speed === 0) return Infinity;

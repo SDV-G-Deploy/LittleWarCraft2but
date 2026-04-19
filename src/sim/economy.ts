@@ -1,6 +1,7 @@
 import type { Entity, EntityKind, GameState, Vec2 } from '../types';
 import { GATHER_TICKS, GATHER_AMOUNT, MAP_W, MAP_H, SIM_HZ, isUnitKind, isWorkerKind } from '../types';
-import { STATS, ticksPerStep } from '../data/units';
+import { ticksPerStep } from '../data/units';
+import { getResolvedBuildTicks, getResolvedCost, getResolvedTileSize } from '../balance/resolver';
 import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity } from './entities';
 import { findPath } from './pathfinding';
 
@@ -146,7 +147,7 @@ export function issueTrainCommand(
   unit: EntityKind,
 ): boolean {
   if (!isUnitKind(unit)) return false; // only unit kinds can be trained
-  const cost = STATS[unit]?.cost ?? 0;
+  const cost = getResolvedCost(unit, state.races[building.owner as 0 | 1]);
   if (state.gold[building.owner as 0 | 1] < cost) return false;
   if (state.pop[building.owner as 0 | 1] >= state.popCap[building.owner as 0 | 1]) return false;
 
@@ -160,7 +161,7 @@ export function issueTrainCommand(
   state.gold[building.owner as 0 | 1] -= cost;
   const owner = building.owner as 0 | 1;
   const openingPlan = state.openingPlanSelected[owner];
-  let ticksLeft = STATS[unit]!.buildTicks;
+  let ticksLeft = getResolvedBuildTicks(unit, state.races[building.owner as 0 | 1]);
 
   if (
     openingPlan === 'tempo' &&
@@ -264,7 +265,7 @@ export function processTrain(state: GameState, building: Entity): void {
   if (cmd.queue.length > 0) {
     const next = cmd.queue.shift()!;
     cmd.unit      = next;
-    cmd.ticksLeft = STATS[next]!.buildTicks;
+    cmd.ticksLeft = getResolvedBuildTicks(next, state.races[owner]);
     if (
       openingPlan === 'tempo' &&
       state.tick <= OPENING_PLAN_LOCK_TICKS &&
@@ -287,8 +288,7 @@ export function isValidPlacement(
   tx: number,
   ty: number,
 ): boolean {
-  const stats = STATS[building];
-  if (!stats) return false;
+  const stats = getResolvedTileSize(building);
   for (let dy = 0; dy < stats.tileH; dy++) {
     for (let dx = 0; dx < stats.tileW; dx++) {
       const x = tx + dx; const y = ty + dy;
@@ -310,8 +310,11 @@ export function issueBuildCommand(
   pos: Vec2,
   currentTick: number,
 ): boolean {
-  const stats = STATS[building];
-  if (!stats) return false;
+  const stats = {
+    ...getResolvedTileSize(building),
+    buildTicks: getResolvedBuildTicks(building),
+    cost: getResolvedCost(building),
+  };
   const cost = stats.cost;
   if (state.gold[worker.owner as 0 | 1] < cost) return false;
   if (!isValidPlacement(state, building, pos.x, pos.y)) return false;
@@ -372,9 +375,9 @@ export function processBuild(state: GameState, entity: Entity): void {
   if (cmd.phase === 'moving') {
     // Path to the tile just south of the building footprint (site blocks its own tiles)
     if (!ec._buildPath) {
-      const bStats = STATS[cmd.building];
-      const adjX   = cmd.pos.x + Math.floor((bStats?.tileW ?? 1) / 2);
-      const adjY   = cmd.pos.y + (bStats?.tileH ?? 1);
+      const bStats = getResolvedTileSize(cmd.building);
+      const adjX   = cmd.pos.x + Math.floor((bStats.tileW ?? 1) / 2);
+      const adjY   = cmd.pos.y + (bStats.tileH ?? 1);
       ec._buildPath = findPath(state, entity.pos.x, entity.pos.y, adjX, adjY) ?? [];
     }
     if (ec._buildPath.length === 0) {

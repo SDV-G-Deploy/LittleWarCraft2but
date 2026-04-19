@@ -213,7 +213,7 @@ export function processCommand(state: GameState, entity: Entity): void {
         if (best) { issueAttackCommand(entity, best.id, state.tick); return; }
       }
 
-      const baseTps = ticksPerStep(entity.kind);
+      const baseTps = ticksPerStep(entity.kind, state.races[entity.owner]);
       const speedBoostActive =
         typeof cmd.speedMult === 'number' &&
         cmd.speedMult > 1 &&

@@ -1,7 +1,7 @@
 import type { Entity, GameState } from '../types';
 import { SIM_HZ, isUnitKind, isRangedUnit } from '../types';
-import { STATS, ticksPerStep } from '../data/units';
-import { getResolvedArmor } from '../balance/resolver';
+import { ticksPerStep } from '../data/units';
+import { getResolvedArmor, getResolvedAttackTicks, getResolvedDamage, getResolvedRange } from '../balance/resolver';
 import { getEntity, killEntity } from './entities';
 import { findPath } from './pathfinding';
 
@@ -74,8 +74,7 @@ export function processAttack(state: GameState, entity: Entity): void {
   // Ranged units (archer, troll) only fight mobile units — not buildings or walls
   if (isRangedUnit(entity.kind) && !isUnitKind(target.kind)) { entity.cmd = null; return; }
 
-  const stats  = STATS[entity.kind];
-  const range  = stats?.range ?? 1;
+  const range  = getResolvedRange(entity.kind, state.races[entity.owner]);
   const dist   = distToEntity(entity.pos.x, entity.pos.y, target);
   const losOk  = range <= 1 || hasLOS(state, entity.pos.x, entity.pos.y, target.pos.x, target.pos.y);
 
@@ -99,7 +98,7 @@ export function processAttack(state: GameState, entity: Entity): void {
     cmd.chasePath = [];
     if (state.tick < cmd.cooldownTick) return;
 
-    const dmg       = stats?.damage ?? 0;
+    const dmg       = getResolvedDamage(entity.kind, state.races[entity.owner]);
     const armor     = getResolvedArmor(target);
     const workerPressureBonus = !isUnitKind(entity.kind) ? 0 : (target.kind === 'worker' || target.kind === 'peon') ? 1 : 0;
     const constructionPressureBonus = target.kind === 'construction' ? 1 : 0;
@@ -108,7 +107,7 @@ export function processAttack(state: GameState, entity: Entity): void {
     const netDmg    = Math.max(1, dmg - armor + workerPressureBonus + constructionPressureBonus + contestedMinePressureBonus + openingPressureBonus);
     target.hp      -= netDmg;
     target.underAttackTick = state.tick;
-    cmd.cooldownTick = state.tick + (STATS[entity.kind]?.attackTicks ?? SIM_HZ);
+    cmd.cooldownTick = state.tick + getResolvedAttackTicks(entity.kind, state.races[entity.owner]);
 
     if (target.hp <= 0) {
       state.corpses.push({ pos: { ...target.pos }, owner: target.owner, deadTick: state.tick });

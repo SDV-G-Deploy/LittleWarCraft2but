@@ -3,7 +3,7 @@ import type { SessionStats, SessionStatus } from '../net/session';
 import { SIM_HZ, TILE_SIZE, isUnitKind, isWorkerKind } from '../types';
 import { STATS } from '../data/units';
 import { RACES, ownerRace } from '../data/races';
-import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedHpMax } from '../balance/resolver';
+import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedTileSize } from '../balance/resolver';
 import type { Camera } from './camera';
 import { isValidPlacement } from '../sim/economy';
 
@@ -501,8 +501,8 @@ function drawEntityInfo(
 
   // ── Training progress ───────────────────────────────────────────────────────
   if (e.cmd?.type === 'train') {
-    const tStats = STATS[e.cmd.unit];
-    const pct   = Math.round(100 * (1 - e.cmd.ticksLeft / (tStats?.buildTicks ?? 1)));
+    const trainBuildTicks = getResolvedBuildTicks(e.cmd.unit, state.races[e.owner]);
+    const pct   = Math.round(100 * (1 - e.cmd.ticksLeft / trainBuildTicks));
     ctx.fillStyle = '#88ccff';
     ctx.font = '11px monospace';
     ctx.fillText(`Training: ${e.cmd.unit} ${pct}%`, x, y); y += LINE - 2;
@@ -597,7 +597,7 @@ function collectButtons(
   // ── Production buildings ────────────────────────────────────────────────────
   if (e.kind === 'townhall') {
     const workerCost = resolveEntityStatsForOwner(rc.worker, state.races, myOwner).cost.gold;
-    const barracksCost = STATS['barracks']?.cost ?? 360;
+    const barracksCost = getResolvedCost('barracks');
     const workerBusy = e.cmd?.type === 'train';
     const selectedPlan = getSelectedOpeningPlan(state, myOwner);
     addButton(`${rc.workerLabel} [V]\n[${workerCost}g]`, `train:${rc.worker}`,
@@ -643,9 +643,9 @@ function collectButtons(
 
   // ── Worker build menu (workers + peons both show build buttons) ─────────────
   if (isWorkerKind(e.kind)) {
-    const barrCost = STATS['barracks']?.cost ?? 400;
-    const farmCost = STATS['farm']?.cost     ?? 250;
-    const wallCost = STATS['wall']?.cost     ?? 50;
+    const barrCost = getResolvedCost('barracks');
+    const farmCost = getResolvedCost('farm');
+    const wallCost = getResolvedCost('wall', state.races[myOwner]);
     const barrLabel = rc.barrLabel;
     const farmLabel = rc.farmLabel;
     addButton(`${barrLabel} [B]\n[${barrCost}g]`, 'build:barracks', state.gold[myOwner] < barrCost);
@@ -662,10 +662,10 @@ function collectButtons(
   }
 
   // ── Demolish / Cancel construction ─────────────────────────────────────────
-  if (e.kind !== 'goldmine' && (STATS[e.kind]?.speed ?? 1) === 0) {
+  if (e.kind !== 'goldmine' && getResolvedSpeed(e.kind, state.races[e.owner]) === 0) {
     const isConst  = e.kind === 'construction';
     const srcKind  = isConst ? (e.constructionOf ?? e.kind) : e.kind;
-    const refund   = Math.floor((STATS[srcKind]?.cost ?? 0) * (isConst ? 1.0 : 0.8));
+    const refund   = Math.floor(getResolvedCost(srcKind, state.races[e.owner]) * (isConst ? 1.0 : 0.8));
     const btnLabel = isConst ? `Cancel\n[+${refund}g]` : `Demolish\n[+${refund}g]`;
     addButton(btnLabel, 'demolish', false, true);
   }
@@ -681,8 +681,7 @@ export function drawGhostBuilding(
   tx: number,
   ty: number,
 ): void {
-  const stats = STATS[building];
-  if (!stats) return;
+  const stats = getResolvedTileSize(building);
   const valid = isValidPlacement(state, building, tx, ty);
 
   const sx = tx * TILE_SIZE - cam.x;

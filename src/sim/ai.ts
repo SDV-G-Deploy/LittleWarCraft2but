@@ -1,7 +1,7 @@
 import type { Entity, EntityKind, GameState, Vec2 } from '../types';
 import { SIM_HZ, isUnitKind } from '../types';
-import { STATS } from '../data/units';
 import { RACES } from '../data/races';
+import { getResolvedCost } from '../balance/resolver';
 import {
   issueGatherCommand, issueTrainCommand,
   issueBuildCommand, isValidPlacement,
@@ -78,9 +78,9 @@ export function tickAI(state: GameState, ai: AIController): void {
         const rangedCount  = mySoldiers.filter(u => u.kind === rc.ranged).length;
         const heavyCount   = mySoldiers.filter(u => u.kind === rc.heavy).length;
         const wantHeavy    = heavyCount < 2 && soldierCount >= 2 &&
-                             state.gold[1] >= (STATS[rc.heavy]?.cost ?? 170);
+                             state.gold[1] >= getResolvedCost(rc.heavy, state.races[1]);
         const wantRanged   = !wantHeavy && rangedCount < Math.floor((soldierCount + heavyCount) / 2) &&
-                             state.gold[1] >= (STATS[rc.ranged]?.cost ?? 100);
+                             state.gold[1] >= getResolvedCost(rc.ranged, state.races[1]);
         issueTrainCommand(state, myBarracks, wantHeavy ? rc.heavy : wantRanged ? rc.ranged : rc.soldier);
       }
       if (!buildingFarm && state.popCap[1] - state.pop[1] <= 2 && farmCount < 3) {

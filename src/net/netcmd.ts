@@ -6,7 +6,7 @@
 
 import type { EntityKind, GameState, OpeningPlan } from '../types';
 import { SIM_HZ, isUnitKind, isWorkerKind } from '../types';
-import { STATS } from '../data/units';
+import { getResolvedCost } from '../balance/resolver';
 import { issueAttackCommand } from '../sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, issueResumeBuildCommand } from '../sim/economy';
 import { issueMoveCommand } from '../sim/commands';
@@ -171,7 +171,7 @@ export function applyNetCmds(
         // Construction sites refund 100% (no work was wasted); finished buildings 80%
         const srcKind  = b.kind === 'construction' ? (b.constructionOf ?? b.kind) : b.kind;
         const refundPct = b.kind === 'construction' ? 1.0 : 0.8;
-        state.gold[owner] += Math.floor((STATS[srcKind]?.cost ?? 0) * refundPct);
+        state.gold[owner] += Math.floor(getResolvedCost(srcKind, state.races[owner]) * refundPct);
         killEntity(state, b.id);
         break;
       }
