@@ -200,28 +200,34 @@ const NUDGE_DIRS = [
  * Push stacked units apart. Call once per sim tick.
  * Only nudges stationary units — units already walking sort themselves out.
  */
+function tileKey(x: number, y: number): number {
+  return y * MAP_W + x;
+}
+
 export function separateUnits(state: GameState): void {
   if (state.tick % 3 !== 0) return; // run every 3 ticks (~150 ms)
 
-  const units = state.entities.filter(e => isUnitKind(e.kind));
-  const stationaryByTile = new Map<string, Entity[]>();
+  const stationaryByTile = new Map<number, Entity[]>();
+  const occupied = new Set<number>();
 
-  for (const unit of units) {
+  for (const unit of state.entities) {
+    if (!isUnitKind(unit.kind)) continue;
+
+    occupied.add(tileKey(unit.pos.x, unit.pos.y));
+
     if (!isStationary(unit)) continue;
-    const key = `${unit.pos.x},${unit.pos.y}`;
+    const key = tileKey(unit.pos.x, unit.pos.y);
     const stack = stationaryByTile.get(key);
     if (stack) stack.push(unit);
     else stationaryByTile.set(key, [unit]);
   }
-
-  const occupied = new Set(units.map(unit => `${unit.pos.x},${unit.pos.y}`));
 
   for (const stack of stationaryByTile.values()) {
     if (stack.length <= 1) continue;
 
     for (let i = 1; i < stack.length; i++) {
       const unit = stack[i]!;
-      occupied.delete(`${unit.pos.x},${unit.pos.y}`);
+      occupied.delete(tileKey(unit.pos.x, unit.pos.y));
 
       for (const d of NUDGE_DIRS) {
         const nx = unit.pos.x + d.x;
@@ -229,7 +235,7 @@ export function separateUnits(state: GameState): void {
         if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H) continue;
         if (!state.tiles[ny][nx].passable) continue;
         if (isTileBlockedByEntity(state, nx, ny)) continue;
-        const nextKey = `${nx},${ny}`;
+        const nextKey = tileKey(nx, ny);
         if (occupied.has(nextKey)) continue;
         unit.pos.x = nx;
         unit.pos.y = ny;
@@ -237,7 +243,7 @@ export function separateUnits(state: GameState): void {
         break;
       }
 
-      occupied.add(`${unit.pos.x},${unit.pos.y}`);
+      occupied.add(tileKey(unit.pos.x, unit.pos.y));
     }
   }
 }
@@ -294,13 +300,15 @@ export function processCommand(state: GameState, entity: Entity): void {
       if (state.tick - cmd.stepTick < tps) return;
 
       if (entity.pos.x !== cmd.lastPos.x || entity.pos.y !== cmd.lastPos.y) {
-        cmd.lastPos = { ...entity.pos };
+        cmd.lastPos.x = entity.pos.x;
+        cmd.lastPos.y = entity.pos.y;
         cmd.lastProgressTick = state.tick;
       } else if (state.tick - cmd.lastProgressTick >= MOVE_STUCK_TICKS && cmd.repathCount < MOVE_REPATH_LIMIT && canAttemptRepath(state, entity)) {
         profiler.recordMoveStuck();
         const movePlan = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
         cmd.lastProgressTick = state.tick;
-        cmd.lastPos = { ...entity.pos };
+        cmd.lastPos.x = entity.pos.x;
+        cmd.lastPos.y = entity.pos.y;
         cmd.repathCount++;
         const repathOk = !!(movePlan && movePlan.path.length > 0);
         profiler.recordMoveRepath(repathOk);
@@ -330,7 +338,8 @@ export function processCommand(state: GameState, entity: Entity): void {
 
         const sidestep = findDeterministicSidestep(state, entity, next);
         cmd.lastProgressTick = state.tick;
-        cmd.lastPos = { ...entity.pos };
+        cmd.lastPos.x = entity.pos.x;
+        cmd.lastPos.y = entity.pos.y;
 
         const sidestepOk = !!sidestep;
         profiler.recordMoveSidestep(sidestepOk);
@@ -340,7 +349,8 @@ export function processCommand(state: GameState, entity: Entity): void {
           entity.pos.y = sidestep.y;
           const movePlan = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
           cmd.stepTick = state.tick;
-          cmd.lastPos = { ...entity.pos };
+          cmd.lastPos.x = entity.pos.x;
+          cmd.lastPos.y = entity.pos.y;
           cmd.lastProgressTick = state.tick;
           if (movePlan && movePlan.path.length > 0) {
             cmd.goal = movePlan.goal;
@@ -360,7 +370,8 @@ export function processCommand(state: GameState, entity: Entity): void {
       entity.pos.y = next.y;
       cmd.stepTick = state.tick;
       if (entity.pos.x !== cmd.lastPos.x || entity.pos.y !== cmd.lastPos.y) {
-        cmd.lastPos = { ...entity.pos };
+        cmd.lastPos.x = entity.pos.x;
+        cmd.lastPos.y = entity.pos.y;
         cmd.lastProgressTick = state.tick;
       }
       break;
