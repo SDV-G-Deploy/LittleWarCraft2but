@@ -7,8 +7,7 @@
 import type { Race, MapId, Tile } from './types';
 import type { GameOptions } from './game';
 import { RACES } from './data/races';
-import { buildMap01 } from './data/maps/map01';
-import { buildMap02 } from './data/maps/map02';
+import { MAP_CATALOG, buildMapById } from './data/maps';
 import { createSession } from './net/session';
 import type { NetSession, NetMode } from './net/session';
 
@@ -56,7 +55,7 @@ function getThumbnail(mapId: MapId): HTMLCanvasElement {
   if (!thumbnailCache) thumbnailCache = new Map();
   if (thumbnailCache.has(mapId)) return thumbnailCache.get(mapId)!;
 
-  const mapData = mapId === 2 ? buildMap02() : buildMap01();
+  const mapData = buildMapById(mapId);
   const W = mapData.tiles[0].length;
   const H = mapData.tiles.length;
   const off = document.createElement('canvas');
@@ -159,6 +158,10 @@ export function runMenu(
       case 'race_orc':    ms.playerRace = 'orc';   ms.screen = 'map'; break;
       case 'map_1':       ms.mapId = 1; startGame(); break;
       case 'map_2':       ms.mapId = 2; startGame(); break;
+      case 'map_3':       ms.mapId = 3; startGame(); break;
+      case 'map_4':       ms.mapId = 4; startGame(); break;
+      case 'map_5':       ms.mapId = 5; startGame(); break;
+      case 'map_6':       ms.mapId = 6; startGame(); break;
 
       case 'host_game': {
         ms.netSession?.destroy();
@@ -568,48 +571,26 @@ export function runMenu(
     ctx.font      = 'bold 28px serif';
     ctx.fillText('Choose a Map', cx, cy - 142);
 
-    interface MapInfo {
-      id:    MapId;
-      name:  string;
-      desc:  string[];
-      action:string;
-    }
-    const maps: MapInfo[] = [
-      {
-        id:     1,
-        name:   'Verdant Hills',
-        desc:   [
-          'Open field with scattered forest.',
-          'Classic 1v1 layout.',
-          'Good for beginners.',
-        ],
-        action: 'map_1',
-      },
-      {
-        id:     2,
-        name:   'River Crossing',
-        desc:   [
-          'A river splits the field in two.',
-          'Two narrow fords to contest.',
-          'Strategic chokepoints.',
-        ],
-        action: 'map_2',
-      },
-    ];
+    const maps = MAP_CATALOG.map((m) => ({ ...m, action: `map_${m.id}` }));
 
-    const cardW = 240;
-    const cardH = 300;
-    const gap   = 40;
-    const leftX  = cx - gap / 2 - cardW;
-    const rightX = cx + gap / 2;
-    const cardY  = cy - 100;
+    const cardW = 220;
+    const cardH = 260;
+    const cols = 3;
+    const gapX = 18;
+    const gapY = 16;
+    const gridW = cols * cardW + (cols - 1) * gapX;
+    const startX = cx - Math.floor(gridW / 2);
+    const cardY0 = cy - 110;
     const thumbH = 120;
 
     const newBtns: MenuButton[] = [];
 
     for (let i = 0; i < maps.length; i++) {
       const m      = maps[i];
-      const cardX  = i === 0 ? leftX : rightX;
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const cardX  = startX + col * (cardW + gapX);
+      const cardY  = cardY0 + row * (cardH + gapY);
       const hov    = mouseX >= cardX && mouseX <= cardX + cardW &&
                      mouseY >= cardY  && mouseY <= cardY + cardH;
 
@@ -633,7 +614,7 @@ export function runMenu(
       // Legend dots on thumbnail
       const tw = thumb.width;
       const th = thumb.height;
-      const buildMap = i === 0 ? buildMap01() : buildMap02();
+      const buildMap = buildMapById(m.id);
       const pxP = cardX + 8 + (buildMap.playerStart.x / tw) * (cardW - 16);
       const pyP = cardY + 8 + (buildMap.playerStart.y / th) * thumbH;
       const pxA = cardX + 8 + (buildMap.aiStart.x / tw) * (cardW - 16);
@@ -738,7 +719,7 @@ export function runMenu(
     ctx.fillText(modeHint, cx, cy - 50);
 
     // ── HOST panel ─────────────────────────────────────────────────────────────
-    const hx = cx - 280; const hy = cy - 20; const hw = 240; const hh = 200;
+    const hx = cx - 280; const hy = cy - 20; const hw = 240; const hh = 236;
     ctx.fillStyle = 'rgba(255,255,255,0.04)';
     ctx.fillRect(hx, hy, hw, hh);
     ctx.strokeStyle = '#44ddaa';
@@ -774,24 +755,25 @@ export function runMenu(
     }
 
     // Map buttons inside host panel
-    for (let i = 0; i < 2; i++) {
-      const mapId = (i + 1) as MapId;
-      const mapName = i === 0 ? 'Verdant Hills' : 'River Crossing';
-      const bx  = hx + 10 + i * 112;
-      const by  = hy + 132;
-      const sel = ms.mapId === mapId;
+    for (let i = 0; i < MAP_CATALOG.length; i++) {
+      const map = MAP_CATALOG[i];
+      const col = i % 3;
+      const row = Math.floor(i / 3);
+      const bx  = hx + 10 + col * 76;
+      const by  = hy + 132 + row * 30;
+      const sel = ms.mapId === map.id;
       ctx.fillStyle = sel ? '#44446688' : 'rgba(0,0,0,0.2)';
-      ctx.fillRect(bx, by, 102, 28);
+      ctx.fillRect(bx, by, 70, 24);
       ctx.strokeStyle = sel ? GOLD : '#444';
-      ctx.strokeRect(bx + 0.5, by + 0.5, 101, 27);
+      ctx.strokeRect(bx + 0.5, by + 0.5, 69, 23);
       ctx.fillStyle = sel ? GOLD : GREY;
-      ctx.font = '11px monospace';
+      ctx.font = 'bold 11px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(mapName, bx + 51, by + 18);
-      newBtns.push({ x: bx, y: by, w: 102, h: 28, label: mapName, action: `set_map_${mapId}` });
+      ctx.fillText(`${map.id}`, bx + 35, by + 16);
+      newBtns.push({ x: bx, y: by, w: 70, h: 24, label: map.name, action: `set_map_${map.id}` });
     }
 
-    const hostBtn: MenuButton = { x: hx + 20, y: hy + hh - 44, w: hw - 40, h: 34, label: 'HOST GAME', action: 'host_game', accent: '#44ddaa' };
+    const hostBtn: MenuButton = { x: hx + 20, y: hy + hh - 40, w: hw - 40, h: 30, label: 'HOST GAME', action: 'host_game', accent: '#44ddaa' };
     newBtns.push(hostBtn);
     drawButton(hostBtn, isHovered(hostBtn));
 

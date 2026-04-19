@@ -188,7 +188,7 @@ type WireMessage =
   | TickPacket & { type?: undefined };  // tick packets have no 'type' field
 
 const VALID_RACES = new Set<Race>(['human', 'orc']);
-const VALID_MAP_IDS = new Set<MapId>([1, 2]);
+const VALID_MAP_IDS = new Set<MapId>([1, 2, 3, 4, 5, 6]);
 const VALID_BUILDINGS = new Set<EntityKind>(['townhall', 'barracks', 'farm', 'wall']);
 const VALID_TRAIN_UNITS = new Set<EntityKind>(['worker', 'footman', 'archer', 'knight', 'peon', 'grunt', 'troll', 'ogreFighter']);
 

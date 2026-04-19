@@ -16,8 +16,7 @@ import { createKeyState } from './input/keyboard';
 import { createMouseState } from './input/mouse';
 import { STATS } from './data/units';
 import { RACES } from './data/races';
-import { buildMap01 } from './data/maps/map01';
-import { buildMap02 } from './data/maps/map02';
+import { buildMapById } from './data/maps';
 import type { NetSession } from './net/session';
 import { applyNetCmds, type NetCmd } from './net/netcmd';
 
@@ -51,7 +50,7 @@ export function startGame(
 
   // In online mode guestRace is set from the handshake; offline defaults to opposite
   const aiRace: Race = options.guestRace ?? (options.playerRace === 'human' ? 'orc' : 'human');
-  const mapData   = options.mapId === 2 ? buildMap02() : buildMap01();
+  const mapData   = buildMapById(options.mapId);
   const state     = createWorld(mapData, [options.playerRace, aiRace]);
   // Camera starts at MY base: owner-0 → playerStart, owner-1 → aiStart
   const myStart   = (options.myOwner ?? 0) === 0 ? mapData.playerStart : mapData.aiStart;
