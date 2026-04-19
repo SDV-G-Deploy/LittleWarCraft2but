@@ -24,6 +24,17 @@ Update it when a phase is completed, reframed, or split.
 - opening branch pass v1 added explicit eco / tempo / pressure framing in UI and opening intent state
 - online lockstep hardened against duplicate per-tick packet replay and disconnect stalls
 - opening branch pass v2 added a small contested-mine pressure hook for early-game clashes
+- balance foundation pass completed:
+  - `src/balance/schema.ts`
+  - `src/balance/base.ts`
+  - `src/balance/races.ts`
+  - `src/balance/resolver.ts`
+  - `src/balance/openings.ts`
+  - `src/balance/modifiers.ts`
+  - `src/balance/report.ts`
+- main stat read-paths migrated to the balance layer
+- human wall override moved out of ad-hoc sim logic into balance resolution
+- `npm run balance:report` added for quick matchup snapshots
 
 ### Verified
 - build green after each recent pass
@@ -43,6 +54,7 @@ Core design priority is now:
 - human gameplay first
 - decision variety first
 - interesting actions first
+- gameplay and faction feel changes before more infra work
 - AI as support, not as the main source of depth
 
 Guiding principle:
@@ -77,13 +89,18 @@ If a pass is only UI/local render, targeted review is not required every time.
 
 ## Next passes
 
+Infrastructure note:
+- the balance foundation is now good enough
+- avoid further balance-system plumbing unless a concrete gameplay iteration need appears
+- next sessions should primarily spend energy on gameplay changes, playtests, and faction identity tuning
+
 ## Phase C. Branching gameplay decisions
 Goal: make early and midgame branch into distinct player plans.
 
 Current branch status:
 - v1 established eco / tempo / pressure framing and opening intent support
 - v2 added a small mechanical payoff around contested mines during the early opening window
-- next step should be playtest-guided, not another blind support-layer pass
+- opening and combat logic now live in dedicated balance modules, so next step should be playtest-guided gameplay tuning, not another support-layer pass
 
 Focus ideas:
 - economy vs army timing
@@ -216,12 +233,13 @@ Not before:
 
 ## Suggested sequencing for future sessions
 1. branching gameplay decisions
-2. interesting action layer
-3. army composition depth
-4. map pressure and expansion gameplay
-5. feedback / clarity pass
-6. AI support pass
-7. only then revisit deeper network work if a concrete problem remains
+2. direct gameplay/balance tuning from playtest evidence
+3. interesting action layer
+4. army composition depth
+5. map pressure and expansion gameplay
+6. feedback / clarity pass
+7. AI support pass
+8. only then revisit deeper network work or more balance tooling if a concrete problem remains
 
 ## Recent commit themes
 - `net: normalize multi-unit command ordering for determinism safety`
@@ -234,7 +252,8 @@ A good restart prompt for future `/new` sessions should mention:
 - main determinism blocker fixed and reviewed
 - duplicate-packet + disconnect-stall lockstep issues fixed
 - build green
-- opening branch pass v1 done
-- contested-mine opening pressure hook added as v2
+- balance foundation now exists under `src/balance/`
+- opening and combat modifiers were migrated into balance modules
+- `npm run balance:report` exists for quick snapshot checks
 - current strategic priority is gameplay variety through player decisions and action diversity
-- next likely target is validating and extending opening branch divergence through playtest-oriented gameplay work, unless a new bug changes priority
+- next likely target is real gameplay tuning and playtest-guided faction/branch divergence work, unless a new bug changes priority

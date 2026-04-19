@@ -20,6 +20,11 @@ Recent completed passes:
 - opening-choice UX polish: backdrop, intro pulse, and short "Opening locked" confirmation state
 - precise single-unit move feedback marker to show the exact commanded destination tile
 - gameplay micro-pass: stronger opening contrast via fatter first Eco cash-in and harder early Pressure hit
+- balance foundation pass: `schema/base/races/resolver` added under `src/balance/`
+- race-aware stat read-path migration completed across sim/UI
+- opening definitions moved into `src/balance/openings.ts`
+- combat bonus rules moved into `src/balance/modifiers.ts`
+- balance report foundation added via `src/balance/report.ts` and `npm run balance:report`
 
 Current state:
 - build green
@@ -30,6 +35,7 @@ Current state:
 - PeerJS/TURN production wiring is aligned for `SERVER` mode manual tests
 - DIRECT fallback remains available for comparison/fallback checks
 - network safety is no longer the main design bottleneck
+- balance-system foundation is now in place and good enough for fast gameplay iteration
 - gameplay variety is back to being the main design focus
 
 ## Core direction
@@ -106,6 +112,7 @@ Related map rule:
 npm install
 npm run dev
 npm run build
+npm run balance:report
 ```
 
 ## Entry point and deployment shape
@@ -185,6 +192,15 @@ Opening contrast micro-pass:
 - Pressure now gets a brief early damage edge on its committed first military unit, so the branch lands harder in first contact instead of reading mostly as a pathing gimmick
 - Tempo stays the clean timing branch, preserving its identity as the low-complexity middle option
 
+Balance foundation pass:
+- base stats now live in `src/balance/base.ts`
+- permanent race overrides now live in `src/balance/races.ts`
+- resolved stat access flows through `src/balance/resolver.ts`
+- opening balance definitions live in `src/balance/openings.ts`
+- combat bonus rules live in `src/balance/modifiers.ts`
+- pure snapshot/report helpers live in `src/balance/report.ts`
+- `src/data/units.ts` and `src/data/races.ts` currently remain compatibility forwarders during migration
+
 Determinism note:
 - the movement fix stays inside net command application and keeps deterministic ordering intact
 - the opening-choice change is UI-first and uses the same existing synced `set_plan` path, so it does not add a new sim divergence surface
@@ -192,6 +208,8 @@ Determinism note:
 - the opening contrast pass only reuses existing synced sim state (`openingPlanSelected`, `openingCommitmentClaimed`, unit-local `openingPlan`) and does not introduce new nondeterministic inputs
 
 ## Roadmap
+
+With the balance foundation now in place, the next major work should bias toward gameplay changes, playtests, and faction feel, not more infrastructure unless a concrete balancing workflow gap appears.
 
 See [ROADMAP.md](./ROADMAP.md) for:
 - recent completed work
