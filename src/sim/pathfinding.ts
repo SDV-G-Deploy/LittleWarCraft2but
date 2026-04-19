@@ -1,13 +1,70 @@
 import type { GameState, Vec2 } from '../types';
 import { MAP_W, MAP_H } from '../types';
 import { isTileBlockedByEntity } from './entities';
+import { profiler } from './profiler';
 
 // ─── A* ───────────────────────────────────────────────────────────────────────
 
 interface Node {
   x: number; y: number;
   g: number; h: number; f: number;
+  key: number;
   parent: Node | null;
+}
+
+class MinHeap {
+  private data: Node[] = [];
+
+  get size(): number {
+    return this.data.length;
+  }
+
+  push(node: Node): void {
+    this.data.push(node);
+    this.bubbleUp(this.data.length - 1);
+  }
+
+  pop(): Node | null {
+    if (this.data.length === 0) return null;
+    const first = this.data[0]!;
+    const last = this.data.pop()!;
+    if (this.data.length > 0) {
+      this.data[0] = last;
+      this.bubbleDown(0);
+    }
+    return first;
+  }
+
+  private bubbleUp(index: number): void {
+    while (index > 0) {
+      const parent = Math.floor((index - 1) / 2);
+      if (compareNodes(this.data[index]!, this.data[parent]!) >= 0) break;
+      [this.data[index], this.data[parent]] = [this.data[parent]!, this.data[index]!];
+      index = parent;
+    }
+  }
+
+  private bubbleDown(index: number): void {
+    const length = this.data.length;
+    while (true) {
+      let smallest = index;
+      const left = index * 2 + 1;
+      const right = left + 1;
+
+      if (left < length && compareNodes(this.data[left]!, this.data[smallest]!) < 0) smallest = left;
+      if (right < length && compareNodes(this.data[right]!, this.data[smallest]!) < 0) smallest = right;
+      if (smallest === index) break;
+
+      [this.data[index], this.data[smallest]] = [this.data[smallest]!, this.data[index]!];
+      index = smallest;
+    }
+  }
+}
+
+function compareNodes(a: Node, b: Node): number {
+  if (a.f !== b.f) return a.f - b.f;
+  if (a.h !== b.h) return a.h - b.h;
+  return a.key - b.key;
 }
 
 function heuristic(ax: number, ay: number, bx: number, by: number): number {
@@ -44,7 +101,17 @@ export function findPath(
   sx: number, sy: number,
   gx: number, gy: number,
 ): Vec2[] | null {
-  if (sx === gx && sy === gy) return [];
+  const t0 = profiler.now();
+  let closedCount = 0;
+  let maxOpenCount = 0;
+  let found = false;
+
+  if (sx === gx && sy === gy) {
+    found = true;
+    const result: Vec2[] = [];
+    profiler.recordFindPath(profiler.now() - t0, found, closedCount, maxOpenCount);
+    return result;
+  }
 
   // If goal is impassable, try to get adjacent instead
   if (!passable(state, gx, gy)) {
@@ -57,23 +124,27 @@ export function findPath(
         if (dist < bestDist) { bestDist = dist; best = { x: nx, y: ny }; }
       }
     }
-    if (!best) return null;
+    if (!best) {
+      profiler.recordFindPath(profiler.now() - t0, found, closedCount, maxOpenCount);
+      return null;
+    }
     gx = best.x; gy = best.y;
   }
 
   const open = new Map<number, Node>();
+  const heap = new MinHeap();
   const closed = new Set<number>();
 
-  const start: Node = { x: sx, y: sy, g: 0, h: heuristic(sx, sy, gx, gy), f: 0, parent: null };
+  const startKey = key(sx, sy);
+  const start: Node = { x: sx, y: sy, g: 0, h: heuristic(sx, sy, gx, gy), f: 0, key: startKey, parent: null };
   start.f = start.h;
-  open.set(key(sx, sy), start);
+  open.set(startKey, start);
+  heap.push(start);
+  maxOpenCount = 1;
 
-  while (open.size > 0) {
-    // Pick node with lowest f
-    let current: Node | null = null;
-    for (const node of open.values()) {
-      if (!current || node.f < current.f) current = node;
-    }
+  while (heap.size > 0) {
+    let current: Node | null = heap.pop();
+    while (current && open.get(current.key) !== current) current = heap.pop();
     if (!current) break;
 
     if (current.x === gx && current.y === gy) {
@@ -84,11 +155,14 @@ export function findPath(
         path.unshift({ x: n.x, y: n.y });
         n = n.parent;
       }
+      found = true;
+      closedCount = closed.size;
+      profiler.recordFindPath(profiler.now() - t0, found, closedCount, maxOpenCount);
       return path;
     }
 
-    open.delete(key(current.x, current.y));
-    closed.add(key(current.x, current.y));
+    open.delete(current.key);
+    closed.add(current.key);
 
     for (const d of DIRS) {
       const nx = current.x + d.x;
@@ -116,14 +190,23 @@ export function findPath(
         g,
         h: heuristic(nx, ny, gx, gy),
         f: g + heuristic(nx, ny, gx, gy),
+        key: nk,
         parent: current,
       };
       open.set(nk, node);
+      heap.push(node);
+      if (open.size > maxOpenCount) maxOpenCount = open.size;
     }
 
     // Safety valve — avoid infinite loop on huge open maps
-    if (closed.size > MAP_W * MAP_H * 2) return null;
+    if (closed.size > MAP_W * MAP_H * 2) {
+      closedCount = closed.size;
+      profiler.recordFindPath(profiler.now() - t0, found, closedCount, maxOpenCount);
+      return null;
+    }
   }
 
+  closedCount = closed.size;
+  profiler.recordFindPath(profiler.now() - t0, found, closedCount, maxOpenCount);
   return null;
 }

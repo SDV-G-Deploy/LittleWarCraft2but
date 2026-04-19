@@ -5,12 +5,14 @@ import { ticksPerStep } from '../data/units';
 import { processAttack, issueAttackCommand } from './combat';
 import { processGather, processTrain, processBuild } from './economy';
 import { isTileBlockedByEntity } from './entities';
+import { profiler } from './profiler';
 
 /** Issue a move-to-tile command on an entity. Replaces current command.
  *  Pass attackMove=true to make the unit auto-attack enemies seen en route. */
 const MOVE_STUCK_TICKS = 14;
 const MOVE_REPATH_LIMIT = 5;
 const MOVE_FALLBACK_RADIUS = 3;
+const MOVE_REPATH_COOLDOWN_TICKS = 8;
 
 function isTileOccupiedByOtherUnit(state: GameState, entity: Entity, tx: number, ty: number): boolean {
   return state.entities.some(other =>
@@ -53,6 +55,10 @@ function clampGoalToMap(tx: number, ty: number): Vec2 {
   };
 }
 
+function goalsNear(a: Vec2, b: Vec2): boolean {
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)) <= 1;
+}
+
 function findNearbyMoveGoal(state: GameState, entity: Entity, tx: number, ty: number): Vec2 | null {
   const clamped = clampGoalToMap(tx, ty);
   const candidates: Vec2[] = [clamped];
@@ -87,6 +93,14 @@ export function issueMoveCommand(
   ty: number,
   attackMove = false,
 ): boolean {
+  const requestedGoal = clampGoalToMap(tx, ty);
+  if (entity.cmd?.type === 'move' &&
+      entity.cmd.attackMove === attackMove &&
+      goalsNear(entity.cmd.goal, requestedGoal) &&
+      entity.cmd.path.length > 0) {
+    return true;
+  }
+
   const goal = findNearbyMoveGoal(state, entity, tx, ty);
   if (!goal) return false;
 
@@ -115,6 +129,10 @@ function isStationary(e: Entity): boolean {
   // Units in attack mode that are standing in place (no chase path) are stationary
   if (e.cmd.type === 'attack'  && e.cmd.chasePath.length === 0) return true;
   return false;
+}
+
+function canAttemptRepath(state: GameState, entity: Entity): boolean {
+  return !entity.cmd || entity.cmd.type !== 'move' || state.tick - entity.cmd.lastProgressTick >= MOVE_REPATH_COOLDOWN_TICKS;
 }
 
 const NUDGE_DIRS = [
@@ -175,6 +193,7 @@ export function separateUnits(state: GameState): void {
 export function autoAttackPass(state: GameState): void {
   if (state.tick % 2 !== 0) return;
 
+  const t0 = profiler.now();
   for (const unit of state.entities) {
     if (!isUnitKind(unit.kind)) continue;
     if (unit.cmd !== null) continue; // already has orders
@@ -190,6 +209,7 @@ export function autoAttackPass(state: GameState): void {
     }
     if (best) issueAttackCommand(unit, best.id, state.tick);
   }
+  profiler.recordAutoAttack(profiler.now() - t0);
 }
 
 /** Process one sim tick for a single entity's current command. */
@@ -227,7 +247,8 @@ export function processCommand(state: GameState, entity: Entity): void {
       if (entity.pos.x !== cmd.lastPos.x || entity.pos.y !== cmd.lastPos.y) {
         cmd.lastPos = { ...entity.pos };
         cmd.lastProgressTick = state.tick;
-      } else if (state.tick - cmd.lastProgressTick >= MOVE_STUCK_TICKS && cmd.repathCount < MOVE_REPATH_LIMIT) {
+      } else if (state.tick - cmd.lastProgressTick >= MOVE_STUCK_TICKS && cmd.repathCount < MOVE_REPATH_LIMIT && canAttemptRepath(state, entity)) {
+        profiler.recordMoveStuck();
         const fallbackGoal = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
         const newPath = fallbackGoal
           ? findPath(state, entity.pos.x, entity.pos.y, fallbackGoal.x, fallbackGoal.y)
@@ -235,9 +256,11 @@ export function processCommand(state: GameState, entity: Entity): void {
         cmd.lastProgressTick = state.tick;
         cmd.lastPos = { ...entity.pos };
         cmd.repathCount++;
-        if (fallbackGoal && newPath && newPath.length > 0) {
-          cmd.goal = fallbackGoal;
-          cmd.path = newPath;
+        const repathOk = !!(fallbackGoal && newPath && newPath.length > 0);
+        profiler.recordMoveRepath(repathOk);
+        if (repathOk) {
+          cmd.goal = fallbackGoal!;
+          cmd.path = newPath!;
           cmd.stepTick = state.tick;
         }
       }
@@ -246,15 +269,17 @@ export function processCommand(state: GameState, entity: Entity): void {
 
       const next = cmd.path[0]!;
       if (isTileOccupiedByOtherUnit(state, entity, next.x, next.y)) {
-        if (cmd.repathCount < MOVE_REPATH_LIMIT) {
+        if (cmd.repathCount < MOVE_REPATH_LIMIT && canAttemptRepath(state, entity)) {
           const fallbackGoal = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
           const newPath = fallbackGoal
             ? findPath(state, entity.pos.x, entity.pos.y, fallbackGoal.x, fallbackGoal.y)
             : null;
           cmd.repathCount++;
-          if (fallbackGoal && newPath && newPath.length > 0) {
-            cmd.goal = fallbackGoal;
-            cmd.path = newPath;
+          const repathOk = !!(fallbackGoal && newPath && newPath.length > 0);
+          profiler.recordMoveRepath(repathOk);
+          if (repathOk) {
+            cmd.goal = fallbackGoal!;
+            cmd.path = newPath!;
             cmd.stepTick = state.tick;
             return;
           }
@@ -263,6 +288,9 @@ export function processCommand(state: GameState, entity: Entity): void {
         const sidestep = findDeterministicSidestep(state, entity, next);
         cmd.lastProgressTick = state.tick;
         cmd.lastPos = { ...entity.pos };
+
+        const sidestepOk = !!sidestep;
+        profiler.recordMoveSidestep(sidestepOk);
 
         if (sidestep) {
           entity.pos.x = sidestep.x;

@@ -11,6 +11,7 @@ export function createWorld(mapData: MapData, races: [Race, Race]): GameState {
     tiles:    mapData.tiles,
     fog,
     entities: [],
+    blockedTiles: new Uint8Array(MAP_W * MAP_H),
     corpses:  [],
     nextId:   1,
     gold:     [500, 500],

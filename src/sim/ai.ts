@@ -9,6 +9,11 @@ import {
 import { issueAttackCommand } from './combat';
 import { issueMoveCommand } from './commands';
 
+function moveGoalNear(entity: Entity, tx: number, ty: number): boolean {
+  return entity.cmd?.type === 'move' &&
+    Math.max(Math.abs(entity.cmd.goal.x - tx), Math.abs(entity.cmd.goal.y - ty)) <= 1;
+}
+
 // ─── Controller state ─────────────────────────────────────────────────────────
 
 export interface AIController {
@@ -111,9 +116,13 @@ export function tickAI(state: GameState, ai: AIController): void {
         if (nearest) {
           issueAttackCommand(s, nearest.id, state.tick);
         } else if (contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > 6) {
-          issueMoveCommand(state, s, contestedMine.pos.x, contestedMine.pos.y - 1);
+          const tx = contestedMine.pos.x;
+          const ty = contestedMine.pos.y - 1;
+          if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
         } else if (playerTH) {
-          issueMoveCommand(state, s, playerTH.pos.x + 1, playerTH.pos.y + 2);
+          const tx = playerTH.pos.x + 1;
+          const ty = playerTH.pos.y + 2;
+          if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
         }
       }
 

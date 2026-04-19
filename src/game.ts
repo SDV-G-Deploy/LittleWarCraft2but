@@ -7,6 +7,7 @@ import { issueAttackCommand } from './sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, computePopCaps } from './sim/economy';
 import { updateFog } from './sim/fogofwar';
 import { createAI, tickAI, AIController } from './sim/ai';
+import { profiler } from './sim/profiler';
 import { render, drawMinimap, resetRenderCache, MINI_SCALE, MINI_W, MINI_H, MINI_PAD } from './render/renderer';
 import { drawUi, drawGhostBuilding, UiButton } from './render/ui';
 import { drawCommandMarkers, type CommandMarker } from './render/markers';
@@ -520,14 +521,39 @@ export function startGame(
     }
 
     state.tick++;
+
+    let p0 = profiler.now();
     for (const entity of state.entities) processCommand(state, entity);
+    profiler.recordPhase('processCommand', profiler.now() - p0);
+
+    p0 = profiler.now();
     autoAttackPass(state);
+    profiler.recordPhase('autoAttackPassWrap', profiler.now() - p0);
+
+    p0 = profiler.now();
     state.corpses = state.corpses.filter(c => state.tick - c.deadTick < CORPSE_LIFE_TICKS);
+    profiler.recordPhase('corpsesFilter', profiler.now() - p0);
+
+    p0 = profiler.now();
     computePopCaps(state);
+    profiler.recordPhase('computePopCaps', profiler.now() - p0);
+
+    p0 = profiler.now();
     separateUnits(state);
+    profiler.recordPhase('separateUnits', profiler.now() - p0);
+
+    p0 = profiler.now();
     updateFog(state, myOwner);
-    if (!net) tickAI(state, ai);   // AI only runs in offline mode
+    profiler.recordPhase('updateFog', profiler.now() - p0);
+
+    if (!net) {
+      p0 = profiler.now();
+      tickAI(state, ai);   // AI only runs in offline mode
+      profiler.recordPhase('tickAI', profiler.now() - p0);
+    }
+
     checkWinLose();
+    profiler.sampleState(state);
 
     // Online: also check if opponent disconnected
     if (net && net.status === 'disconnected' && gameResult === 'playing') {
