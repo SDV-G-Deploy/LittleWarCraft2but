@@ -3,6 +3,8 @@ import type { Tile, MapData } from '../../types';
 const G = (): Tile => ({ kind: 'grass', passable: true });
 const T = (): Tile => ({ kind: 'tree', passable: false });
 const M = (): Tile => ({ kind: 'goldmine', passable: false });
+const R = (): Tile => ({ kind: 'rock', passable: false });
+const P = (): Tile => ({ kind: 'grass', passable: true, watchPost: true });
 
 function fill(map: Tile[][], x: number, y: number, w: number, h: number, fn: () => Tile): void {
   for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (x + dx < 64 && y + dy < 64) map[y + dy][x + dx] = fn();
@@ -26,6 +28,11 @@ export function buildMap03(): MapData {
   // Light mid-map clutter so center is contested but not completely empty.
   fill(map, 25, 28, 3, 2, T);
   fill(map, 36, 34, 3, 2, T);
+  fill(map, 22, 24, 2, 2, R);
+  fill(map, 40, 38, 2, 2, R);
+
+  map[27][31] = P();
+  map[35][32] = P();
 
   fill(map, 12, 44, 2, 2, M);
   fill(map, 18, 50, 2, 2, M);
@@ -45,6 +52,6 @@ export function buildMap03(): MapData {
       { x: 31, y: 31 },
     ],
     name: 'Open Steppe',
-    description: 'Wide open lanes force early scouting and pressure.\nCenter mine is exposed and worth fighting for.',
+    description: 'Wide open lanes force early scouting and pressure.\nWatch posts and center mine reward active map control.',
   };
 }

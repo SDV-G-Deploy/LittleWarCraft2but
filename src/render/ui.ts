@@ -1,6 +1,6 @@
 import type { Entity, EntityKind, GameState, OpeningPlan } from '../types';
 import type { SessionStats, SessionStatus } from '../net/session';
-import { SIM_HZ, TILE_SIZE, isUnitKind, isWorkerKind } from '../types';
+import { SIM_HZ, TILE_SIZE, MAP_H, MAP_W, isUnitKind, isWorkerKind } from '../types';
 import { STATS } from '../data/units';
 import { RACES, ownerRace } from '../data/races';
 import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedTileSize } from '../balance/resolver';
@@ -478,6 +478,17 @@ function drawEntityInfo(
       ctx.fillStyle = 'rgba(255,200,120,0.60)';
       ctx.fillText(`Opening clash window: +1 pressure damage nearby for ${secondsLeft}s`, x, y); y += LINE - 1;
     }
+  }
+
+  const centerX = Math.min(MAP_W - 1, Math.max(0, e.pos.x + Math.floor(e.tileW / 2)));
+  const centerY = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
+  const centerTile = state.tiles[centerY]?.[centerX];
+  if (centerTile?.watchPost && e.owner === myOwner && isUnitKind(e.kind)) {
+    ctx.fillStyle = '#f4d35e';
+    ctx.font = '10px monospace';
+    ctx.fillText('Watch post: +4 sight while holding this tile', x, y); y += LINE - 1;
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillText('Strong for scouts, staging, and route control', x, y); y += LINE - 1;
   }
 
   // ── Food slots (farms / town halls) ────────────────────────────────────────

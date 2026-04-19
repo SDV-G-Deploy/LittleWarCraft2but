@@ -3,6 +3,8 @@ import type { Tile, MapData } from '../../types';
 const G = (): Tile => ({ kind: 'grass', passable: true });
 const T = (): Tile => ({ kind: 'tree', passable: false });
 const M = (): Tile => ({ kind: 'goldmine', passable: false });
+const R = (): Tile => ({ kind: 'rock', passable: false });
+const P = (): Tile => ({ kind: 'grass', passable: true, watchPost: true });
 
 function fill(map: Tile[][], x: number, y: number, w: number, h: number, fn: () => Tile): void {
   for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (x + dx < 64 && y + dy < 64) map[y + dy][x + dx] = fn();
@@ -28,9 +30,15 @@ export function buildMap06(): MapData {
   fill(map, 22, 29, 4, 6, G);
   fill(map, 38, 29, 4, 6, G);
 
+  fill(map, 27, 27, 2, 2, R);
+  fill(map, 35, 35, 2, 2, R);
+
   // Slight flank clutter so center is still the fastest route.
   fill(map, 8, 28, 5, 8, T);
   fill(map, 51, 28, 5, 8, T);
+
+  map[28][32] = P();
+  map[35][31] = P();
 
   fill(map, 12, 12, 2, 2, M);
   fill(map, 50, 50, 2, 2, M);
@@ -52,6 +60,6 @@ export function buildMap06(): MapData {
       { x: 28, y: 31 },
     ],
     name: 'Crown Pit',
-    description: 'Rich center ring creates a hard contest point.\nHold gates, then break into the pit.',
+    description: 'Rich center ring creates a hard contest point.\nWatch posts and rocks shape pit entries and control.',
   };
 }

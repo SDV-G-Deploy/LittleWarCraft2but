@@ -18,6 +18,7 @@ export type FogState = 'unseen' | 'explored' | 'visible';
 export interface Tile {
   kind: TileKind;
   passable: boolean;
+  watchPost?: boolean;
 }
 
 // ─── Map data ─────────────────────────────────────────────────────────────────

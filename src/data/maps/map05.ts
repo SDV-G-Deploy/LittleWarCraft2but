@@ -3,6 +3,8 @@ import type { Tile, MapData } from '../../types';
 const G = (): Tile => ({ kind: 'grass', passable: true });
 const T = (): Tile => ({ kind: 'tree', passable: false });
 const M = (): Tile => ({ kind: 'goldmine', passable: false });
+const R = (): Tile => ({ kind: 'rock', passable: false });
+const P = (): Tile => ({ kind: 'grass', passable: true, watchPost: true });
 
 function fill(map: Tile[][], x: number, y: number, w: number, h: number, fn: () => Tile): void {
   for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (x + dx < 64 && y + dy < 64) map[y + dy][x + dx] = fn();
@@ -28,6 +30,12 @@ export function buildMap05(): MapData {
   fill(map, 38, 34, 6, 7, G);
   fill(map, 38, 52, 6, 6, G);
 
+  fill(map, 28, 18, 2, 6, R);
+  fill(map, 34, 40, 2, 6, R);
+
+  map[23][31] = P();
+  map[40][32] = P();
+
   // Side brush around starts.
   fill(map, 7, 7, 6, 6, T);
   fill(map, 51, 51, 6, 6, T);
@@ -50,6 +58,6 @@ export function buildMap05(): MapData {
       { x: 31, y: 31 },
     ],
     name: 'Timber Lanes',
-    description: 'Tree walls split the map into staged corridors.\nLane control and rotations decide fights.',
+    description: 'Tree walls split the map into staged corridors.\nWatch posts and rock blockers reward lane control.',
   };
 }

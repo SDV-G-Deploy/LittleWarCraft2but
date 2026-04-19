@@ -52,8 +52,13 @@ function buildMinimapTerrain(state: GameState): HTMLCanvasElement {
   const mctx  = mc.getContext('2d')!;
   for (let ty = 0; ty < MAP_H; ty++) {
     for (let tx = 0; tx < MAP_W; tx++) {
-      mctx.fillStyle = MINI_TILE_COLORS[state.tiles[ty][tx].kind];
+      const tile = state.tiles[ty][tx];
+      mctx.fillStyle = MINI_TILE_COLORS[tile.kind];
       mctx.fillRect(tx * MINI_SCALE, ty * MINI_SCALE, MINI_SCALE, MINI_SCALE);
+      if (tile.watchPost) {
+        mctx.fillStyle = '#f4d35e';
+        mctx.fillRect(tx * MINI_SCALE, ty * MINI_SCALE, MINI_SCALE, MINI_SCALE);
+      }
     }
   }
   return mc;
@@ -207,6 +212,19 @@ function drawTiles(
       const tile = state.tiles[ty][tx];
       const { sx, sy } = worldToScreen(tx * TILE_SIZE, ty * TILE_SIZE, cam);
       ctx.drawImage(tileSprite(sp, tile.kind, state.tick), sx, sy, TILE_SIZE, TILE_SIZE);
+      if (tile.watchPost) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 232, 120, 0.9)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(sx + 7.5, sy + 7.5, TILE_SIZE - 15, TILE_SIZE - 15);
+        ctx.beginPath();
+        ctx.moveTo(sx + TILE_SIZE / 2, sy + 8);
+        ctx.lineTo(sx + TILE_SIZE / 2, sy + TILE_SIZE - 8);
+        ctx.moveTo(sx + 8, sy + TILE_SIZE / 2);
+        ctx.lineTo(sx + TILE_SIZE - 8, sy + TILE_SIZE / 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       // Subtle grid line
       ctx.strokeStyle = GRID_COLOR;
       ctx.lineWidth = 1;

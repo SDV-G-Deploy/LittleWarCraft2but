@@ -29,25 +29,25 @@ export const MAP_CATALOG: MapCatalogEntry[] = [
   {
     id: 3,
     name: 'Open Steppe',
-    desc: ['Very open pressure map.', 'Fast rotations and scout value.', 'Exposed center mine.'],
+    desc: ['Very open pressure map.', 'Watch posts reward active scouting.', 'Exposed center mine.'],
     build: buildMap03,
   },
   {
     id: 4,
     name: 'Stone Fords',
-    desc: ['Vertical river split.', 'Three narrow crossing fights.', 'Punishes late repositioning.'],
+    desc: ['Vertical river split.', 'Watch posts frame the ford war.', 'Punishes late repositioning.'],
     build: buildMap04,
   },
   {
     id: 5,
     name: 'Timber Lanes',
-    desc: ['Forest corridor / positional map.', 'Staggered lane gates.', 'Rewards setup and timing.'],
+    desc: ['Forest corridor / positional map.', 'Rock blockers sharpen lane pivots.', 'Rewards setup and timing.'],
     build: buildMap05,
   },
   {
     id: 6,
     name: 'Crown Pit',
-    desc: ['Central contest map.', 'Ring gates around rich center.', 'Center control snowballs economy.'],
+    desc: ['Central contest map.', 'Watch posts and rocks shape pit entries.', 'Center control snowballs economy.'],
     build: buildMap06,
   },
 ];
