@@ -63,6 +63,20 @@ function hasLOS(state: GameState, ax: number, ay: number, bx: number, by: number
   return true;
 }
 
+/**
+ * LOS to an entity footprint, consistent with range geometry:
+ * any target footprint tile that is both in range and visible is valid.
+ */
+function hasLOSToEntity(state: GameState, attacker: Entity, target: Entity, range: number): boolean {
+  for (let ty = target.pos.y; ty < target.pos.y + target.tileH; ty++) {
+    for (let tx = target.pos.x; tx < target.pos.x + target.tileW; tx++) {
+      if (chebyshev(attacker.pos.x, attacker.pos.y, tx, ty) > range) continue;
+      if (hasLOS(state, attacker.pos.x, attacker.pos.y, tx, ty)) return true;
+    }
+  }
+  return false;
+}
+
 // ─── Process ─────────────────────────────────────────────────────────────────
 
 export function processAttack(state: GameState, entity: Entity): void {
@@ -77,7 +91,7 @@ export function processAttack(state: GameState, entity: Entity): void {
 
   const range  = getResolvedRange(entity.kind, state.races[entity.owner]);
   const dist   = distToEntity(entity.pos.x, entity.pos.y, target);
-  const losOk  = range <= 1 || hasLOS(state, entity.pos.x, entity.pos.y, target.pos.x, target.pos.y);
+  const losOk  = range <= 1 || hasLOSToEntity(state, entity, target, range);
 
   if (dist <= range && losOk) {
     // ── In range with LOS: attack ───────────────────────────────────────────
@@ -99,7 +113,7 @@ export function processAttack(state: GameState, entity: Entity): void {
     }
   } else {
     // ── Out of range or no LOS: chase toward nearest footprint tile ─────────
-    const tps = ticksPerStep(entity.kind);
+    const tps = ticksPerStep(entity.kind, state.races[entity.owner]);
     if ((state.tick - cmd.chasePathTick) % tps !== 0) return;
 
     if (cmd.chasePath.length === 0 || state.tick - cmd.chasePathTick >= SIM_HZ) {
