@@ -570,6 +570,10 @@ function drawEntityInfo(
       ctx.fillStyle = 'rgba(255,255,255,0.28)';
       ctx.fillText('RMB empty ground: set rally', x, y); y += LINE - 1;
       const selectedPlan = getSelectedOpeningPlan(state, myOwner);
+      if (selectedPlan === 'tempo' && !state.openingCommitmentClaimed[myOwner]) {
+        ctx.fillStyle = 'rgba(180,220,255,0.48)';
+        ctx.fillText('Tempo fallback: first military heads toward contested mine', x, y); y += LINE - 1;
+      }
       if (selectedPlan === 'pressure' && !state.openingCommitmentClaimed[myOwner]) {
         ctx.fillStyle = 'rgba(255,200,120,0.42)';
         ctx.fillText('Pressure fallback: first military commits toward enemy Town Hall', x, y); y += LINE - 1;

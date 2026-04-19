@@ -86,7 +86,7 @@ export type Command =
   | { type: 'attack';  targetId: number; cooldownTick: number; chasePath: Vec2[]; chasePathTick: number }
   | { type: 'gather';  mineId: number; phase: 'tomine' | 'gathering' | 'returning'; waitTicks: number }
   | { type: 'build';   building: EntityKind; pos: Vec2; siteId: number; phase: 'moving' | 'building'; stepTick: number }
-  | { type: 'train';   unit: EntityKind; ticksLeft: number; queue: EntityKind[] };
+  | { type: 'train';   unit: EntityKind; ticksLeft: number; queue: EntityKind[]; openingTempoCommit?: boolean };
 
 export type OpeningPlan = 'eco' | 'tempo' | 'pressure';
 

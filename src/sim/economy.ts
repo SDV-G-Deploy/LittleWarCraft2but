@@ -58,6 +58,27 @@ type EntityWithCache = Entity & {
   _buildPath?:  Vec2[];
 };
 
+function bestContestedMine(state: GameState, owner: 0 | 1): Entity | null {
+  let best: Entity | null = null;
+  let bestScore = -Infinity;
+  const myTownHall = state.entities.find(e => e.owner === owner && e.kind === 'townhall');
+  const enemyTownHall = state.entities.find(e => e.owner !== owner && e.kind === 'townhall');
+  if (!myTownHall || !enemyTownHall) return null;
+
+  for (const e of state.entities) {
+    if (e.kind !== 'goldmine' || (e.goldReserve ?? 0) <= 0) continue;
+    const myDist = Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y);
+    const enemyDist = Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y);
+    const centerBias = e.pos.x > 16 && e.pos.x < 48 ? 6 : 0;
+    const score = (e.goldReserve ?? 0) / 100 + centerBias - Math.abs(myDist - enemyDist) * 0.2;
+    if (score > bestScore) {
+      best = e;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
 export function processGather(state: GameState, entity: Entity): void {
   if (!entity.cmd || entity.cmd.type !== 'gather') return;
   const cmd = entity.cmd;
@@ -156,13 +177,15 @@ export function issueTrainCommand(
   const owner = building.owner as 0 | 1;
   const openingPlan = state.openingPlanSelected[owner];
   let ticksLeft = getResolvedBuildTicks(unit, state.races[building.owner as 0 | 1]);
+  let openingTempoCommit = false;
 
   if (shouldApplyTempoFirstMilitaryTrainBonus(openingPlan, state.openingCommitmentClaimed[owner], state.tick, unit)) {
     ticksLeft = applyTempoTrainTicks(ticksLeft);
     state.openingCommitmentClaimed[owner] = true;
+    openingTempoCommit = true;
   }
 
-  building.cmd = { type: 'train', unit, ticksLeft, queue: [] };
+  building.cmd = { type: 'train', unit, ticksLeft, queue: [], openingTempoCommit };
   return true;
 }
 
@@ -200,6 +223,7 @@ export function processTrain(state: GameState, building: Entity): void {
   const openingPlan = state.openingPlanSelected[owner];
 
   let openingPressureAttackMove = false;
+  const openingTempoContestMove = !!cmd.openingTempoCommit && !building.rallyPoint;
 
   if (openingPlan && isOpeningWindowActive(state.tick)) {
     newUnit.openingPlan = openingPlan;
@@ -220,8 +244,14 @@ export function processTrain(state: GameState, building: Entity): void {
   const pressureFallbackTarget = openingPressureAttackMove && !building.rallyPoint
     ? state.entities.find(e => e.owner !== owner && e.kind === 'townhall')
     : null;
+  const tempoFallbackMine = openingTempoContestMove ? bestContestedMine(state, owner) : null;
   const moveTarget = building.rallyPoint
     ? building.rallyPoint
+    : tempoFallbackMine
+      ? {
+          x: tempoFallbackMine.pos.x,
+          y: tempoFallbackMine.pos.y - 1,
+        }
     : pressureFallbackTarget
       ? {
           x: pressureFallbackTarget.pos.x + Math.floor(pressureFallbackTarget.tileW / 2),
@@ -254,9 +284,11 @@ export function processTrain(state: GameState, building: Entity): void {
     const next = cmd.queue.shift()!;
     cmd.unit      = next;
     cmd.ticksLeft = getResolvedBuildTicks(next, state.races[owner]);
+    cmd.openingTempoCommit = false;
     if (shouldApplyTempoFirstMilitaryTrainBonus(openingPlan, state.openingCommitmentClaimed[owner], state.tick, next)) {
       cmd.ticksLeft = applyTempoTrainTicks(cmd.ticksLeft);
       state.openingCommitmentClaimed[owner] = true;
+      cmd.openingTempoCommit = true;
     }
   } else {
     building.cmd = null;
