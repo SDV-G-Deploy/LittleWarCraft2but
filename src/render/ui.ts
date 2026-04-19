@@ -33,6 +33,7 @@ export function drawUi(
   viewH: number,
   myOwner: 0 | 1 = 0,
   onlineStatus?: { status: SessionStatus; statusMsg: string; stats: SessionStats } | null,
+  openingPlanFeedback?: { plan: OpeningPlan; untilTick: number } | null,
 ): UiButton[] {
   const panelY = viewH - PANEL_H;
   const buttons: UiButton[] = [];
@@ -49,6 +50,7 @@ export function drawUi(
 
   if (onlineStatus) drawOnlineStrip(ctx, viewW, panelY, onlineStatus);
   drawOpeningChoiceOverlay(ctx, state, viewW, panelY, myOwner, buttons);
+  drawOpeningChoiceConfirmation(ctx, state, viewW, myOwner, openingPlanFeedback);
 
   const sel = [...selectedIds]
     .map(id => state.entities.find(e => e.id === id))
@@ -147,11 +149,22 @@ function drawOpeningChoiceOverlay(
   const overlayH = 124;
   const x = Math.floor((viewW - overlayW) / 2);
   const y = 12;
+  const pulse = 0.5 + 0.5 * Math.sin(state.tick * 0.28);
+  const introPulse = state.tick <= SIM_HZ * 2;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(0, 0, viewW, panelY);
+
   ctx.fillStyle = 'rgba(9,16,28,0.94)';
   ctx.fillRect(x, y, overlayW, overlayH);
   ctx.strokeStyle = 'rgba(136,216,255,0.85)';
   ctx.lineWidth = 3;
   ctx.strokeRect(x + 0.5, y + 0.5, overlayW - 1, overlayH - 1);
+  if (introPulse) {
+    ctx.strokeStyle = `rgba(255,230,140,${0.35 + pulse * 0.35})`;
+    ctx.lineWidth = 5;
+    ctx.strokeRect(x - 2.5, y - 2.5, overlayW + 4, overlayH + 4);
+  }
 
   ctx.fillStyle = '#f5fbff';
   ctx.font = 'bold 18px monospace';
@@ -176,10 +189,45 @@ function drawOpeningChoiceOverlay(
   const totalW = labels.length * buttonW + (labels.length - 1) * gap;
   let bx = x + Math.floor((overlayW - totalW) / 2);
   for (const item of labels) {
-    drawButton(ctx, bx, btnY, buttonW, buttonH, item.label, true, false);
+    drawButton(ctx, bx, btnY, buttonW, buttonH, item.label, true, false, introPulse ? pulse : 0);
     buttons.push({ x: bx, y: btnY, w: buttonW, h: buttonH, label: item.label, action: item.action });
     bx += buttonW + gap;
   }
+}
+
+function drawOpeningChoiceConfirmation(
+  ctx: CanvasRenderingContext2D,
+  state: GameState,
+  viewW: number,
+  myOwner: 0 | 1,
+  openingPlanFeedback?: { plan: OpeningPlan; untilTick: number } | null,
+): void {
+  const selectedPlan = state.openingPlanSelected[myOwner];
+  if (!selectedPlan) return;
+
+  const feedbackActive = openingPlanFeedback && state.tick <= openingPlanFeedback.untilTick;
+  if (!feedbackActive) return;
+
+  const copy = openingPlanText(openingPlanFeedback.plan);
+  const w = Math.min(360, viewW - 32);
+  const h = 52;
+  const x = Math.floor((viewW - w) / 2);
+  const y = 18;
+
+  ctx.fillStyle = 'rgba(8,24,14,0.9)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(130,255,170,0.9)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+
+  ctx.fillStyle = '#d8ffe5';
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(`Opening locked: ${copy.title}`, x + w / 2, y + 21);
+  ctx.fillStyle = 'rgba(216,255,229,0.82)';
+  ctx.font = '11px monospace';
+  ctx.fillText(copy.body, x + w / 2, y + 38, w - 20);
+  ctx.textAlign = 'left';
 }
 
 function drawEmptyPanel(
@@ -670,6 +718,7 @@ function drawButton(
   label: string,
   enabled: boolean,
   danger = false,
+  pulse = 0,
 ): void {
   if (danger) {
     ctx.fillStyle = enabled ? '#4a1a1a' : '#2a2a2a';
@@ -682,6 +731,11 @@ function drawButton(
   }
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  if (enabled && pulse > 0) {
+    ctx.strokeStyle = `rgba(255,245,170,${0.2 + pulse * 0.45})`;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x - 1.5, y - 1.5, w + 3, h + 3);
+  }
 
   ctx.fillStyle = enabled
     ? (danger ? '#ffaaaa' : '#ccffcc')

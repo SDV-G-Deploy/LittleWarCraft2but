@@ -72,6 +72,7 @@ export function startGame(
   const peerOwner = (myOwner === 0 ? 1 : 0) as 0 | 1;
   const myRC      = RACES[state.races[myOwner]];
   const commandMarkers: CommandMarker[] = [];
+  let openingPlanFeedback: { plan: OpeningPlan; untilTick: number } | null = null;
 
   /**
    * Emit a command.
@@ -419,6 +420,7 @@ export function startGame(
       e.owner === myOwner && (e.kind === 'townhall' || e.kind === 'barracks'));
     if (!building) return;
     emit({ k: 'set_plan', buildingId: building.id, plan });
+    openingPlanFeedback = { plan, untilTick: state.tick + SIM_HZ * 2 };
   }
 
   function handleUiAction(action: string): void {
@@ -616,7 +618,7 @@ export function startGame(
       status: net.status,
       statusMsg: net.statusMsg,
       stats: net.getStats(),
-    } : null);
+    } : null, openingPlanFeedback);
     drawGroupBadges();
     drawResultOverlay();
 

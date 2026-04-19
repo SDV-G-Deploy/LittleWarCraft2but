@@ -17,6 +17,7 @@ Recent completed passes:
 - opening branch pass v2 contested-mine pressure hook
 - targeted move-to-tile fix for single-unit orders, preserving spread only for multi-select moves
 - start-of-match opening chooser overlay made explicit, visible, and auto-defaulted to Eco after 10s
+- opening-choice UX polish: backdrop, intro pulse, and short "Opening locked" confirmation state
 
 Current state:
 - build green
@@ -80,6 +81,8 @@ AI should be improved only after those systems create interesting matches on the
 At the very start of the match, a large opening-choice overlay appears immediately and stays visible for the first 10 seconds.
 - click **Eco**, **Tempo**, or **Pressure** to lock your opening
 - if you do nothing, the game auto-selects **Eco** after 10 seconds
+- the overlay now dims the battlefield slightly and pulses briefly at the start so the choice is hard to miss
+- after you pick, a short `Opening locked` confirmation appears
 - this choice is now presented directly at match start, not hidden behind Town Hall selection
 
 The game now has three intended early plans:
