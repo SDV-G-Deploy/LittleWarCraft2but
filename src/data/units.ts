@@ -24,13 +24,13 @@ export const STATS: Partial<Record<EntityKind, UnitStats>> = {
     tileW: 1, tileH: 1,
   },
   footman: {
-    hp: 72,  damage: 8, armor: 3, range: 1,
+    hp: 72,  damage: 8, armor: 4, range: 1,
     speed: 4, sight: 5, cost: 85,  buildTicks: SIM_HZ * 14,
     attackTicks: SIM_HZ,
     tileW: 1, tileH: 1,
   },
   archer: {
-    hp: 34,  damage: 8, armor: 0, range: 5,
+    hp: 34,  damage: 8, armor: 0, range: 6,
     speed: 4, sight: 7, cost: 95, buildTicks: SIM_HZ * 17,
     attackTicks: Math.round(SIM_HZ * 1.4),
     tileW: 1, tileH: 1,
