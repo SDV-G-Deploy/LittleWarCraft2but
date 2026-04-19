@@ -7,7 +7,7 @@ import { findPath } from './pathfinding';
 const ECO_OPENING_BONUS_GOLD = 20;
 const PRESSURE_OPENING_SPEED_BOOST_MULT = 1.2;
 const PRESSURE_OPENING_SPEED_BOOST_TICKS = SIM_HZ * 5;
-const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 240;
+const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 10;
 
 // ─── Population ───────────────────────────────────────────────────────────────
 

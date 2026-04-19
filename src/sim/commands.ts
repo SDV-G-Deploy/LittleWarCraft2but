@@ -66,13 +66,15 @@ function findNearbyMoveGoal(state: GameState, entity: Entity, tx: number, ty: nu
   }
 
   let best: Vec2 | null = null;
-  let bestPath: Vec2[] | null = null;
+  let bestScore = Infinity;
   for (const c of candidates) {
     const path = findPath(state, entity.pos.x, entity.pos.y, c.x, c.y);
     if (!path) continue;
-    if (!bestPath || path.length < bestPath.length) {
+    const goalDist = Math.max(Math.abs(clamped.x - c.x), Math.abs(clamped.y - c.y));
+    const score = goalDist * 1000 + path.length;
+    if (!best || score < bestScore) {
       best = c;
-      bestPath = path;
+      bestScore = score;
     }
   }
   return best;

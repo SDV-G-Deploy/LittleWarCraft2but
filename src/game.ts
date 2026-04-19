@@ -1,4 +1,4 @@
-import { SIM_TICK_MS, TILE_SIZE, CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL,
+import { SIM_TICK_MS, TILE_SIZE, CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL, SIM_HZ,
          isUnitKind, isWorkerKind, type EntityKind, type Race, type MapId, type OpeningPlan } from './types';
 import { createWorld } from './sim/world';
 import { spawnEntity, killEntity } from './sim/entities';
@@ -24,6 +24,7 @@ const CAM_SPEED   = 400;
 const EDGE_ZONE   = 20;
 const SELECT_DIST = TILE_SIZE * 0.6;
 const UI_HEIGHT   = 96; // must match render/ui.ts PANEL_H
+const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 10;
 
 // ─── Options ──────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ export function startGame(
   const peerOwner = (myOwner === 0 ? 1 : 0) as 0 | 1;
   const myRC      = RACES[state.races[myOwner]];
   const commandMarkers: CommandMarker[] = [];
+  let openingOverlayDismissed = false;
 
   /**
    * Emit a command.
@@ -412,6 +414,15 @@ export function startGame(
     }
   }
 
+  function setOpeningPlan(plan: OpeningPlan): void {
+    if (state.openingPlanSelected[myOwner]) return;
+    const building = state.entities.find(e =>
+      e.owner === myOwner && (e.kind === 'townhall' || e.kind === 'barracks'));
+    if (!building) return;
+    emit({ k: 'set_plan', buildingId: building.id, plan });
+    openingOverlayDismissed = true;
+  }
+
   function handleUiAction(action: string): void {
     const parts = action.split('|');
     let pendingPlan: OpeningPlan | null = null;
@@ -426,12 +437,7 @@ export function startGame(
     }
 
     if (pendingPlan) {
-      for (const id of selectedIds) {
-        const building = state.entities.find(e =>
-          e.id === id && e.owner === myOwner && (e.kind === 'townhall' || e.kind === 'barracks'));
-        if (!building) continue;
-        emit({ k: 'set_plan', buildingId: building.id, plan: pendingPlan });
-      }
+      setOpeningPlan(pendingPlan);
       if (!pendingAction) return;
     }
 
@@ -474,6 +480,18 @@ export function startGame(
 
   // ── Sim tick ───────────────────────────────────────────────────────────────
   function simTick(): void {
+    if (!state.openingPlanSelected[0] && state.tick > OPENING_PLAN_LOCK_TICKS) {
+      state.openingPlanSelected[0] = 'eco';
+      for (const en of state.entities) {
+        if (en.owner === 0 && (en.kind === 'townhall' || en.kind === 'barracks')) en.openingPlan = 'eco';
+      }
+    }
+    if (!state.openingPlanSelected[1] && state.tick > OPENING_PLAN_LOCK_TICKS) {
+      state.openingPlanSelected[1] = 'eco';
+      for (const en of state.entities) {
+        if (en.owner === 1 && (en.kind === 'townhall' || en.kind === 'barracks')) en.openingPlan = 'eco';
+      }
+    }
     // Online mini-lockstep: advance only when this tick is ready on both sides.
     if (net) {
       if (net.status === 'disconnected' && gameResult === 'playing') {

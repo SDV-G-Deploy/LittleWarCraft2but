@@ -14,7 +14,7 @@ const BTN_H      = 32;
 const BTN_PAD    = 8;
 const PORTRAIT_W = 80;
 const MAX_BTN_COLS = 6;
-const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 240;
+const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 10;
 
 export interface UiButton {
   x: number; y: number;
@@ -48,6 +48,7 @@ export function drawUi(
   ctx.stroke();
 
   if (onlineStatus) drawOnlineStrip(ctx, viewW, panelY, onlineStatus);
+  drawOpeningChoiceOverlay(ctx, state, viewW, panelY, myOwner, buttons);
 
   const sel = [...selectedIds]
     .map(id => state.entities.find(e => e.id === id))
@@ -130,6 +131,52 @@ function drawOnlineStrip(
   ctx.textAlign = 'left';
 }
 
+function drawOpeningChoiceOverlay(
+  ctx: CanvasRenderingContext2D,
+  state: GameState,
+  viewW: number,
+  panelY: number,
+  myOwner: 0 | 1,
+  buttons: UiButton[],
+): void {
+  const selectedPlan = state.openingPlanSelected[myOwner];
+  const ticksLeft = OPENING_PLAN_LOCK_TICKS - state.tick;
+  if (selectedPlan || ticksLeft < 0) return;
+
+  const overlayW = Math.min(540, viewW - 24);
+  const overlayH = 76;
+  const x = Math.floor((viewW - overlayW) / 2);
+  const y = Math.max(10, panelY - overlayH - 10);
+  ctx.fillStyle = 'rgba(9,16,28,0.9)';
+  ctx.fillRect(x, y, overlayW, overlayH);
+  ctx.strokeStyle = 'rgba(136,216,255,0.75)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 0.5, y + 0.5, overlayW - 1, overlayH - 1);
+
+  ctx.fillStyle = '#f5fbff';
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Choose opening in ${Math.ceil(ticksLeft / SIM_HZ)}s`, x + 12, y + 18);
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.font = '11px monospace';
+  ctx.fillText('Eco defaults automatically if you do nothing', x + 12, y + 33);
+
+  const btnY = y + 42;
+  const labels = [
+    { label: 'Eco\n+20g on 1st worker', action: 'plan:eco' },
+    { label: 'Tempo\n1st military -35% time', action: 'plan:tempo' },
+    { label: 'Pressure\n1st military AM +20%/5s', action: 'plan:pressure' },
+  ];
+  const gap = 10;
+  const totalW = labels.length * BTN_W + (labels.length - 1) * gap;
+  let bx = x + Math.floor((overlayW - totalW) / 2);
+  for (const item of labels) {
+    drawButton(ctx, bx, btnY, BTN_W, BTN_H, item.label, true, false);
+    buttons.push({ x: bx, y: btnY, w: BTN_W, h: BTN_H, label: item.label, action: item.action });
+    bx += BTN_W + gap;
+  }
+}
+
 function drawEmptyPanel(
   ctx: CanvasRenderingContext2D,
   panelY: number,
@@ -161,7 +208,7 @@ function drawPortrait(
 }
 
 function getSelectedOpeningPlan(state: GameState, owner: 0 | 1): OpeningPlan | null {
-  return state.openingPlanSelected[owner];
+  return state.openingPlanSelected[owner] ?? (state.tick > OPENING_PLAN_LOCK_TICKS ? 'eco' : null);
 }
 
 function openingPlanText(plan: OpeningPlan): { title: string; body: string; risk: string } {
@@ -348,7 +395,7 @@ function drawEntityInfo(
     ctx.fillText(
       selectedPlan
         ? `Bonus: ${openingSpent ? 'spent' : 'ready'}`
-        : (canStillChoose ? 'Choose branch at Town Hall to lock your opening bonus' : 'Opening lock window ended'),
+        : (canStillChoose ? 'Choose branch in the start overlay, auto-locks to Eco at 10s' : 'Auto-locked to Eco'),
       x,
       y,
     ); y += LINE - 1;
@@ -499,17 +546,10 @@ function collectButtons(
     const barracksCost = STATS['barracks']?.cost ?? 360;
     const workerBusy = e.cmd?.type === 'train';
     const selectedPlan = getSelectedOpeningPlan(state, myOwner);
-    const canChooseOpening = !selectedPlan && state.tick <= OPENING_PLAN_LOCK_TICKS;
-
     addButton(`${rc.workerLabel} [V]\n[${workerCost}g]`, `train:${rc.worker}`,
       state.gold[myOwner] < workerCost);
     if (!workerBusy && state.gold[myOwner] >= workerCost) {
       addButton('Worker spike\nfast eco', `train:${rc.worker}`);
-    }
-    if (canChooseOpening) {
-      addButton('Eco\n1st worker +20g', 'plan:eco');
-      addButton('Tempo\n1st military -35% time', 'plan:tempo');
-      addButton('Pressure\n1st military rally AM +20%/5s', 'plan:pressure');
     }
   }
   if (e.kind === 'barracks') {

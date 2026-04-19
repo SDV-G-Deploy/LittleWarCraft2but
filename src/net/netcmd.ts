@@ -140,7 +140,7 @@ export function applyNetCmds(
       }
       case 'set_plan': {
         const b = getEntity(state, cmd.buildingId);
-        const canLockPlan = state.tick <= SIM_HZ * 240 && !state.openingPlanSelected[owner];
+        const canLockPlan = state.tick <= SIM_HZ * 10 && !state.openingPlanSelected[owner];
         if (b && b.owner === owner && (b.kind === 'townhall' || b.kind === 'barracks') && canLockPlan) {
           state.openingPlanSelected[owner] = cmd.plan;
           for (const en of state.entities) {
