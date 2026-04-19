@@ -35,6 +35,12 @@ Update it when a phase is completed, reframed, or split.
 - main stat read-paths migrated to the balance layer
 - human wall override moved out of ad-hoc sim logic into balance resolution
 - `npm run balance:report` added for quick matchup snapshots
+- performance hardening pass set 1 completed:
+  - static blocked occupancy grid for non-unit blockers
+  - deterministic A* heap
+  - move/repath dedupe and cooldown
+  - cheaper move-goal candidate selection with reused chosen path
+  - streamlined deterministic target-acquisition scans for auto-attack / attack-move
 
 ### Verified
 - build green after each recent pass
@@ -47,6 +53,9 @@ Update it when a phase is completed, reframed, or split.
 - blocked-step sidestep still depends on same-tick entity processing order
 - if entity iteration ever diverges between peers, that area becomes more sensitive
 - this is not the next small polish item, it is a broader sim-order discipline topic
+- do not introduce dynamic unit occupancy as a live mutable grid in-path yet; if needed later, use snapshot/fixed-phase discipline
+- keep all perf throttling tick-based only, never wall-clock/runtime-budget based
+- any heap/path selection changes must keep deterministic tie-break rules explicit
 
 ## Strategic priority
 
@@ -93,6 +102,13 @@ Infrastructure note:
 - the balance foundation is now good enough
 - avoid further balance-system plumbing unless a concrete gameplay iteration need appears
 - next sessions should primarily spend energy on gameplay changes, playtests, and faction identity tuning
+
+Performance note:
+- immediate next perf target is `combat.ts` LOS checks via blocker/grid lookup
+- do this before any risky dynamic unit occupancy or spatial-bucket rewrite
+- after LOS pass, likely order is:
+  1. allocation churn reduction (`shift`, repeated arrays/maps/strings in hot paths)
+  2. only then reconsider spatial buckets if profiling still points there
 
 ## Phase C. Branching gameplay decisions
 Goal: make early and midgame branch into distinct player plans.
@@ -260,4 +276,14 @@ A good restart prompt for future `/new` sessions should mention:
 - opening and combat modifiers were migrated into balance modules
 - `npm run balance:report` exists for quick snapshot checks
 - current strategic priority is gameplay variety through player decisions and action diversity
-- next likely target is real gameplay tuning and playtest-guided faction/branch divergence work, unless a new bug changes priority
+- perf hardening pass set 1 already landed and is pushed:
+  - blocked static occupancy grid
+  - deterministic A* heap
+  - move/repath path-cost reductions
+  - streamlined target-acquisition scans
+- determinism guardrails for next perf passes:
+  - static blockers or tick snapshots only
+  - tick-based throttling only
+  - explicit heap/path tie-breaks
+  - no risky dynamic unit occupancy yet
+- next concrete target for `/new`: LOS through grid/blocker cache in `src/sim/combat.ts`, then build, then targeted review if behavior changed materially

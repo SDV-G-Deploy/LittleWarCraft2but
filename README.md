@@ -37,6 +37,12 @@ Current state:
 - network safety is no longer the main design bottleneck
 - balance-system foundation is now in place and good enough for fast gameplay iteration
 - gameplay variety is back to being the main design focus
+- performance hardening pass set 1 landed:
+  - static blocked occupancy grid for non-unit blockers
+  - A* open-set heap with deterministic tie-break
+  - move/repath dedupe and cheaper move-goal path selection
+  - cheaper deterministic target-acquisition scans for auto-attack and attack-move
+- next performance target should be LOS checks via grid/blocker cache, not risky dynamic unit occupancy
 
 ## Core direction
 
