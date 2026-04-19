@@ -99,7 +99,7 @@ export function processAttack(state: GameState, entity: Entity): void {
     if (state.tick < cmd.cooldownTick) return;
 
     const dmg       = stats?.damage ?? 0;
-    const armor     = STATS[target.kind]?.armor ?? 0;
+    const armor     = target.statArmor ?? STATS[target.kind]?.armor ?? 0;
     const workerPressureBonus = !isUnitKind(entity.kind) ? 0 : (target.kind === 'worker' || target.kind === 'peon') ? 1 : 0;
     const constructionPressureBonus = target.kind === 'construction' ? 1 : 0;
     const contestedMinePressureBonus = nearContestedMine && state.tick <= state.contestedMineBonusUntilTick && isUnitKind(entity.kind) ? 1 : 0;

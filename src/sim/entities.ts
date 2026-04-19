@@ -37,6 +37,13 @@ export function spawnEntity(
     sightRadius: stats.sight,
   };
 
+  const ownerRace = state.races[owner] ?? 'human';
+  if (kind === 'wall' && ownerRace === 'human') {
+    entity.hp = 260;
+    entity.hpMax = 260;
+    entity.statHpMax = 260;
+  }
+
   state.entities.push(entity);
   getEntityIndex(state).set(entity.id, entity);
   return entity;

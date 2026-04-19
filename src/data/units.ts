@@ -36,7 +36,7 @@ export const STATS: Partial<Record<EntityKind, UnitStats>> = {
     tileW: 1, tileH: 1,
   },
   knight: {
-    hp: 125, damage: 14, armor: 5, range: 1,
+    hp: 125, damage: 14, armor: 6, range: 1,
     speed: 4, sight: 5, cost: 165, buildTicks: SIM_HZ * 21,
     attackTicks: Math.round(SIM_HZ * 1.5),
     tileW: 1, tileH: 1,

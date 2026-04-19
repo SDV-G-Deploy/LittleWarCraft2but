@@ -107,6 +107,8 @@ export interface Entity {
   openingPlan?: OpeningPlan; // player-declared early intent for UI + rally support
   constructionOf?: EntityKind;  // 'construction' entities: target building kind
   underAttackTick?: number;     // recent damage marker for UI / harassment readability
+  statHpMax?: number;           // optional runtime max HP override for race-specific variants
+  statArmor?: number;           // optional runtime armor override for race-specific variants
 }
 
 // ─── Corpse ───────────────────────────────────────────────────────────────────
