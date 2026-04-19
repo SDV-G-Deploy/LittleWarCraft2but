@@ -72,7 +72,6 @@ export function startGame(
   const peerOwner = (myOwner === 0 ? 1 : 0) as 0 | 1;
   const myRC      = RACES[state.races[myOwner]];
   const commandMarkers: CommandMarker[] = [];
-  let openingOverlayDismissed = false;
 
   /**
    * Emit a command.
@@ -420,7 +419,6 @@ export function startGame(
       e.owner === myOwner && (e.kind === 'townhall' || e.kind === 'barracks'));
     if (!building) return;
     emit({ k: 'set_plan', buildingId: building.id, plan });
-    openingOverlayDismissed = true;
   }
 
   function handleUiAction(action: string): void {

@@ -15,6 +15,8 @@ Recent completed passes:
 - opening branch pass v1 (eco / tempo / pressure framing + opening intent state)
 - online lockstep hardening for duplicate tick packets + disconnect stall handling
 - opening branch pass v2 contested-mine pressure hook
+- targeted move-to-tile fix for single-unit orders, preserving spread only for multi-select moves
+- start-of-match opening chooser overlay made explicit, visible, and auto-defaulted to Eco after 10s
 
 Current state:
 - build green
@@ -74,6 +76,11 @@ The next meaningful gains should come from:
 AI should be improved only after those systems create interesting matches on their own.
 
 ## How to play the opening branches
+
+At the very start of the match, a large opening-choice overlay appears immediately and stays visible for the first 10 seconds.
+- click **Eco**, **Tempo**, or **Pressure** to lock your opening
+- if you do nothing, the game auto-selects **Eco** after 10 seconds
+- this choice is now presented directly at match start, not hidden behind Town Hall selection
 
 The game now has three intended early plans:
 - **Eco**: your first worker gets a one-time `+20 gold` boost, helping faster early saturation and safer growth
@@ -159,6 +166,18 @@ Current production expectations:
   - `VITE_PEER_PATH=/`
   - `VITE_PEER_SECURE=true`
 - safe next step is real manual `SERVER` mode testing and fixing only concrete findings
+
+## Notes on the latest fix pass
+
+Movement bug review result:
+- the main issue was not footprint rendering, click-to-tile conversion, or end-of-move completion logic
+- single-unit right-click move orders were being routed through the same spread-assignment logic used for groups
+- because the spiral spread starts at offset `(0,0)` and then assigns later offsets by sorted unit id, a single selected unit could receive a nearby offset destination instead of the exact clicked tile
+- fix: preserve spread assignment for multi-unit move commands only, while single-unit move commands now target the exact clicked tile first and do not fan out through fallback spread positions unless part of a group order
+
+Determinism note:
+- the movement fix stays inside net command application and keeps deterministic ordering intact
+- the opening-choice change is UI-first and uses the same existing synced `set_plan` path, so it does not add a new sim divergence surface
 
 ## Roadmap
 

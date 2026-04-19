@@ -60,8 +60,13 @@ function buildMoveSpreadOffsets(count: number): { x: number; y: number }[] {
 function assignMoveDestinations(ids: number[], tx: number, ty: number): Map<number, { x: number; y: number }> {
   const assigned = new Map<number, { x: number; y: number }>();
   const sorted = sortUnitIds(ids);
-  const offsets = buildMoveSpreadOffsets(sorted.length);
 
+  if (sorted.length <= 1) {
+    if (sorted.length === 1) assigned.set(sorted[0], { x: tx, y: ty });
+    return assigned;
+  }
+
+  const offsets = buildMoveSpreadOffsets(sorted.length);
   for (let i = 0; i < sorted.length; i++) {
     const offset = offsets[i] ?? { x: 0, y: 0 };
     assigned.set(sorted[i], { x: tx + offset.x, y: ty + offset.y });
@@ -70,7 +75,8 @@ function assignMoveDestinations(ids: number[], tx: number, ty: number): Map<numb
   return assigned;
 }
 
-function buildMoveFallbackDestinations(tx: number, ty: number): { x: number; y: number }[] {
+function buildMoveFallbackDestinations(ids: number[], tx: number, ty: number): { x: number; y: number }[] {
+  if (ids.length <= 1) return [];
   return buildMoveSpreadOffsets(9)
     .slice(1)
     .map(offset => ({ x: tx + offset.x, y: ty + offset.y }));
@@ -88,7 +94,7 @@ export function applyNetCmds(
     switch (cmd.k) {
       case 'move': {
         const destinations = assignMoveDestinations(cmd.ids, cmd.tx, cmd.ty);
-        const fallbackDestinations = buildMoveFallbackDestinations(cmd.tx, cmd.ty);
+        const fallbackDestinations = buildMoveFallbackDestinations(cmd.ids, cmd.tx, cmd.ty);
         for (const id of sortUnitIds(cmd.ids)) {
           const e = getEntity(state, id);
           if (!e || e.owner !== owner || !isUnitKind(e.kind)) continue;

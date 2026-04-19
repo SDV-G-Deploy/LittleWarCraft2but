@@ -143,37 +143,42 @@ function drawOpeningChoiceOverlay(
   const ticksLeft = OPENING_PLAN_LOCK_TICKS - state.tick;
   if (selectedPlan || ticksLeft < 0) return;
 
-  const overlayW = Math.min(540, viewW - 24);
-  const overlayH = 76;
+  const overlayW = Math.min(700, viewW - 24);
+  const overlayH = 124;
   const x = Math.floor((viewW - overlayW) / 2);
-  const y = Math.max(10, panelY - overlayH - 10);
-  ctx.fillStyle = 'rgba(9,16,28,0.9)';
+  const y = 12;
+  ctx.fillStyle = 'rgba(9,16,28,0.94)';
   ctx.fillRect(x, y, overlayW, overlayH);
-  ctx.strokeStyle = 'rgba(136,216,255,0.75)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(136,216,255,0.85)';
+  ctx.lineWidth = 3;
   ctx.strokeRect(x + 0.5, y + 0.5, overlayW - 1, overlayH - 1);
 
   ctx.fillStyle = '#f5fbff';
-  ctx.font = 'bold 14px monospace';
+  ctx.font = 'bold 18px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText(`Choose opening in ${Math.ceil(ticksLeft / SIM_HZ)}s`, x + 12, y + 18);
-  ctx.fillStyle = 'rgba(255,255,255,0.72)';
-  ctx.font = '11px monospace';
-  ctx.fillText('Eco defaults automatically if you do nothing', x + 12, y + 33);
+  ctx.fillText(`Choose your opening, ${Math.ceil(ticksLeft / SIM_HZ)}s left`, x + 16, y + 24);
+  ctx.fillStyle = 'rgba(255,255,255,0.78)';
+  ctx.font = '12px monospace';
+  ctx.fillText('Pick once at match start. If you do nothing, Eco is selected automatically.', x + 16, y + 44);
+  ctx.fillStyle = 'rgba(255,230,140,0.92)';
+  ctx.font = 'bold 12px monospace';
+  ctx.fillText('START OF MATCH CHOICE', x + overlayW - 220, y + 24);
 
-  const btnY = y + 42;
+  const btnY = y + 60;
   const labels = [
-    { label: 'Eco\n+20g on 1st worker', action: 'plan:eco' },
-    { label: 'Tempo\n1st military -35% time', action: 'plan:tempo' },
-    { label: 'Pressure\n1st military AM +20%/5s', action: 'plan:pressure' },
+    { label: 'Eco\n1st worker gets +20 gold', action: 'plan:eco' },
+    { label: 'Tempo\n1st military trains 35% faster', action: 'plan:tempo' },
+    { label: 'Pressure\n1st military auto-commits forward', action: 'plan:pressure' },
   ];
-  const gap = 10;
-  const totalW = labels.length * BTN_W + (labels.length - 1) * gap;
+  const buttonW = 180;
+  const buttonH = 42;
+  const gap = 12;
+  const totalW = labels.length * buttonW + (labels.length - 1) * gap;
   let bx = x + Math.floor((overlayW - totalW) / 2);
   for (const item of labels) {
-    drawButton(ctx, bx, btnY, BTN_W, BTN_H, item.label, true, false);
-    buttons.push({ x: bx, y: btnY, w: BTN_W, h: BTN_H, label: item.label, action: item.action });
-    bx += BTN_W + gap;
+    drawButton(ctx, bx, btnY, buttonW, buttonH, item.label, true, false);
+    buttons.push({ x: bx, y: btnY, w: buttonW, h: buttonH, label: item.label, action: item.action });
+    bx += buttonW + gap;
   }
 }
 
