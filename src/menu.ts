@@ -148,7 +148,7 @@ export function runMenu(
   canvas.addEventListener('click', onClick);
 
   // ── Action handler ─────────────────────────────────────────────────────────
-  function handleAction(action: string): void {
+  async function handleAction(action: string): Promise<void> {
     switch (action) {
       case 'new_game':    ms.screen = 'race';     break;
       case 'online':      ms.screen = 'online';   break;
@@ -163,7 +163,7 @@ export function runMenu(
       case 'host_game': {
         ms.netSession?.destroy();
         ms.netRole    = 'host';
-        ms.netSession = createSession('host', undefined, { race: ms.playerRace, mapId: ms.mapId }, undefined, ms.netMode);
+        ms.netSession = await createSession('host', undefined, { race: ms.playerRace, mapId: ms.mapId }, undefined, ms.netMode);
         // Host starts game after receiving guest's hello (which includes guest race)
         ms.netSession.onConfig = (cfg) => {
           ms.guestRace = cfg.guestRace;
@@ -178,7 +178,7 @@ export function runMenu(
         ms.netSession?.destroy();
         ms.netRole    = 'guest';
         // Pass guest's chosen race so it's sent in the hello message
-        ms.netSession = createSession('guest', normalizedJoinCode, undefined, ms.guestRace, ms.netMode);
+        ms.netSession = await createSession('guest', normalizedJoinCode, undefined, ms.guestRace, ms.netMode);
         // Guest starts game after receiving full config from host
         ms.netSession.onConfig = (cfg) => {
           ms.playerRace = cfg.race;

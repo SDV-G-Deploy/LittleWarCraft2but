@@ -31,6 +31,10 @@ interface RuntimeNetConfig {
   iceServers: RTCIceServer[];
 }
 
+interface RuntimeIceConfigResponse {
+  iceServers?: RTCIceServer[];
+}
+
 function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
   if (value == null || value.trim() === '') return fallback;
   const normalized = value.trim().toLowerCase();
@@ -108,6 +112,23 @@ function getSelfHostedNetConfig(): RuntimeNetConfig {
 
 function getRuntimePeerConfig(mode: NetMode): RuntimeNetConfig {
   return mode === 'public' ? getPublicNetConfig() : getSelfHostedNetConfig();
+}
+
+async function fetchRuntimeIceServers(): Promise<RTCIceServer[] | null> {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return null;
+  try {
+    const response = await fetch('./api/ice', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as RuntimeIceConfigResponse;
+    if (!payload || !Array.isArray(payload.iceServers)) return null;
+    return payload.iceServers.filter((entry): entry is RTCIceServer => !!entry && typeof entry === 'object' && 'urls' in entry);
+  } catch {
+    return null;
+  }
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -244,13 +265,13 @@ function parseConfig(v: unknown): SessionConfig | null {
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
-export function createSession(
+export async function createSession(
   role:         'host' | 'guest',
   hostCode?:    string,                           // required when role === 'guest'
   hostConfig?:  Pick<SessionConfig, 'race' | 'mapId'>,  // required when role === 'host'
   guestRace?:   Race,                           // required when role === 'guest'
   netMode:      NetMode = 'selfhost',
-): NetSession {
+): Promise<NetSession> {
 
   const safeHostConfig = hostConfig && isRace(hostConfig.race) && isMapId(hostConfig.mapId)
     ? hostConfig
@@ -416,6 +437,7 @@ export function createSession(
 
   // ── PeerJS setup ─────────────────────────────────────────────────────────────
   const runtimeNet = getRuntimePeerConfig(netMode);
+  const runtimeIceServers = netMode === 'selfhost' ? await fetchRuntimeIceServers() : null;
   const peer = new Peer({
     host:   runtimeNet.peer.host,
     port:   runtimeNet.peer.port,
@@ -423,7 +445,7 @@ export function createSession(
     secure: runtimeNet.peer.secure,
     debug:  1,
     config: {
-      iceServers: runtimeNet.iceServers,
+      iceServers: runtimeIceServers ?? runtimeNet.iceServers,
     },
   });
 

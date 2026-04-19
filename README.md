@@ -96,6 +96,18 @@ npm run dev
 npm run build
 ```
 
+## Entry point and deployment shape
+
+The canonical public entry point for the game is:
+- `https://w2.kislota.today/`
+
+Architecturally, `w2.kislota.today` is not just a static page host. It is the single public origin that fronts three roles:
+- game client entry point (`/`)
+- PeerJS signaling endpoint (`/peerjs`)
+- runtime ICE config endpoint (`/api/ice`)
+
+That same-origin shape matters because multiplayer should resolve through one stable public origin, while nginx routes traffic internally to the right service.
+
 ## Online infra config
 
 Client networking is now env-driven to keep online hardening low-scope.
@@ -106,6 +118,11 @@ Supported Vite env vars:
 - `VITE_PEER_PATH`
 - `VITE_PEER_SECURE`
 - `VITE_ICE_SERVERS` as a JSON array string
+
+Runtime ICE override:
+- client first tries `GET /api/ice`
+- if unavailable, it falls back to `VITE_ICE_SERVERS`
+- production self-host should prefer `/api/ice` with short-lived TURN credentials
 
 Online menu now supports two runtime test modes:
 - `SERVER` uses the self-hosted PeerJS/TURN config from the build env
@@ -130,9 +147,12 @@ TURN note for Docker deployments:
 - keep `--external-ip` set to the public host IP advertised to browsers
 - keep `--relay-ip=0.0.0.0` inside the container unless the container actually owns the public IP
 - open UDP/TCP `3478` plus the full relay range `49160-49200`
+- prefer coturn shared-secret auth with short-lived credentials, served by `/api/ice`
 
 Current production expectations:
+- `https://w2.kislota.today/` is the player-facing entry point for starting the game
 - `https://w2.kislota.today/peerjs/id` should respond successfully
+- `https://w2.kislota.today/api/ice` should return short-lived ICE config
 - `SERVER` defaults should resolve to:
   - `VITE_PEER_HOST=w2.kislota.today`
   - `VITE_PEER_PORT=443`

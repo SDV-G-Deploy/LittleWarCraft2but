@@ -41,11 +41,11 @@ services:
     command:
       - -n
       - --log-file=stdout
-      - --lt-cred-mech
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_STATIC_AUTH_SECRET}
       - --fingerprint
       - --realm=${TURN_REALM}
       - --server-name=${TURN_REALM}
-      - --user=${TURN_USERNAME}:${TURN_PASSWORD}
       - --external-ip=${TURN_EXTERNAL_IP}
       - --listening-ip=0.0.0.0
       - --relay-ip=0.0.0.0
@@ -60,5 +60,23 @@ services:
       - "3478:3478/udp"
       - "49160-49200:49160-49200/tcp"
       - "49160-49200:49160-49200/udp"
+
+  ice-api:
+    image: node:20-alpine
+    container_name: lwc2-ice-api
+    restart: unless-stopped
+    working_dir: /app
+    command: ["node", "ice-server.js"]
+    environment:
+      ICE_API_PORT: 8081
+      ICE_ALLOWED_ORIGIN: https://w2.kislota.today
+      TURN_HOST: ${TURN_REALM}
+      TURN_PORT: 3478
+      TURN_STATIC_AUTH_SECRET: ${TURN_STATIC_AUTH_SECRET}
+      TURN_TTL_SECONDS: 600
+    expose:
+      - "8081"
+    volumes:
+      - ./ice-server.js:/app/ice-server.js:ro
 
 
