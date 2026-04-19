@@ -472,6 +472,8 @@ function drawBuilding(
     sprite = isOrc ? sp.greathall[e.owner as 0 | 1] : sp.townhall[e.owner as 0 | 1];
   } else if (renderKind === 'barracks') {
     sprite = isOrc ? sp.warmill[e.owner as 0 | 1]   : sp.barracks[e.owner as 0 | 1];
+  } else if (renderKind === 'tower') {
+    sprite = isOrc ? sp.watchtower[e.owner as 0 | 1] : sp.tower[e.owner as 0 | 1];
   } else {
     // farm / anything else
     sprite = isOrc ? sp.pigsty[e.owner as 0 | 1]    : sp.farm[e.owner as 0 | 1];

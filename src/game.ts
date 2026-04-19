@@ -223,6 +223,7 @@ export function startGame(
       if (isWorkerKind(firstSel.kind)) {
         if (e.key === 'b' || e.key === 'B') { placementMode = { building: 'barracks' }; return; }
         if (e.key === 'f' || e.key === 'F') { placementMode = { building: 'farm' };     return; }
+        if (e.key === 'g' || e.key === 'G') { placementMode = { building: 'tower' };    return; }
         if (e.key === 'w' || e.key === 'W') { placementMode = { building: 'wall' };     return; }
       }
       // Townhall training — race-appropriate worker
@@ -473,7 +474,7 @@ export function startGame(
   }
 
   // ── Win / lose detection ───────────────────────────────────────────────────
-  const BLDG_KINDS = new Set(['townhall', 'barracks', 'farm']);
+  const BLDG_KINDS = new Set(['townhall', 'barracks', 'farm', 'tower']);
   function checkWinLose(): void {
     if (gameResult !== 'playing') return;
     const hasMyTH      = state.entities.some(e => e.owner === myOwner   && e.kind === 'townhall');

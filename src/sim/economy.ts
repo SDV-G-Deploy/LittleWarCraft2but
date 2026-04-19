@@ -343,6 +343,11 @@ export function issueBuildCommand(
   pos: Vec2,
   currentTick: number,
 ): boolean {
+  if (building === 'tower') {
+    const hasBarracks = state.entities.some(e => e.owner === worker.owner && e.kind === 'barracks');
+    if (!hasBarracks) return false;
+  }
+
   const stats = {
     ...getResolvedTileSize(building),
     buildTicks: getResolvedBuildTicks(building),

@@ -6,6 +6,7 @@ import { processAttack, issueAttackCommand } from './combat';
 import { processGather, processTrain, processBuild } from './economy';
 import { isTileBlockedByEntity } from './entities';
 import { profiler } from './profiler';
+import { getResolvedRange, getResolvedSpeed } from '../balance/resolver';
 
 type TargetPredicate = (target: Entity) => boolean;
 
@@ -256,16 +257,21 @@ export function autoAttackPass(state: GameState): void {
   if (state.tick % 2 !== 0) return;
 
   const t0 = profiler.now();
-  for (const unit of state.entities) {
-    if (!isUnitKind(unit.kind)) continue;
-    if (unit.cmd !== null) continue; // already has orders
+  for (const entity of state.entities) {
+    const isUnit = isUnitKind(entity.kind);
+    const isArmedBuilding = !isUnit
+      && getResolvedSpeed(entity.kind, state.races[entity.owner]) === 0
+      && getResolvedRange(entity.kind, state.races[entity.owner]) > 1;
+    if (!isUnit && !isArmedBuilding) continue;
+    if (entity.cmd !== null) continue; // already has orders
 
-    const best = acquireNearestTarget(state, unit, (target) => {
+    const best = acquireNearestTarget(state, entity, (target) => {
       if (target.kind === 'goldmine') return false;
-      if (isRangedUnit(unit.kind) && !isUnitKind(target.kind)) return false;
+      if (isRangedUnit(entity.kind) && !isUnitKind(target.kind)) return false;
+      if (isArmedBuilding && !isUnitKind(target.kind)) return false;
       return true;
     });
-    if (best) issueAttackCommand(unit, best.id, state.tick);
+    if (best) issueAttackCommand(entity, best.id, state.tick);
   }
   profiler.recordAutoAttack(profiler.now() - t0);
 }

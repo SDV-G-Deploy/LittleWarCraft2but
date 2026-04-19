@@ -43,10 +43,12 @@ export function tickAI(state: GameState, ai: AIController): void {
   const mySoldiers = es.filter(e => e.owner === 1 &&
     (e.kind === rc.soldier || e.kind === rc.ranged || e.kind === rc.heavy));
   const farmCount  = es.filter(e => e.owner === 1 && e.kind === 'farm').length;
+  const towerCount = es.filter(e => e.owner === 1 && e.kind === 'tower').length;
 
   // Flags: is a worker already tasked with building X?
   const buildingFarm     = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'farm');
   const buildingBarracks = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'barracks');
+  const buildingTower    = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'tower');
 
   // Always keep workers on gold
   keepGathering(state, myWorkers);
@@ -93,6 +95,13 @@ export function tickAI(state: GameState, ai: AIController): void {
         if (w) {
           const pos = findBuildSpot(state, myTH, 'farm');
           if (pos) issueBuildCommand(state, w, 'farm', pos, state.tick);
+        }
+      }
+      if (!buildingTower && towerCount < 2 && myBarracks && mySoldiers.length >= 4 && state.gold[1] >= getResolvedCost('tower', state.races[1])) {
+        const w = freeWorker(myWorkers);
+        if (w) {
+          const pos = findBuildSpot(state, myTH, 'tower');
+          if (pos) issueBuildCommand(state, w, 'tower', pos, state.tick);
         }
       }
       if (mySoldiers.length >= ai.attackWaveSize) {

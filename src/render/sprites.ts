@@ -29,10 +29,12 @@ export interface SpriteCache {
   barracks: [HTMLCanvasElement, HTMLCanvasElement];
   farm:     [HTMLCanvasElement, HTMLCanvasElement];
   wall:     [HTMLCanvasElement, HTMLCanvasElement];
+  tower:    [HTMLCanvasElement, HTMLCanvasElement];
   // Orc buildings (same slot sizes as human counterparts)
   greathall: [HTMLCanvasElement, HTMLCanvasElement];
   warmill:   [HTMLCanvasElement, HTMLCanvasElement];
   pigsty:    [HTMLCanvasElement, HTMLCanvasElement];
+  watchtower:[HTMLCanvasElement, HTMLCanvasElement];
   // Neutral
   goldmine: HTMLCanvasElement;
   // FX
@@ -868,6 +870,41 @@ function makeWall(T: number, owner: 0 | 1): HTMLCanvasElement {
   return c;
 }
 
+function makeTower(T: number, owner: 0 | 1, orc: boolean): HTMLCanvasElement {
+  const W = T * 2; const H = T * 2;
+  const [c, ctx] = oc(W, H);
+
+  const baseDark = orc ? '#201608' : ST_VD;
+  const baseMid  = orc ? '#362612' : ST_D;
+  const baseLite = orc ? '#4a3620' : ST_L;
+  stoneTexture(ctx, 0, 10, W, H - 10, baseDark, baseMid, baseLite, 8, 12);
+
+  ctx.fillStyle = baseMid;
+  ctx.fillRect(0, 0, W, 12);
+  ctx.fillStyle = orc ? '#4e3824' : ST_L;
+  crenels(ctx, 1, 10, W - 2, 8, 8);
+
+  ctx.fillStyle = TC_D[owner];
+  ctx.fillRect(0, 0, W, 2);
+
+  ctx.fillStyle = '#120c08';
+  ctx.fillRect(W / 2 - 7, H - 20, 14, 20);
+  ctx.beginPath();
+  ctx.arc(W / 2, H - 20, 7, Math.PI, 0);
+  ctx.fill();
+
+  if (orc) {
+    ctx.fillStyle = ORC_TUSK;
+    ctx.beginPath(); ctx.moveTo(8, 4); ctx.lineTo(10, -3); ctx.lineTo(12, 4); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(W - 12, 4); ctx.lineTo(W - 10, -3); ctx.lineTo(W - 8, 4); ctx.fill();
+  } else {
+    ctx.fillStyle = ST_HL;
+    ctx.fillRect(W / 2 - 1, 2, 2, 8);
+  }
+
+  return c;
+}
+
 function makeGoldmine(T: number): HTMLCanvasElement {
   const W = T * 2; const H = T * 2;
   const [c, ctx] = oc(W, H);
@@ -1586,10 +1623,12 @@ export function buildSpriteCache(T: number): SpriteCache {
     barracks: [makeBarracks(T, 0), makeBarracks(T, 1)],
     farm:     [makeFarm(T, 0), makeFarm(T, 1)],
     wall:     [makeWall(T, 0), makeWall(T, 1)],
+    tower:    [makeTower(T, 0, false), makeTower(T, 1, false)],
     // Orc buildings
     greathall: [makeGreatHall(T, 0), makeGreatHall(T, 1)],
     warmill:   [makeWarMill(T, 0),   makeWarMill(T, 1)],
     pigsty:    [makePigsty(T, 0),    makePigsty(T, 1)],
+    watchtower:[makeTower(T, 0, true), makeTower(T, 1, true)],
     // Neutral
     goldmine: makeGoldmine(T),
     // FX

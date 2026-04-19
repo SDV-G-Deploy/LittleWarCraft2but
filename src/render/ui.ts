@@ -383,6 +383,7 @@ function drawEntityInfo(
     e.kind === 'townhall' ? rc.hallLabel    :
     e.kind === 'barracks' ? rc.barrLabel    :
     e.kind === 'farm'     ? rc.farmLabel    :
+    e.kind === 'tower'    ? rc.towerLabel   :
     e.kind === 'goldmine' ? 'Gold Mine'     :
     e.kind.toUpperCase();
 
@@ -428,6 +429,20 @@ function drawEntityInfo(
       ctx.font = '10px monospace';
       ctx.fillText(roleLabel, x, y); y += LINE - 1;
     }
+  }
+  if (stats && stats.speed === 0 && stats.range > 1) {
+    const atkSpd = stats.attackTicks > 0
+      ? (stats.attackTicks / 20).toFixed(1) + 's'
+      : '—';
+    ctx.fillStyle = '#ffcc88';
+    ctx.font = '10px monospace';
+    ctx.fillText(
+      `ATK:${stats.damage}  DEF:${stats.armor}  RNG:${stats.range}  SPD:${atkSpd}`,
+      x, y,
+    ); y += LINE;
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = '10px monospace';
+    ctx.fillText('Role: static territorial defense', x, y); y += LINE - 1;
   }
 
   // ── Gold mine reserve ───────────────────────────────────────────────────────
@@ -715,13 +730,16 @@ function collectButtons(
 
   // ── Worker build menu (workers + peons both show build buttons) ─────────────
   if (isWorkerKind(e.kind)) {
-    const barrCost = getResolvedCost('barracks');
-    const farmCost = getResolvedCost('farm');
+    const barrCost = getResolvedCost('barracks', state.races[myOwner]);
+    const farmCost = getResolvedCost('farm', state.races[myOwner]);
     const wallCost = getResolvedCost('wall', state.races[myOwner]);
+    const towerCost = getResolvedCost('tower', state.races[myOwner]);
+    const hasBarracks = state.entities.some(en => en.owner === myOwner && en.kind === 'barracks');
     const barrLabel = rc.barrLabel;
     const farmLabel = rc.farmLabel;
     addButton(`${barrLabel} [B]\n[${barrCost}g]`, 'build:barracks', state.gold[myOwner] < barrCost);
     addButton(`${farmLabel} [F]\n[${farmCost}g]`, 'build:farm',     state.gold[myOwner] < farmCost);
+    addButton(`${rc.towerLabel} [G]\n[${towerCost}g]`, 'build:tower', state.gold[myOwner] < towerCost || !hasBarracks);
     addButton(`Wall [W]\n[${wallCost}g]`,          'build:wall',     state.gold[myOwner] < wallCost);
     if (state.gold[myOwner] >= wallCost) {
       addButton('Hold line\nquick wall', 'build:wall');

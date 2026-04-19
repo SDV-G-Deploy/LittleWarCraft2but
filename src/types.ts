@@ -51,7 +51,7 @@ export type Owner = 0 | 1; // 0 = player, 1 = AI
 export type EntityKind =
   | 'worker'  | 'footman' | 'archer' | 'knight'         // human units
   | 'peon'    | 'grunt'   | 'troll'  | 'ogreFighter'    // orc units
-  | 'townhall' | 'barracks' | 'farm' | 'wall'           // shared buildings (sprite varies by race)
+  | 'townhall' | 'barracks' | 'farm' | 'wall' | 'tower' // shared buildings (sprite varies by race)
   | 'goldmine'                                           // resource node
   | 'construction';                                      // building-in-progress scaffold
 

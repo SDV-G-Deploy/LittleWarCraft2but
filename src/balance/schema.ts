@@ -47,6 +47,7 @@ export interface RaceDisplayProfile extends RaceIdentityUnitMap {
   hallLabel: string;
   barrLabel: string;
   farmLabel: string;
+  towerLabel: string;
   tagline: string;
   description: string;
   accentColor: string;

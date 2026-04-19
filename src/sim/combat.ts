@@ -1,7 +1,7 @@
 import type { Entity, GameState, ProjectileVisualEvent } from '../types';
 import { MAP_H, MAP_W, SIM_HZ, isUnitKind, isRangedUnit } from '../types';
 import { ticksPerStep } from '../data/units';
-import { getResolvedArmor, getResolvedAttackTicks, getResolvedDamage, getResolvedRange } from '../balance/resolver';
+import { getResolvedArmor, getResolvedAttackTicks, getResolvedDamage, getResolvedRange, getResolvedSpeed } from '../balance/resolver';
 import { resolveAttackBonus } from '../balance/modifiers';
 import { getEntity, killEntity } from './entities';
 import { findPath } from './pathfinding';
@@ -126,6 +126,9 @@ export function processAttack(state: GameState, entity: Entity): void {
   const target = getEntity(state, cmd.targetId);
   if (!target) { entity.cmd = null; return; }
 
+  const isStaticAttacker = getResolvedSpeed(entity.kind, state.races[entity.owner]) === 0;
+  if (isStaticAttacker && !isUnitKind(target.kind)) { entity.cmd = null; return; }
+
   // Ranged units (archer, troll) only fight mobile units — not buildings or walls
   if (isRangedUnit(entity.kind) && !isUnitKind(target.kind)) { entity.cmd = null; return; }
 
@@ -153,6 +156,10 @@ export function processAttack(state: GameState, entity: Entity): void {
       entity.cmd = null;
     }
   } else {
+    if (isStaticAttacker) {
+      entity.cmd = null;
+      return;
+    }
     // ── Out of range or no LOS: chase toward nearest footprint tile ─────────
     const tps = ticksPerStep(entity.kind, state.races[entity.owner]);
     if ((state.tick - cmd.chasePathTick) % tps !== 0) return;
