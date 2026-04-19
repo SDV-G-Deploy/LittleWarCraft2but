@@ -27,12 +27,12 @@ export const RACE_BALANCE_PROFILES: Record<Race, RaceBalanceProfile> = {
         hp: 260,
       },
       tower: {
-        hp: 430,
+        hp: 390,
         damage: 8,
         armor: 1,
         range: 7,
         sight: 9,
-        attackTicks: Math.round(0.8 * 20),
+        attackTicks: Math.round(0.9 * 20),
       },
     },
     identityNotes: ['Stronger fortified play, safer line holding.'],
@@ -59,7 +59,7 @@ export const RACE_BALANCE_PROFILES: Record<Race, RaceBalanceProfile> = {
     },
     entityOverrides: {
       tower: {
-        hp: 640,
+        hp: 600,
         damage: 12,
         armor: 3,
         range: 5,
