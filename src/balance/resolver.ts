@@ -19,6 +19,7 @@ function mergeEntityStats(base: EntityBlueprint, override?: Partial<EntityBalanc
     attackTicks: override?.attackTicks ?? base.attackTicks,
     tileW: override?.tileW ?? base.tileW,
     tileH: override?.tileH ?? base.tileH,
+    supplyProvided: override?.supplyProvided ?? base.supplyProvided,
   };
 }
 
@@ -57,6 +58,7 @@ export function resolveEntityStats(kind: EntityKind, race?: Race | null): Resolv
     attackTicks: blueprint.attackTicks,
     tileW: blueprint.tileW,
     tileH: blueprint.tileH,
+    supplyProvided: blueprint.supplyProvided,
     tags: blueprint.tags,
     roleText: blueprint.roleText,
   };
@@ -115,6 +117,10 @@ export function getResolvedSpeed(kind: EntityKind, race?: Race | null): number {
 export function getResolvedTileSize(kind: EntityKind, race?: Race | null): { tileW: number; tileH: number } {
   const stats = resolveEntityStats(kind, race);
   return { tileW: stats.tileW, tileH: stats.tileH };
+}
+
+export function getResolvedSupplyProvided(kind: EntityKind, race?: Race | null): number {
+  return resolveEntityStats(kind, race).supplyProvided ?? 0;
 }
 
 export function ticksPerStepForResolved(kind: EntityKind, race?: Race | null): number {

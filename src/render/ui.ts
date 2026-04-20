@@ -493,9 +493,14 @@ function drawEntityInfo(
 
   // ── Food slots (farms / town halls) ────────────────────────────────────────
   if (e.kind === 'farm' || e.kind === 'townhall') {
+    const supplyProvided = e.kind === 'townhall'
+      ? 4
+      : state.races[e.owner] === 'human'
+        ? 5
+        : 4;
     ctx.fillStyle = '#ffcc88';
     ctx.font = '11px monospace';
-    ctx.fillText('+4 food slots', x, y); y += LINE;
+    ctx.fillText(`+${supplyProvided} food slots`, x, y); y += LINE;
   }
 
   // ── Pop + treasury (player-owned, non-goldmine) ─────────────────────────────

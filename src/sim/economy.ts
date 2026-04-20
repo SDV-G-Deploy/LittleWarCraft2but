@@ -1,7 +1,7 @@
 import type { Entity, EntityKind, GameState, Vec2 } from '../types';
 import { GATHER_TICKS, GATHER_AMOUNT, MAP_W, MAP_H, SIM_HZ, isUnitKind, isWorkerKind } from '../types';
 import { ticksPerStep } from '../data/units';
-import { getResolvedBuildTicks, getResolvedCost, getResolvedTileSize } from '../balance/resolver';
+import { getResolvedBuildTicks, getResolvedCost, getResolvedSupplyProvided, getResolvedTileSize } from '../balance/resolver';
 import {
   applyTempoTrainTicks,
   getEcoFirstReturnBonusGold,
@@ -27,8 +27,7 @@ export function computePopCaps(state: GameState): void {
     let cap = 0; let count = 0;
     for (const e of state.entities) {
       if (e.owner !== owner) continue;
-      if (e.kind === 'townhall') cap += 4;
-      if (e.kind === 'farm')     cap += 4;
+      cap += getResolvedSupplyProvided(e.kind, state.races[owner]);
       if (isUnitKind(e.kind))    count++;   // walls & buildings don't count as pop
     }
     state.popCap[owner] = cap;

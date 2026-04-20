@@ -16,6 +16,7 @@ export interface EntityBalanceStats {
   attackTicks: number;
   tileW: number;
   tileH: number;
+  supplyProvided?: number;
 }
 
 export type EntityClass = 'unit' | 'building' | 'resource' | 'scaffold';

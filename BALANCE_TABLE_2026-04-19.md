@@ -38,6 +38,8 @@ Purpose: working balance sheet for future tuning passes
 | Town Hall | Shared | 1200 | 0 | 5 | 0 | 0 | 0 | - | main base |
 | Barracks | Shared | 800 | 0 | 3 | 0 | 0 | 360 | - | production |
 | Farm | Shared | 400 | 0 | 1 | 0 | 0 | 180 | - | supply |
+| Farm supply | Human | - | - | - | - | - | - | +5 pop | infrastructure edge |
+| Farm supply | Orc | - | - | - | - | - | - | +4 pop | baseline supply |
 | Wall (Human) | Human | 260 | 0 | 5 | 0 | 0 | 50 | - | fortified hold |
 | Wall (Orc) | Orc | 200 | 0 | 5 | 0 | 0 | 50 | - | rough delay tool |
 
@@ -115,6 +117,10 @@ Purpose: working balance sheet for future tuning passes
 - Human Wall
 - Orc Wall
 
+### Active live-test change
+- Human Farm supply: 4 -> 5
+- Goal: reduce Human supply friction and let structured armies reach critical mass earlier without directly buffing early duel stats
+
 ### Watch closely in playtests
 - Archer behind Human walls
 - Grunt dominance in unsupported open-field early fights
@@ -122,7 +128,7 @@ Purpose: working balance sheet for future tuning passes
 
 ### Most likely next small follow-up, only if needed
 1. tiny Grunt adjustment, or
-2. tiny Human opening-economy/tempo expression buff
+2. tiny Human infrastructure / supply expression buff
 
 Not both in the same pass.
 

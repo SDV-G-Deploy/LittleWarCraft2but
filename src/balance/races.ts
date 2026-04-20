@@ -23,6 +23,9 @@ export const RACE_BALANCE_PROFILES: Record<Race, RaceBalanceProfile> = {
       accentColor: '#4488ff',
     },
     entityOverrides: {
+      farm: {
+        supplyProvided: 5,
+      },
       wall: {
         hp: 260,
       },
