@@ -10,6 +10,7 @@ import { RACES } from './data/races';
 import { MAP_CATALOG, buildMapById } from './data/maps';
 import { createSession } from './net/session';
 import type { NetSession, NetMode } from './net/session';
+import { getLanguage, setLanguage, t, type Language } from './i18n';
 
 // ─── State machine ────────────────────────────────────────────────────────────
 
@@ -19,6 +20,7 @@ interface MenuState {
   screen:      MenuScreen;
   playerRace:  Race;
   mapId:       MapId;
+  language:    Language;
   // Online lobby
   netRole?:    'host' | 'guest';
   netSession?: NetSession;
@@ -50,6 +52,28 @@ interface MenuButton {
 // ─── Map thumbnail cache ──────────────────────────────────────────────────────
 
 let thumbnailCache: Map<MapId, HTMLCanvasElement> | null = null;
+
+function translateUnitLabel(label: string): string {
+  switch (label) {
+    case 'Peasant': return t('unit_peasant');
+    case 'Peon': return t('unit_peon');
+    case 'Footman': return t('unit_footman');
+    case 'Archer': return t('unit_archer');
+    case 'Knight': return t('unit_knight');
+    case 'Grunt': return t('unit_grunt');
+    case 'Troll': return t('unit_troll');
+    case 'Ogre Fighter': return t('unit_ogre_fighter');
+    case 'Town Hall': return t('unit_town_hall');
+    case 'Great Hall': return t('unit_great_hall');
+    case 'Barracks': return t('unit_barracks');
+    case 'War Mill': return t('unit_war_mill');
+    case 'Farm': return t('unit_farm');
+    case 'Pig Farm': return t('unit_pig_farm');
+    case 'Guard Tower': return t('unit_guard_tower');
+    case 'Watch Tower': return t('unit_watch_tower');
+    default: return label;
+  }
+}
 
 function getThumbnail(mapId: MapId): HTMLCanvasElement {
   if (!thumbnailCache) thumbnailCache = new Map();
@@ -99,6 +123,7 @@ export function runMenu(
     screen:     'title',
     playerRace: 'human',
     mapId:      1,
+    language:   getLanguage(),
     joinCode:   '',
     guestRace:  'orc',
     netMode:    'selfhost',
@@ -153,6 +178,8 @@ export function runMenu(
       case 'online':      ms.screen = 'online';   break;
       case 'how_to_play': ms.screen = 'howtoplay';break;
       case 'back_title':  ms.screen = 'title'; ms.netSession?.destroy(); ms.netSession = undefined; break;
+      case 'lang_en':     ms.language = 'en'; setLanguage('en'); break;
+      case 'lang_ru':     ms.language = 'ru'; setLanguage('ru'); break;
       case 'back_race':   ms.screen = 'race';     break;
       case 'race_human':  ms.playerRace = 'human'; ms.screen = 'map'; break;
       case 'race_orc':    ms.playerRace = 'orc';   ms.screen = 'map'; break;
@@ -267,7 +294,7 @@ export function runMenu(
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.font = 'bold 56px serif';
-    ctx.fillText('Little Warcraft', cx + 3, y + 3);
+    ctx.fillText(t('game_title'), cx + 3, y + 3);
 
     // Gold gradient fill
     const tg = ctx.createLinearGradient(0, y - 50, 0, y + 10);
@@ -275,11 +302,11 @@ export function runMenu(
     tg.addColorStop(0.5, GOLD);
     tg.addColorStop(1, GOLD_DIM);
     ctx.fillStyle = tg;
-    ctx.fillText('Little Warcraft', cx, y);
+    ctx.fillText(t('game_title'), cx, y);
 
     ctx.fillStyle = GREY;
     ctx.font = '16px monospace';
-    ctx.fillText('A tiny Warcraft II tribute', cx, y + 28);
+    ctx.fillText(t('game_subtitle'), cx, y + 28);
   }
 
   // ── Generic button drawing ─────────────────────────────────────────────────
@@ -314,6 +341,29 @@ export function runMenu(
            mouseY >= btn.y && mouseY <= btn.y + btn.h;
   }
 
+  function drawLanguageToggle(newBtns: MenuButton[]): void {
+    const items: Array<{ lang: Language; label: string; action: string }> = [
+      { lang: 'en', label: t('lang_en'), action: 'lang_en' },
+      { lang: 'ru', label: t('lang_ru'), action: 'lang_ru' },
+    ];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const x = canvas.width - 126 + i * 54;
+      const y = 18;
+      const selected = ms.language === item.lang;
+      ctx.fillStyle = selected ? 'rgba(232,200,74,0.18)' : 'rgba(255,255,255,0.04)';
+      ctx.fillRect(x, y, 46, 28);
+      ctx.strokeStyle = selected ? GOLD : PANEL_BD;
+      ctx.lineWidth = selected ? 2 : 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, 45, 27);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = selected ? GOLD : WHITE;
+      ctx.font = 'bold 12px monospace';
+      ctx.fillText(item.label, x + 23, y + 18);
+      newBtns.push({ x, y, w: 46, h: 28, label: item.label, action: item.action });
+    }
+  }
+
   // ─── Screen: Title ─────────────────────────────────────────────────────────
   function drawTitle_screen(): void {
     const cx = canvas.width / 2;
@@ -332,18 +382,19 @@ export function runMenu(
     ctx.setLineDash([]);
 
     const btns: MenuButton[] = [
-      { x: cx - 100, y: cy - 20,  w: 200, h: 44, label: '⚔  NEW GAME',    action: 'new_game',    accent: GOLD },
-      { x: cx - 100, y: cy + 36,  w: 200, h: 38, label: '🌐  ONLINE 1v1',  action: 'online',      accent: '#44ddaa' },
-      { x: cx - 100, y: cy + 86,  w: 200, h: 34, label: '?  HOW TO PLAY', action: 'how_to_play', accent: '#88bbff' },
+      { x: cx - 100, y: cy - 20,  w: 200, h: 44, label: t('menu_new_game'),    action: 'new_game',    accent: GOLD },
+      { x: cx - 100, y: cy + 36,  w: 200, h: 38, label: t('menu_online'),      action: 'online',      accent: '#44ddaa' },
+      { x: cx - 100, y: cy + 86,  w: 200, h: 34, label: t('menu_how_to_play'), action: 'how_to_play', accent: '#88bbff' },
     ];
 
+    drawLanguageToggle(btns);
     buttons = btns;
     for (const b of btns) drawButton(b, isHovered(b));
 
     ctx.textAlign = 'center';
     ctx.fillStyle = '#444a5a';
     ctx.font = '12px monospace';
-    ctx.fillText('Arrow keys / WASD to scroll · Click to select · Right-click to command', cx, canvas.height - 14);
+    ctx.fillText(t('menu_footer_hint'), cx, canvas.height - 14);
   }
 
   // ─── Screen: How To Play ───────────────────────────────────────────────────
@@ -356,7 +407,7 @@ export function runMenu(
     ctx.textAlign = 'center';
     ctx.fillStyle = GOLD;
     ctx.font      = 'bold 28px serif';
-    ctx.fillText('How to Play', cx, y); y += 36;
+    ctx.fillText(t('how_to_play'), cx, y); y += 36;
 
     ctx.strokeStyle = GOLD_DIM;
     ctx.lineWidth   = 1;
@@ -364,69 +415,13 @@ export function runMenu(
     y += 18;
 
     const sections: Array<{ heading: string; lines: string[] }> = [
-      {
-        heading: 'Goal',
-        lines: [
-          'Destroy all enemy buildings to win. Lose your Town Hall and it\'s over.',
-        ],
-      },
-      {
-        heading: 'Economy',
-        lines: [
-          'Workers (Peasant / Peon) gather gold from mines.',
-          'Build Farms to raise your population cap.',
-          'Build a Barracks to train frontline, ranged, and heavy anchor units.',
-          'Worker cost: 55g, train time: 9s. Barracks cost: 360g, build time: 34s.',
-        ],
-      },
-      {
-        heading: 'Map Pressure',
-        lines: [
-          'Contested mines matter most early. Fight for them before greedy mining.',
-          'Opening clash window lasts about 64s. Near contested mines, pressure fights hit harder there.',
-          'Pressure opening sends your first military unit forward on attack-move with +20% move speed for 5s.',
-          'Walls are cheap tools for holding a line or buying time.',
-        ],
-      },
-      {
-        heading: 'Combat',
-        lines: [
-          'Right-click an enemy to attack.',
-          'Hold A then right-click on the map to issue an attack-move order.',
-          'Basic melee holds the front, heavies anchor key fights, ranged units pressure from behind.',
-        ],
-      },
-      {
-        heading: 'Controls',
-        lines: [
-          'Arrow keys or edge-scroll  — pan camera',
-          'Left-click / drag          — select units',
-          'Right-click                — move / attack / gather / set rally',
-          'V  — train worker (Town Hall selected)',
-          'T / A / H  — train frontline / ranged / heavy (Barracks selected)',
-          'B / F / W  — build Barracks / Farm / Wall (Worker selected)',
-          '1–9  — control groups   (Ctrl+# to assign, # to recall)',
-          'S  — stop selected units',
-          'R  — return to menu (after game ends)',
-        ],
-      },
-      {
-        heading: 'Openings',
-        lines: [
-          'Select your opening branch early by selecting Town Hall and clicking Eco/Tempo/Pressure.',
-          'Eco: your first worker gets +20 gold once. Best for faster early saturation.',
-          'Tempo: your first military unit trains 35% faster once. Best for earlier field presence.',
-          'Pressure: your first military unit attack-moves to rally and gets +20% move speed for 5s.',
-        ],
-      },
-      {
-        heading: 'Rally Points',
-        lines: [
-          'Right-click empty ground with a building selected to set a rally point.',
-          'Newly trained units will automatically march there.',
-          'Forward rally supports pressure, safer rally supports macro buildup.',
-        ],
-      },
+      { heading: t('how_goal'), lines: [t('how_goal_1')] },
+      { heading: t('how_economy'), lines: [t('how_economy_1'), t('how_economy_2'), t('how_economy_3'), t('how_economy_4')] },
+      { heading: t('how_pressure'), lines: [t('how_pressure_1'), t('how_pressure_2'), t('how_pressure_3'), t('how_pressure_4')] },
+      { heading: t('how_combat'), lines: [t('how_combat_1'), t('how_combat_2'), t('how_combat_3')] },
+      { heading: t('how_controls'), lines: [t('how_controls_1'), t('how_controls_2'), t('how_controls_3'), t('how_controls_4'), t('how_controls_5'), t('how_controls_6'), t('how_controls_7'), t('how_controls_8'), t('how_controls_9')] },
+      { heading: t('how_openings'), lines: [t('how_openings_1'), t('how_openings_2'), t('how_openings_3'), t('how_openings_4')] },
+      { heading: t('how_rally'), lines: [t('how_rally_1'), t('how_rally_2'), t('how_rally_3')] },
     ];
 
     for (const sec of sections) {
@@ -446,7 +441,7 @@ export function runMenu(
     // Back button
     const backBtn: MenuButton = {
       x: cx - 80, y: Math.max(y + 10, canvas.height - 70),
-      w: 160, h: 38, label: '← BACK', action: 'back_title',
+      w: 160, h: 38, label: t('back'), action: 'back_title',
     };
     buttons = [backBtn];
     drawButton(backBtn, isHovered(backBtn));
@@ -460,7 +455,7 @@ export function runMenu(
     ctx.textAlign = 'center';
     ctx.fillStyle = GOLD;
     ctx.font      = 'bold 28px serif';
-    ctx.fillText('Choose Your Race', cx, cy - 150);
+    ctx.fillText(t('choose_race'), cx, cy - 150);
 
     const cardW  = 240;
     const cardH  = 280;
@@ -475,6 +470,7 @@ export function runMenu(
 
     for (let i = 0; i < 2; i++) {
       const rc     = RACES[races[i]];
+      const raceName = races[i] === 'human' ? t('race_humans') : t('race_orcs');
       const cardX  = i === 0 ? leftX : rightX;
       const action = actions[i];
       const accent = rc.accentColor;
@@ -497,19 +493,19 @@ export function runMenu(
       ctx.textAlign = 'center';
       ctx.fillStyle = accent;
       ctx.font      = `bold 22px serif`;
-      ctx.fillText(rc.name, cardX + cardW / 2, cardY + 38);
+      ctx.fillText(raceName, cardX + cardW / 2, cardY + 38);
 
       // Tagline
       ctx.fillStyle = GOLD_DIM;
       ctx.font      = 'italic 13px serif';
-      ctx.fillText(`"${rc.tagline}"`, cardX + cardW / 2, cardY + 60);
+      ctx.fillText(`"${races[i] === 'human' ? t('tagline_humans') : t('tagline_orcs')}"`, cardX + cardW / 2, cardY + 60);
 
       // Unit roster
       const units = [
-        { label: rc.workerLabel,  desc: 'Eco, build, and gathering' },
-        { label: rc.soldierLabel, desc: 'Frontline melee unit' },
-        { label: rc.rangedLabel,  desc: 'Backline pressure unit' },
-        { label: rc.heavyLabel,   desc: 'Elite frontline anchor' },
+        { label: translateUnitLabel(rc.workerLabel),  desc: t('menu_unit_desc_worker') },
+        { label: translateUnitLabel(rc.soldierLabel), desc: t('menu_unit_desc_frontline') },
+        { label: translateUnitLabel(rc.rangedLabel),  desc: t('menu_unit_desc_backline') },
+        { label: translateUnitLabel(rc.heavyLabel),   desc: t('menu_unit_desc_heavy') },
       ];
       let uy = cardY + 84;
       for (const u of units) {
@@ -528,7 +524,10 @@ export function runMenu(
       ctx.textAlign = 'center';
       ctx.fillStyle = GREY;
       ctx.font      = '11px monospace';
-      for (const line of rc.description.split('\n')) {
+      const descriptionLines = races[i] === 'human'
+        ? [t('race_desc_humans_1'), t('race_desc_humans_2')]
+        : [t('race_desc_orcs_1'), t('race_desc_orcs_2')];
+      for (const line of descriptionLines) {
         ctx.fillText(line, cardX + cardW / 2, descY);
         descY += 15;
       }
@@ -537,7 +536,7 @@ export function runMenu(
       const selBtn: MenuButton = {
         x: cardX + 20, y: cardY + cardH - 48,
         w: cardW - 40, h: 34,
-        label: `PLAY AS ${rc.name.toUpperCase()}`,
+        label: t('play_as', { name: raceName.toUpperCase() }),
         action,
         accent,
       };
@@ -548,7 +547,7 @@ export function runMenu(
     // Back button
     const backBtn: MenuButton = {
       x: 20, y: 20, w: 90, h: 32,
-      label: '← BACK', action: 'back_title',
+      label: t('back'), action: 'back_title',
     };
     newBtns.push(backBtn);
     drawButton(backBtn, isHovered(backBtn));
@@ -561,15 +560,17 @@ export function runMenu(
     const cx = canvas.width  / 2;
     const cy = canvas.height / 2;
     const rc = RACES[ms.playerRace];
+    const mapRaceName = ms.playerRace === 'human' ? t('race_humans') : t('race_orcs');
+    const mapTagline = ms.playerRace === 'human' ? t('tagline_humans') : t('tagline_orcs');
 
     ctx.textAlign = 'center';
     ctx.fillStyle = rc.accentColor;
     ctx.font      = `bold 13px monospace`;
-    ctx.fillText(`Playing as: ${rc.name}  ·  "${rc.tagline}"`, cx, cy - 168);
+    ctx.fillText(t('playing_as', { name: mapRaceName, tagline: mapTagline }), cx, cy - 168);
 
     ctx.fillStyle = GOLD;
     ctx.font      = 'bold 28px serif';
-    ctx.fillText('Choose a Map', cx, cy - 142);
+    ctx.fillText(t('choose_map'), cx, cy - 142);
 
     const maps = MAP_CATALOG.map((m) => ({ ...m, action: `map_${m.id}` }));
 
@@ -629,9 +630,9 @@ export function runMenu(
       ctx.textAlign = 'left';
       ctx.font      = '10px monospace';
       ctx.fillStyle = '#4488ff';
-      ctx.fillText('● You', cardX + 8, cardY + thumbH + 20);
+      ctx.fillText(t('you'), cardX + 8, cardY + thumbH + 20);
       ctx.fillStyle = '#cc4422';
-      ctx.fillText('● Enemy', cardX + 60, cardY + thumbH + 20);
+      ctx.fillText(t('enemy'), cardX + 60, cardY + thumbH + 20);
 
       // Map name
       ctx.textAlign = 'center';
@@ -652,7 +653,7 @@ export function runMenu(
       const selBtn: MenuButton = {
         x: cardX + 20, y: cardY + cardH - 48,
         w: cardW - 40, h: 34,
-        label: `PLAY ${m.name.toUpperCase()}`,
+        label: t('play_map', { name: m.name.toUpperCase() }),
         action: m.action,
         accent: GOLD,
       };
@@ -663,7 +664,7 @@ export function runMenu(
     // Back button
     const backBtn: MenuButton = {
       x: 20, y: 20, w: 90, h: 32,
-      label: '← BACK', action: 'back_race',
+      label: t('back'), action: 'back_race',
     };
     newBtns.push(backBtn);
     drawButton(backBtn, isHovered(backBtn));
@@ -680,20 +681,20 @@ export function runMenu(
     ctx.textAlign = 'center';
     ctx.fillStyle = '#44ddaa';
     ctx.font      = 'bold 28px serif';
-    ctx.fillText('Online 1v1', cx, cy - 160);
+    ctx.fillText(t('online_1v1'), cx, cy - 160);
 
     ctx.fillStyle = GREY;
     ctx.font      = '13px monospace';
-    ctx.fillText('Host a game and share the link, or enter a code to join.', cx, cy - 130);
+    ctx.fillText(t('online_intro'), cx, cy - 130);
 
     ctx.font = '11px monospace';
     ctx.fillStyle = GREY;
-    ctx.fillText('Connection mode', cx, cy - 106);
+    ctx.fillText(t('connection_mode'), cx, cy - 106);
 
     const modeY = cy - 92;
     const modeDefs: Array<{ mode: NetMode; label: string; accent: string }> = [
-      { mode: 'selfhost', label: 'SERVER', accent: '#44ddaa' },
-      { mode: 'public', label: 'DIRECT', accent: '#88bbff' },
+      { mode: 'selfhost', label: t('mode_server'), accent: '#44ddaa' },
+      { mode: 'public', label: t('mode_direct'), accent: '#88bbff' },
     ];
     for (let i = 0; i < modeDefs.length; i++) {
       const def = modeDefs[i];
@@ -714,8 +715,8 @@ export function runMenu(
     ctx.fillStyle = GREY;
     ctx.font = '10px monospace';
     const modeHint = ms.netMode === 'selfhost'
-      ? 'SERVER = self-hosted PeerJS + TURN from build config'
-      : 'DIRECT = public PeerJS + browser STUN fallback';
+      ? t('mode_hint_server')
+      : t('mode_hint_direct');
     ctx.fillText(modeHint, cx, cy - 50);
 
     // ── HOST panel ─────────────────────────────────────────────────────────────
@@ -729,13 +730,13 @@ export function runMenu(
     ctx.textAlign = 'center';
     ctx.fillStyle = '#44ddaa';
     ctx.font      = 'bold 16px monospace';
-    ctx.fillText('HOST A GAME', hx + hw / 2, hy + 26);
+    ctx.fillText(t('host_a_game'), hx + hw / 2, hy + 26);
 
     ctx.fillStyle = GREY;
     ctx.font      = '11px monospace';
-    ctx.fillText('Pick your race & map first.', hx + hw / 2, hy + 50);
-    ctx.fillText('Then host — share the link.', hx + hw / 2, hy + 65);
-    ctx.fillText('Opponent joins automatically.', hx + hw / 2, hy + 80);
+    ctx.fillText(t('host_line_1'), hx + hw / 2, hy + 50);
+    ctx.fillText(t('host_line_2'), hx + hw / 2, hy + 65);
+    ctx.fillText(t('host_line_3'), hx + hw / 2, hy + 80);
 
     // Race buttons inside host panel
     const races: Race[] = ['human', 'orc'];
@@ -773,7 +774,7 @@ export function runMenu(
       newBtns.push({ x: bx, y: by, w: 70, h: 24, label: map.name, action: `set_map_${map.id}` });
     }
 
-    const hostBtn: MenuButton = { x: hx + 20, y: hy + hh - 40, w: hw - 40, h: 30, label: 'HOST GAME', action: 'host_game', accent: '#44ddaa' };
+    const hostBtn: MenuButton = { x: hx + 20, y: hy + hh - 40, w: hw - 40, h: 30, label: t('host_game'), action: 'host_game', accent: '#44ddaa' };
     newBtns.push(hostBtn);
     drawButton(hostBtn, isHovered(hostBtn));
 
@@ -791,13 +792,13 @@ export function runMenu(
         const link   = `${origin}?room=${sess.code}${ms.netMode === 'public' ? '&mode=public' : ''}`;
         ctx.fillStyle = WHITE;
         ctx.font      = '11px monospace';
-        ctx.fillText('Share link:', hx + hw / 2, hy + hh + 36);
+        ctx.fillText(t('share_link'), hx + hw / 2, hy + hh + 36);
         ctx.fillStyle = '#aaddff';
         // Truncate for display
         const display = link.length > 50 ? link.slice(0, 47) + '…' : link;
         ctx.fillText(display, hx + hw / 2, hy + hh + 52);
         ctx.fillStyle = GREY;
-        ctx.fillText('(click to copy)', hx + hw / 2, hy + hh + 68);
+        ctx.fillText(t('click_to_copy'), hx + hw / 2, hy + hh + 68);
 
         // Invisible button for copy-to-clipboard
         newBtns.push({ x: hx, y: hy + hh + 24, w: hw, h: 50, label: '', action: `copy_link:${link}` });
@@ -815,12 +816,12 @@ export function runMenu(
 
     ctx.fillStyle = '#88bbff';
     ctx.font      = 'bold 16px monospace';
-    ctx.fillText('JOIN A GAME', jx + jw / 2, jy + 26);
+    ctx.fillText(t('join_a_game'), jx + jw / 2, jy + 26);
 
     ctx.fillStyle = GREY;
     ctx.font      = '11px monospace';
-    ctx.fillText('Pick your race, enter room code,', jx + jw / 2, jy + 50);
-    ctx.fillText('then click JOIN.', jx + jw / 2, jy + 65);
+    ctx.fillText(t('join_line_1'), jx + jw / 2, jy + 50);
+    ctx.fillText(t('join_line_2'), jx + jw / 2, jy + 65);
 
     // Race picker inside join panel
     const joinRaces: Race[] = ['human', 'orc'];
@@ -849,13 +850,13 @@ export function runMenu(
     ctx.strokeRect(jx + 12.5, codeY + 0.5, jw - 25, 31);
     ctx.fillStyle   = ms.joinCode ? WHITE : GREY;
     ctx.font        = 'bold 14px monospace';
-    ctx.fillText(ms.joinCode || 'type room code…', jx + jw / 2, codeY + 21);
+    ctx.fillText(ms.joinCode || t('type_room_code'), jx + jw / 2, codeY + 21);
 
     ctx.fillStyle = GREY;
     ctx.font      = '10px monospace';
-    ctx.fillText('(keyboard — backspace to delete)', jx + jw / 2, jy + 152);
+    ctx.fillText(t('keyboard_delete'), jx + jw / 2, jy + 152);
 
-    const joinBtn: MenuButton = { x: jx + 20, y: jy + jh - 44, w: jw - 40, h: 34, label: 'JOIN GAME', action: 'join_game', accent: '#88bbff' };
+    const joinBtn: MenuButton = { x: jx + 20, y: jy + jh - 44, w: jw - 40, h: 34, label: t('join_game'), action: 'join_game', accent: '#88bbff' };
     newBtns.push(joinBtn);
     drawButton(joinBtn, isHovered(joinBtn));
 
@@ -868,7 +869,7 @@ export function runMenu(
     }
 
     // ── Back button ────────────────────────────────────────────────────────────
-    const backBtn: MenuButton = { x: 20, y: 20, w: 90, h: 32, label: '← BACK', action: 'back_title' };
+    const backBtn: MenuButton = { x: 20, y: 20, w: 90, h: 32, label: t('back'), action: 'back_title' };
     newBtns.push(backBtn);
     drawButton(backBtn, isHovered(backBtn));
 

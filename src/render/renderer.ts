@@ -4,6 +4,7 @@ import { ticksPerStep } from '../data/units';
 import type { Camera } from './camera';
 import { worldToScreen } from './camera';
 import { buildSpriteCache, type SpriteCache } from './sprites';
+import { t } from '../i18n';
 
 // ─── Sprite cache (built once on first render) ────────────────────────────────
 
@@ -795,14 +796,14 @@ function drawHUD(ctx: CanvasRenderingContext2D, state: GameState, myOwner: 0 | 1
   }).length;
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
   ctx.font = '10px monospace';
-  const mapLabel = state.mapName ?? 'Map';
+  const mapLabel = state.mapName ?? t('map_label_fallback');
   const pressureHint = contestedMines >= 2
-    ? 'Pressure: rally army toward contested mines first'
+    ? t('pressure_hint_many')
     : contestedMines > 0
-      ? 'Pressure: secure one forward route, then expand'
-      : 'Pressure: scout outer routes before greedy mining';
+      ? t('pressure_hint_some')
+      : t('pressure_hint_none');
   const openingHook = openingWindowTicks > 0
-    ? `  |  Opening clash: contested mine fights hit harder for ${Math.ceil(openingWindowTicks / 20)}s`
+    ? `  |  ${t('opening_hook', { seconds: Math.ceil(openingWindowTicks / 20) })}`
     : '';
   ctx.fillText(`${mapLabel}  |  ${pressureHint}${openingHook}`, 4, 34);
 }

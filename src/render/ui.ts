@@ -7,6 +7,7 @@ import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBui
 import { getOpeningPlanLockTicks, getOpeningPlanPresentation } from '../balance/openings';
 import type { Camera } from './camera';
 import { isValidPlacement } from '../sim/economy';
+import { t, getLanguage } from '../i18n';
 
 // ─── Layout constants ──────────────────────────────────────────────────────────
 
@@ -103,11 +104,11 @@ function drawOnlineStrip(
 ): void {
   const { status, stats } = onlineStatus;
   const label =
-    status === 'ready' && stats.waitingStallTicks === 0 ? 'Online: stable' :
-    status === 'ready' ? 'Waiting for peer…' :
-    status === 'disconnected' ? 'Online: disconnected' :
-    status === 'error' ? 'Online: error' :
-    'Online: connecting…';
+    status === 'ready' && stats.waitingStallTicks === 0 ? t('online_stable') :
+    status === 'ready' ? t('online_waiting') :
+    status === 'disconnected' ? t('online_disconnected') :
+    status === 'error' ? t('online_error') :
+    t('online_connecting');
   const detail = onlineStatus.statusMsg || label;
   const color =
     status === 'error' ? '#ff8888' :
@@ -128,7 +129,7 @@ function drawOnlineStrip(
   ctx.font = '10px monospace';
   ctx.fillText(detail.slice(0, 30), viewW - 240, panelY + 27);
 
-  const ageText = stats.lastPacketAgeMs === null ? 'no packets yet' : `${Math.round(stats.lastPacketAgeMs)}ms ago`;
+  const ageText = stats.lastPacketAgeMs === null ? t('no_packets_yet') : t('ms_ago', { ms: Math.round(stats.lastPacketAgeMs) });
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.font = '10px monospace';
   ctx.textAlign = 'right';
@@ -172,13 +173,13 @@ function drawOpeningChoiceOverlay(
   ctx.fillStyle = '#f5fbff';
   ctx.font = 'bold 18px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText(`Choose your opening, ${Math.ceil(ticksLeft / SIM_HZ)}s left`, x + 16, y + 24);
+  ctx.fillText(t('choose_opening', { seconds: Math.ceil(ticksLeft / SIM_HZ) }), x + 16, y + 24);
   ctx.fillStyle = 'rgba(255,255,255,0.78)';
   ctx.font = '12px monospace';
-  ctx.fillText('Pick once at match start. If you do nothing, Eco is selected automatically.', x + 16, y + 44);
+  ctx.fillText(t('opening_pick_once'), x + 16, y + 44);
   ctx.fillStyle = 'rgba(255,230,140,0.92)';
   ctx.font = 'bold 12px monospace';
-  ctx.fillText('START OF MATCH CHOICE', x + overlayW - 220, y + 24);
+  ctx.fillText(t('opening_choice_banner'), x + overlayW - 220, y + 24);
 
   const btnY = y + 60;
   const labels = [
@@ -226,7 +227,7 @@ function drawOpeningChoiceConfirmation(
   ctx.fillStyle = '#d8ffe5';
   ctx.font = 'bold 16px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(`Opening locked: ${copy.title}`, x + w / 2, y + 21);
+  ctx.fillText(t('opening_locked', { title: copy.title }), x + w / 2, y + 21);
   ctx.fillStyle = 'rgba(216,255,229,0.82)';
   ctx.font = '11px monospace';
   ctx.fillText(copy.body, x + w / 2, y + 38, w - 20);
@@ -241,7 +242,7 @@ function drawEmptyPanel(
   ctx.fillStyle = 'rgba(255,255,255,0.15)';
   ctx.font = '12px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('Select a unit', viewW / 2, panelY + PANEL_H / 2 + 4);
+  ctx.fillText(t('select_a_unit'), viewW / 2, panelY + PANEL_H / 2 + 4);
   ctx.textAlign = 'left';
 }
 
@@ -268,15 +269,58 @@ function getSelectedOpeningPlan(state: GameState, owner: 0 | 1): OpeningPlan | n
 }
 
 function openingPlanText(plan: OpeningPlan): { title: string; body: string; risk: string } {
-  return getOpeningPlanPresentation(plan);
+  const base = getOpeningPlanPresentation(plan);
+  if (getLanguage() === 'en') return base;
+  if (plan === 'eco') {
+    return {
+      title: t('opening_name_eco'),
+      body: 'Первый рабочий приносит +20 золота и сильнее разгоняет стартовую добычу',
+      risk: 'Риск: можно отдать инициативу, если давление прилетит раньше',
+    };
+  }
+  if (plan === 'tempo') {
+    return {
+      title: t('opening_name_tempo'),
+      body: 'Первый боевой юнит один раз обучается на 35% быстрее',
+      risk: 'Риск: если тайминг не заходит, экономика отстаёт',
+    };
+  }
+  return {
+    title: t('opening_name_pressure'),
+    body: 'Первый боевой юнит форвард-коммитится, ускоряется и сильнее давит в начале',
+    risk: 'Риск: хрупко, если переехать слишком глубоко без контроля',
+  };
+}
+
+function translateDisplayLabel(label: string): string {
+  if (getLanguage() === 'en') return label;
+  switch (label) {
+    case 'Peasant': return t('unit_peasant');
+    case 'Peon': return t('unit_peon');
+    case 'Footman': return t('unit_footman');
+    case 'Archer': return t('unit_archer');
+    case 'Knight': return t('unit_knight');
+    case 'Grunt': return t('unit_grunt');
+    case 'Troll': return t('unit_troll');
+    case 'Ogre Fighter': return t('unit_ogre_fighter');
+    case 'Town Hall': return t('unit_town_hall');
+    case 'Great Hall': return t('unit_great_hall');
+    case 'Barracks': return t('unit_barracks');
+    case 'War Mill': return t('unit_war_mill');
+    case 'Farm': return t('unit_farm');
+    case 'Pig Farm': return t('unit_pig_farm');
+    case 'Guard Tower': return t('unit_guard_tower');
+    case 'Watch Tower': return t('unit_watch_tower');
+    default: return label;
+  }
 }
 
 function formatQueueLabel(kind: EntityKind, owner: 0 | 1, state: GameState): string {
   const rc = ownerRace(state.races, owner);
-  return kind === rc.worker ? rc.workerLabel
-    : kind === rc.soldier ? rc.soldierLabel
-    : kind === rc.ranged ? rc.rangedLabel
-    : kind === rc.heavy ? rc.heavyLabel
+  return kind === rc.worker ? translateDisplayLabel(rc.workerLabel)
+    : kind === rc.soldier ? translateDisplayLabel(rc.soldierLabel)
+    : kind === rc.ranged ? translateDisplayLabel(rc.rangedLabel)
+    : kind === rc.heavy ? translateDisplayLabel(rc.heavyLabel)
     : kind;
 }
 
@@ -302,7 +346,7 @@ function drawProductionPanel(
 
   ctx.fillStyle = '#9fd0ff';
   ctx.font = 'bold 11px monospace';
-  ctx.fillText('PRODUCTION', innerX, blockY + 10);
+  ctx.fillText(t('production'), innerX, blockY + 10);
 
   if (e.cmd?.type === 'train') {
     const trainBuildTicks = getResolvedBuildTicks(e.cmd.unit, state.races[e.owner]);
@@ -345,10 +389,10 @@ function drawProductionPanel(
   } else {
     ctx.fillStyle = 'rgba(255,255,255,0.86)';
     ctx.font = 'bold 13px monospace';
-    ctx.fillText('IDLE', innerX, blockY + 24);
+    ctx.fillText(t('idle'), innerX, blockY + 24);
     ctx.fillStyle = 'rgba(255,255,255,0.28)';
     ctx.font = '10px monospace';
-    ctx.fillText('No unit in production', innerX, blockY + 36);
+    ctx.fillText(t('no_unit_in_production'), innerX, blockY + 36);
 
     for (let i = 0; i < PRODUCTION_SLOTS; i++) {
       const sx = queueStartX + i * 19;
@@ -376,15 +420,15 @@ function drawEntityInfo(
 
   // ── Race-aware display name ─────────────────────────────────────────────────
   const displayName =
-    e.kind === rc.worker  ? rc.workerLabel  :
-    e.kind === rc.soldier ? rc.soldierLabel :
-    e.kind === rc.ranged  ? rc.rangedLabel  :
-    e.kind === rc.heavy   ? rc.heavyLabel   :
-    e.kind === 'townhall' ? rc.hallLabel    :
-    e.kind === 'barracks' ? rc.barrLabel    :
-    e.kind === 'farm'     ? rc.farmLabel    :
-    e.kind === 'tower'    ? rc.towerLabel   :
-    e.kind === 'goldmine' ? 'Gold Mine'     :
+    e.kind === rc.worker  ? translateDisplayLabel(rc.workerLabel)  :
+    e.kind === rc.soldier ? translateDisplayLabel(rc.soldierLabel) :
+    e.kind === rc.ranged  ? translateDisplayLabel(rc.rangedLabel)  :
+    e.kind === rc.heavy   ? translateDisplayLabel(rc.heavyLabel)   :
+    e.kind === 'townhall' ? translateDisplayLabel(rc.hallLabel)    :
+    e.kind === 'barracks' ? translateDisplayLabel(rc.barrLabel)    :
+    e.kind === 'farm'     ? translateDisplayLabel(rc.farmLabel)    :
+    e.kind === 'tower'    ? translateDisplayLabel(rc.towerLabel)   :
+    e.kind === 'goldmine' ? t('gold_mine')  :
     e.kind.toUpperCase();
 
   // Running Y cursor — everything flows downward from here
@@ -419,10 +463,10 @@ function drawEntityInfo(
     ); y += LINE;
 
     const roleLabel =
-      e.kind === rc.heavy ? 'Role: elite frontline anchor' :
-      e.kind === rc.soldier ? 'Role: frontline core' :
-      e.kind === rc.ranged ? 'Role: backline pressure' :
-      isWorkerKind(e.kind) ? 'Role: eco / build' :
+      e.kind === rc.heavy ? t('role_elite_frontline') :
+      e.kind === rc.soldier ? t('role_frontline') :
+      e.kind === rc.ranged ? t('role_backline') :
+      isWorkerKind(e.kind) ? t('role_eco') :
       null;
     if (roleLabel) {
       ctx.fillStyle = 'rgba(255,255,255,0.55)';
@@ -442,14 +486,14 @@ function drawEntityInfo(
     ); y += LINE;
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = '10px monospace';
-    ctx.fillText('Role: static territorial defense', x, y); y += LINE - 1;
+    ctx.fillText(t('role_static_defense'), x, y); y += LINE - 1;
   }
 
   // ── Gold mine reserve ───────────────────────────────────────────────────────
   if (e.kind === 'goldmine') {
     ctx.fillStyle = '#ffe97a';
     ctx.font = '11px monospace';
-    ctx.fillText(`Gold remaining: ${e.goldReserve ?? 0}`, x, y); y += LINE;
+    ctx.fillText(t('gold_remaining', { amount: e.goldReserve ?? 0 }), x, y); y += LINE;
 
     const myTownHall = state.entities.find(en => en.owner === myOwner && en.kind === 'townhall');
     const enemyTownHall = state.entities.find(en => en.owner !== myOwner && en.kind === 'townhall');
@@ -458,25 +502,25 @@ function drawEntityInfo(
     const distanceGap = Math.abs(myDist - enemyDist);
     const nearCenter = e.pos.x > 16 && e.pos.x < 48;
     const isContested = nearCenter || distanceGap <= 8;
-    const mineLabel = isContested ? 'Contested mine, control matters' : myDist < enemyDist
-      ? 'Safer mine, eco anchor'
-      : 'Outer mine, route pressure matters';
+    const mineLabel = isContested ? t('mine_contested') : myDist < enemyDist
+      ? t('mine_safer')
+      : t('mine_outer');
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = '10px monospace';
     ctx.fillText(mineLabel, x, y); y += LINE - 1;
 
     const actionHint = isContested
-      ? 'Bring army or rally here before workers'
+      ? t('mine_hint_contested')
       : myDist < enemyDist
-        ? 'Good target for worker saturation'
-        : 'Take it when you can defend the route';
+        ? t('mine_hint_safer')
+        : t('mine_hint_outer');
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.fillText(actionHint, x, y); y += LINE - 1;
 
     if (isContested && state.tick <= state.contestedMineBonusUntilTick) {
       const secondsLeft = Math.ceil((state.contestedMineBonusUntilTick - state.tick) / SIM_HZ);
       ctx.fillStyle = 'rgba(255,200,120,0.60)';
-      ctx.fillText(`Opening clash window: +1 pressure damage nearby for ${secondsLeft}s`, x, y); y += LINE - 1;
+      ctx.fillText(t('clash_window', { seconds: secondsLeft }), x, y); y += LINE - 1;
     }
   }
 
@@ -486,9 +530,9 @@ function drawEntityInfo(
   if (centerTile?.watchPost && e.owner === myOwner && isUnitKind(e.kind)) {
     ctx.fillStyle = '#f4d35e';
     ctx.font = '10px monospace';
-    ctx.fillText('Watch post: +4 sight while holding this tile', x, y); y += LINE - 1;
+    ctx.fillText(t('watch_post_1'), x, y); y += LINE - 1;
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.fillText('Strong for scouts, staging, and route control', x, y); y += LINE - 1;
+    ctx.fillText(t('watch_post_2'), x, y); y += LINE - 1;
   }
 
   // ── Food slots (farms / town halls) ────────────────────────────────────────
@@ -496,7 +540,7 @@ function drawEntityInfo(
     const supplyProvided = getResolvedSupplyProvided(e.kind, state.races[e.owner]);
     ctx.fillStyle = '#ffcc88';
     ctx.font = '11px monospace';
-    ctx.fillText(`+${supplyProvided} food slots`, x, y); y += LINE;
+    ctx.fillText(t('food_slots', { amount: supplyProvided }), x, y); y += LINE;
   }
 
   // ── Pop + treasury (player-owned, non-goldmine) ─────────────────────────────
@@ -507,7 +551,7 @@ function drawEntityInfo(
     const popNearFull = !popFull && popCap > 0 && popCap - pop <= 1;
     ctx.fillStyle = popFull ? '#ff6666' : popNearFull ? '#ffbb66' : '#88ff88';
     ctx.font = '11px monospace';
-    ctx.fillText(`Pop: ${pop}/${popCap}`, x, y);
+    ctx.fillText(t('pop', { pop, cap: popCap }), x, y);
     ctx.fillStyle = '#ffe97a';
     ctx.font = 'bold 12px monospace';
     ctx.fillText(`${state.gold[myOwner]}g`, x + 90, y);
@@ -516,7 +560,7 @@ function drawEntityInfo(
     if (popFull || popNearFull) {
       ctx.fillStyle = popFull ? '#ff7777' : '#ffcc88';
       ctx.font = '10px monospace';
-      ctx.fillText(popFull ? 'Food full, add Farm now' : 'Food almost full, prep Farm', x, y);
+      ctx.fillText(popFull ? t('food_full') : t('food_almost_full'), x, y);
       y += LINE - 1;
     }
   }
@@ -525,7 +569,7 @@ function drawEntityInfo(
   if (e.carryGold) {
     ctx.fillStyle = '#ffe97a';
     ctx.font = '11px monospace';
-    ctx.fillText(`Carrying: ${e.carryGold}g`, x, y); y += LINE;
+    ctx.fillText(t('carrying', { amount: e.carryGold }), x, y); y += LINE;
   }
 
   // ── Under attack clarity ───────────────────────────────────────────────────
@@ -533,11 +577,11 @@ function drawEntityInfo(
     ctx.fillStyle = '#ff7777';
     ctx.font = 'bold 10px monospace';
     if (isWorkerKind(e.kind)) {
-      ctx.fillText('Harassed, pull back or defend', x, y); y += LINE - 1;
+      ctx.fillText(t('harassed'), x, y); y += LINE - 1;
     } else if (e.kind === 'construction') {
-      ctx.fillText('Build under pressure', x, y); y += LINE - 1;
+      ctx.fillText(t('build_under_pressure'), x, y); y += LINE - 1;
     } else {
-      ctx.fillText('Under attack', x, y); y += LINE - 1;
+      ctx.fillText(t('under_attack'), x, y); y += LINE - 1;
     }
   }
 
@@ -549,12 +593,12 @@ function drawEntityInfo(
     const openingCopy = selectedPlan ? openingPlanText(selectedPlan) : null;
     ctx.fillStyle = 'rgba(136,216,255,0.58)';
     ctx.font = '10px monospace';
-    ctx.fillText(`Opening: ${openingCopy ? openingCopy.title : 'not selected'}`, x, y); y += LINE - 1;
+    ctx.fillText(t('opening_status', { title: openingCopy ? openingCopy.title : t('opening_not_selected') }), x, y); y += LINE - 1;
     ctx.fillStyle = 'rgba(255,255,255,0.34)';
     ctx.fillText(
       selectedPlan
-        ? `Bonus: ${openingSpent ? 'spent' : 'ready'}`
-        : (canStillChoose ? 'Choose branch in the start overlay, auto-locks to Eco at 10s' : 'Auto-locked to Eco'),
+        ? (openingSpent ? t('opening_bonus_spent') : t('opening_bonus_ready'))
+        : (canStillChoose ? t('opening_choose_now') : t('opening_auto_locked')),
       x,
       y,
     ); y += LINE - 1;
@@ -563,7 +607,7 @@ function drawEntityInfo(
     }
     if (selectedPlan === 'pressure' && !openingSpent) {
       ctx.fillStyle = 'rgba(255,200,120,0.52)';
-      ctx.fillText('1st military gets an 18s forward-commit damage window', x, y); y += LINE - 1;
+      ctx.fillText(t('pressure_damage_window'), x, y); y += LINE - 1;
     }
   }
 
@@ -572,7 +616,7 @@ function drawEntityInfo(
     ctx.font = '10px monospace';
     if (e.rallyPoint) {
       ctx.fillStyle = '#ffe840';
-      ctx.fillText(`Rally → (${e.rallyPoint.x}, ${e.rallyPoint.y})`, x, y); y += LINE - 1;
+      ctx.fillText(t('rally_to', { x: e.rallyPoint.x, y: e.rallyPoint.y }), x, y); y += LINE - 1;
       const myTownHall = state.entities.find(en => en.owner === myOwner && en.kind === 'townhall');
       const enemyTownHall = state.entities.find(en => en.owner !== myOwner && en.kind === 'townhall');
       const myDist = myTownHall ? Math.hypot(e.rallyPoint.x - myTownHall.pos.x, e.rallyPoint.y - myTownHall.pos.y) : Infinity;
@@ -581,39 +625,39 @@ function drawEntityInfo(
       const openingPlan = getSelectedOpeningPlan(state, myOwner) ?? 'tempo';
       const rallyText = Math.abs(myDist - enemyDist) <= 8
         ? (openingPlan === 'eco'
-            ? 'Contested rally, you are leaving eco comfort'
+            ? t('rally_contested_eco')
             : openingPlan === 'tempo'
-              ? 'Forward rally, good for first contest timing'
-              : 'Forward rally, ideal for pressure fights')
+              ? t('rally_contested_tempo')
+              : t('rally_contested_pressure'))
         : myDist < enemyDist
           ? (openingPlan === 'pressure'
-              ? 'Safe rally, pressure is not fully committed yet'
+              ? t('rally_safe_pressure')
               : openingPlan === 'tempo'
-                ? 'Safe rally, lets tempo army stabilize first'
-                : 'Safe rally, good for macro buildup')
+                ? t('rally_safe_tempo')
+                : t('rally_safe_eco'))
           : (openingPlan === 'pressure'
-              ? 'Deep rally, pressure branch is fully committed'
-              : 'Deep rally, commit only with map control');
+              ? t('rally_deep_pressure')
+              : t('rally_deep_other'));
       ctx.fillText(rallyText, x, y); y += LINE - 1;
       ctx.fillStyle = 'rgba(255,255,255,0.28)';
-      ctx.fillText('RMB empty ground to move rally', x, y); y += LINE - 1;
+      ctx.fillText(t('rally_move'), x, y); y += LINE - 1;
     } else {
       ctx.fillStyle = 'rgba(255,255,255,0.28)';
-      ctx.fillText('RMB empty ground: set rally', x, y); y += LINE - 1;
+      ctx.fillText(t('rally_set'), x, y); y += LINE - 1;
       const selectedPlan = getSelectedOpeningPlan(state, myOwner);
       if (selectedPlan === 'eco') {
         ctx.fillStyle = 'rgba(160,230,180,0.42)';
-        ctx.fillText('Eco fallback: first military regroups near your Town Hall', x, y); y += LINE - 1;
+        ctx.fillText(t('eco_fallback'), x, y); y += LINE - 1;
       }
       if (selectedPlan === 'tempo' && !state.openingCommitmentClaimed[myOwner]) {
         ctx.fillStyle = 'rgba(180,220,255,0.48)';
-        ctx.fillText('Tempo fallback: first military heads toward contested mine', x, y); y += LINE - 1;
+        ctx.fillText(t('tempo_fallback'), x, y); y += LINE - 1;
       }
       if (selectedPlan === 'pressure' && !state.openingCommitmentClaimed[myOwner]) {
         ctx.fillStyle = 'rgba(255,200,120,0.42)';
-        ctx.fillText('Pressure fallback: first military commits toward enemy Town Hall', x, y); y += LINE - 1;
+        ctx.fillText(t('pressure_fallback'), x, y); y += LINE - 1;
         ctx.fillStyle = 'rgba(255,170,120,0.34)';
-        ctx.fillText('That unit keeps +1 damage while its forward-commit window lasts', x, y); y += LINE - 1;
+        ctx.fillText(t('pressure_fallback_2'), x, y); y += LINE - 1;
       }
     }
   }
@@ -624,10 +668,10 @@ function drawEntityInfo(
     ctx.font = '11px monospace';
     if (e.cmd.phase === 'moving') {
       ctx.fillStyle = '#88ccff';
-      ctx.fillText(`→ Going to build ${e.cmd.building}…`, x, y); y += LINE;
+      ctx.fillText(t('going_to_build', { building: e.cmd.building }), x, y); y += LINE;
     } else {
       ctx.fillStyle = '#88ffcc';
-      ctx.fillText(`Building ${e.cmd.building}… (click site)`, x, y); y += LINE;
+      ctx.fillText(t('building_click_site', { building: e.cmd.building }), x, y); y += LINE;
     }
   }
 
@@ -636,11 +680,11 @@ function drawEntityInfo(
     const pct = Math.round(100 * e.hp / Math.max(1, e.hpMax));
     ctx.fillStyle = '#88ffcc';
     ctx.font = '11px monospace';
-    ctx.fillText(`${e.constructionOf}: ${pct}% built`, x, y); y += LINE - 2;
+    ctx.fillText(t('built_pct', { building: e.constructionOf, pct }), x, y); y += LINE - 2;
     drawProgressBar(ctx, x, y, 150, '#44cc88', pct); y += 10;
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.font = '10px monospace';
-    ctx.fillText('RMB worker here to continue', x, y); y += LINE - 1;
+    ctx.fillText(t('continue_build'), x, y); y += LINE - 1;
   }
 
   // ── Gather status ───────────────────────────────────────────────────────────
@@ -648,9 +692,9 @@ function drawEntityInfo(
     ctx.fillStyle = '#ffe97a';
     ctx.font = '11px monospace';
     const label =
-      e.cmd.phase === 'gathering'  ? 'Mining…'          :
-      e.cmd.phase === 'returning'  ? 'Returning gold…'  :
-      'Walking to mine…';
+      e.cmd.phase === 'gathering'  ? t('mining')         :
+      e.cmd.phase === 'returning'  ? t('returning_gold') :
+      t('walking_to_mine');
     ctx.fillText(label, x, y);
   }
 
@@ -658,21 +702,21 @@ function drawEntityInfo(
   if (e.cmd?.type === 'attack') {
     ctx.fillStyle = '#ff8888';
     ctx.font = '11px monospace';
-    ctx.fillText(e.cmd.chasePath.length > 0 ? 'Chasing…' : 'Attacking!', x, y);
+    ctx.fillText(e.cmd.chasePath.length > 0 ? t('chasing') : t('attacking'), x, y);
   }
 
   // ── Move status ─────────────────────────────────────────────────────────────
   if (e.cmd?.type === 'move') {
     ctx.fillStyle = '#aaddff';
     ctx.font = '11px monospace';
-    ctx.fillText('Moving…', x, y);
+    ctx.fillText(t('moving'), x, y);
   }
 
   // ── Idle hint (player units only) ───────────────────────────────────────────
   if (e.owner === myOwner && !e.cmd && stats && stats.speed > 0) {
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.font = '10px monospace';
-    ctx.fillText('RMB: Move/Attack/Gather   A+RMB: Atk-Move', x, panelY + PANEL_H - 8);
+    ctx.fillText(t('rmb_hint'), x, panelY + PANEL_H - 8);
   }
 }
 
@@ -705,10 +749,10 @@ function collectButtons(
     const barracksCost = getResolvedCost('barracks');
     const workerBusy = e.cmd?.type === 'train';
     const selectedPlan = getSelectedOpeningPlan(state, myOwner);
-    addButton(`${rc.workerLabel} [V]\n[${workerCost}g]`, `train:${rc.worker}`,
+    addButton(`${translateDisplayLabel(rc.workerLabel)} [V]\n[${workerCost}g]`, `train:${rc.worker}`,
       state.gold[myOwner] < workerCost);
     if (!workerBusy && state.gold[myOwner] >= workerCost) {
-      addButton('Worker spike\nfast eco', `train:${rc.worker}`);
+      addButton(t('worker_spike'), `train:${rc.worker}`);
     }
   }
   if (e.kind === 'barracks') {
@@ -729,20 +773,20 @@ function collectButtons(
     const wantsRanged = rangedCount + queuedRanged < Math.max(1, Math.floor((frontlineMass + anchorCount) / 2));
     const wantsHeavy = anchorCount < 2 && frontlineMass >= 2;
 
-    addButton(`${rc.soldierLabel} [T]\n[${soldierCost}g]`, `train:${rc.soldier}`,
+    addButton(`${translateDisplayLabel(rc.soldierLabel)} [T]\n[${soldierCost}g]`, `train:${rc.soldier}`,
       state.gold[myOwner] < soldierCost);
-    addButton(`${rc.rangedLabel} [A]\n[${rangedCost}g]`, `train:${rc.ranged}`,
+    addButton(`${translateDisplayLabel(rc.rangedLabel)} [A]\n[${rangedCost}g]`, `train:${rc.ranged}`,
       state.gold[myOwner] < rangedCost);
-    addButton(`${rc.heavyLabel} [H]\n[${heavyCost}g]`, `train:${rc.heavy}`,
+    addButton(`${translateDisplayLabel(rc.heavyLabel)} [H]\n[${heavyCost}g]`, `train:${rc.heavy}`,
       state.gold[myOwner] < heavyCost);
     if (state.gold[myOwner] >= soldierCost && wantsFrontline) {
-      addButton('Frontline add\nhold the line', `train:${rc.soldier}`);
+      addButton(t('frontline_add'), `train:${rc.soldier}`);
     }
     if (state.gold[myOwner] >= rangedCost && wantsRanged) {
-      addButton('Backline add\nkeep pressure up', `train:${rc.ranged}`);
+      addButton(t('backline_add'), `train:${rc.ranged}`);
     }
     if (state.gold[myOwner] >= heavyCost && wantsHeavy) {
-      addButton('Anchor add\n1-2 elite frontliners', `train:${rc.heavy}`);
+      addButton(t('anchor_add'), `train:${rc.heavy}`);
     }
   }
 
@@ -753,20 +797,20 @@ function collectButtons(
     const wallCost = getResolvedCost('wall', state.races[myOwner]);
     const towerCost = getResolvedCost('tower', state.races[myOwner]);
     const hasBarracks = state.entities.some(en => en.owner === myOwner && en.kind === 'barracks');
-    const barrLabel = rc.barrLabel;
-    const farmLabel = rc.farmLabel;
+    const barrLabel = translateDisplayLabel(rc.barrLabel);
+    const farmLabel = translateDisplayLabel(rc.farmLabel);
     addButton(`${barrLabel} [B]\n[${barrCost}g]`, 'build:barracks', state.gold[myOwner] < barrCost);
     addButton(`${farmLabel} [F]\n[${farmCost}g]`, 'build:farm',     state.gold[myOwner] < farmCost);
-    addButton(`${rc.towerLabel} [G]\n[${towerCost}g]`, 'build:tower', state.gold[myOwner] < towerCost || !hasBarracks);
-    addButton(`Wall [W]\n[${wallCost}g]`,          'build:wall',     state.gold[myOwner] < wallCost);
+    addButton(`${translateDisplayLabel(rc.towerLabel)} [G]\n[${towerCost}g]`, 'build:tower', state.gold[myOwner] < towerCost || !hasBarracks);
+    addButton(`${t('wall')} [W]\n[${wallCost}g]`,  'build:wall',     state.gold[myOwner] < wallCost);
     if (state.gold[myOwner] >= wallCost) {
-      addButton('Hold line\nquick wall', 'build:wall');
+      addButton(t('hold_line'), 'build:wall');
     }
   }
 
   // ── Stop (any player unit/building with an active command) ──────────────────
   if (e.cmd !== null) {
-    addButton('Stop\n[S]', 'stop');
+    addButton(t('stop'), 'stop');
   }
 
   // ── Demolish / Cancel construction ─────────────────────────────────────────
@@ -774,7 +818,7 @@ function collectButtons(
     const isConst  = e.kind === 'construction';
     const srcKind  = isConst ? (e.constructionOf ?? e.kind) : e.kind;
     const refund   = Math.floor(getResolvedCost(srcKind, state.races[e.owner]) * (isConst ? 1.0 : 0.8));
-    const btnLabel = isConst ? `Cancel\n[+${refund}g]` : `Demolish\n[+${refund}g]`;
+    const btnLabel = isConst ? t('cancel', { amount: refund }) : t('demolish', { amount: refund });
     addButton(btnLabel, 'demolish', false, true);
   }
 }

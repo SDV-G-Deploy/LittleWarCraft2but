@@ -19,6 +19,7 @@ import { RACES } from './data/races';
 import { buildMapById } from './data/maps';
 import type { NetSession } from './net/session';
 import { applyNetCmds, type NetCmd } from './net/netcmd';
+import { t } from './i18n';
 
 const CAM_SPEED   = 400;
 const EDGE_ZONE   = 20;
@@ -577,10 +578,10 @@ export function startGame(
     ctx.textAlign = 'center';
     ctx.fillStyle = gameResult === 'win' ? '#ffe97a' : '#ff5555';
     ctx.font = 'bold 72px monospace';
-    ctx.fillText(gameResult === 'win' ? 'VICTORY!' : 'DEFEAT', w / 2, h / 2 - 24);
+    ctx.fillText(gameResult === 'win' ? t('victory') : t('defeat'), w / 2, h / 2 - 24);
     ctx.fillStyle = '#ccc';
     ctx.font = '22px monospace';
-    ctx.fillText('Press R to return to menu', w / 2, h / 2 + 30);
+    ctx.fillText(t('press_r_menu'), w / 2, h / 2 + 30);
     ctx.textAlign = 'left';
   }
 
