@@ -47,6 +47,13 @@ Current state:
   - melee and ranged attacks now emit lightweight on-field attack / hit flashes
   - archer / troll shots now render simple readability-first projectile cues
 - latest pass stayed in UI/render-first scope; no netcode or hit-timing rewrite was introduced
+- movement interpolation fix pass landed across all major path-following states:
+  - plain `move`
+  - `attackMove` / pressure forward-commit movement
+  - `gather` travel to mine and return-to-base travel
+  - `attack` chase movement
+  - `build` move-to-site travel
+- movement feel is now driven by real step progress instead of one-tick-only render smoothing
 - next performance target should be LOS checks via grid/blocker cache, not risky dynamic unit occupancy
 
 ## Core direction
@@ -200,8 +207,19 @@ Movement bug review result:
 
 Opening contrast micro-pass:
 - Eco now converts its first worker payoff into a clearer early economy spike instead of only a small invisible bonus
-- Pressure now gets a brief early damage edge on its committed first military unit, so the branch lands harder in first contact instead of reading mostly as a pathing gimmick
+- Pressure now gets a committed first-unit damage window tied to its forward push, so the branch lands harder in first contact instead of reading mostly as a pathing gimmick
 - Tempo stays the clean timing branch, preserving its identity as the low-complexity middle option
+
+Movement feel follow-up:
+- the first walk-animation pass had two partial fixes before the real root cause was isolated
+- confirmed root issue for plain movement was one-tick interpolation, while actual tile travel spans multiple sim ticks
+- follow-up audit then unified render interpolation across all real path-following movement states:
+  - `move`
+  - `gather` (`tomine`, `returning`)
+  - `attack` chase
+  - `build` move-to-site
+  - pressure / attack-move variants that already use move-path stepping
+- chase logic now separates repath timing from per-step visual progress timing, reducing hidden coupling in movement rendering
 
 Balance foundation pass:
 - base stats now live in `src/balance/base.ts`
@@ -213,7 +231,8 @@ Balance foundation pass:
 - `src/data/units.ts` and `src/data/races.ts` currently remain compatibility forwarders during migration
 
 Determinism note:
-- the movement fix stays inside net command application and keeps deterministic ordering intact
+- the movement interpolation pass is render-first and keeps synced sim movement tile-based
+- smoothing now reads progress from existing deterministic step timers / paths instead of adding a new gameplay-time source
 - the opening-choice change is UI-first and uses the same existing synced `set_plan` path, so it does not add a new sim divergence surface
 - the exact move feedback marker is render-only command feedback and does not affect simulation or online state
 - the opening contrast pass only reuses existing synced sim state (`openingPlanSelected`, `openingCommitmentClaimed`, unit-local `openingPlan`) and does not introduce new nondeterministic inputs

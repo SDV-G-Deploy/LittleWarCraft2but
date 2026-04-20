@@ -24,6 +24,15 @@ Update it when a phase is completed, reframed, or split.
 - opening branch pass v1 added explicit eco / tempo / pressure framing in UI and opening intent state
 - online lockstep hardened against duplicate per-tick packet replay and disconnect stalls
 - opening branch pass v2 added a small contested-mine pressure hook for early-game clashes
+- movement feel / interpolation pass corrected to use real step progress instead of one-tick smoothing
+- movement rendering unified across real path-following states:
+  - `move`
+  - `attackMove` / pressure forward-commit movement
+  - `gather: tomine`
+  - `gather: returning`
+  - `attack` chase
+  - `build` move-to-site
+- chase timing split so repath cadence and per-step visual cadence are no longer coupled
 - balance foundation pass completed:
   - `src/balance/schema.ts`
   - `src/balance/base.ts`
@@ -231,6 +240,11 @@ Suggested commit theme:
 ## Phase G2. Movement feel and render readability
 Goal: make unit motion feel legible and alive without changing sim rules or abandoning the current pixel/retro style.
 
+Status:
+- main interpolation foundation is now in place and works across the major movement states
+- plain move is confirmed improved in live check
+- remaining follow-up here should come from concrete playtest findings, not another speculative motion pass
+
 Why this matters:
 - current tile-to-tile motion reads as jumps, not travel
 - the main visual debt is temporal readability, not art direction
@@ -275,6 +289,7 @@ Definition of done:
 - players can parse direction and motion intent faster
 - the game feels more alive while keeping the same retro/pixel identity
 - no new determinism surface is introduced
+- all command-driven path-following branches use the same visual movement model unless a concrete exception is justified
 
 ## Phase H. AI support pass
 Goal: let AI participate in the improved game without pretending AI is the main source of variety.
@@ -350,4 +365,5 @@ A good restart prompt for future `/new` sessions should mention:
   - tick-based throttling only
   - explicit heap/path tie-breaks
   - no risky dynamic unit occupancy yet
-- next concrete target for `/new`: review fresh playtest feedback after this clarity pass and choose the smallest high-value follow-up, keeping scope out of risky net/determinism rewrites; if shifting back to perf work, LOS through grid/blocker cache in `src/sim/combat.ts` remains the clean next target
+- next concrete target for `/new`: review fresh playtest feedback after the unified movement pass and choose the smallest high-value follow-up, keeping scope out of risky net/determinism rewrites; if shifting back to perf work, LOS through grid/blocker cache in `src/sim/combat.ts` remains the clean next target
+- separate worthwhile audit track: inspect the codebase for unnecessary state growth, stale per-entity work after death/removal, duplicate movement plumbing, and only safe/necessary optimizations
