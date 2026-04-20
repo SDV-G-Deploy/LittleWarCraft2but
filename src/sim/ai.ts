@@ -26,6 +26,7 @@ export interface AIController {
   maxTowers: number;
   workerTarget: number;
   openingPlan: 'eco' | 'tempo' | 'pressure';
+  openingChoiceDelayTicks: number;
 }
 
 export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
@@ -40,6 +41,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       maxTowers: 1,
       workerTarget: 3,
       openingPlan: 'eco',
+      openingChoiceDelayTicks: Math.round(SIM_HZ * 8),
     };
   }
   if (difficulty === 'hard') {
@@ -53,6 +55,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       maxTowers: 3,
       workerTarget: 5,
       openingPlan: 'pressure',
+      openingChoiceDelayTicks: Math.round(SIM_HZ * 4),
     };
   }
   return {
@@ -65,6 +68,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
     maxTowers: 2,
     workerTarget: 4,
     openingPlan: 'tempo',
+    openingChoiceDelayTicks: Math.round(SIM_HZ * 6),
   };
 }
 
@@ -95,7 +99,7 @@ export function tickAI(state: GameState, ai: AIController): void {
   const buildingBarracks = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'barracks');
   const buildingTower    = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'tower');
 
-  if (!state.openingPlanSelected[1]) {
+  if (!state.openingPlanSelected[1] && state.tick >= ai.openingChoiceDelayTicks) {
     state.openingPlanSelected[1] = ai.openingPlan;
     for (const e of es) {
       if (e.owner === 1 && (e.kind === 'townhall' || e.kind === 'barracks')) e.openingPlan = ai.openingPlan;
@@ -140,7 +144,9 @@ export function tickAI(state: GameState, ai: AIController): void {
                              state.gold[1] >= getResolvedCost(rc.heavy, state.races[1]);
         const wantRanged   = !wantHeavy && rangedCount < Math.floor((soldierCount + heavyCount) / 2) &&
                              state.gold[1] >= getResolvedCost(rc.ranged, state.races[1]);
-        issueTrainCommand(state, myBarracks, wantHeavy ? rc.heavy : wantRanged ? rc.ranged : rc.soldier);
+        const nextUnit = wantHeavy ? rc.heavy : wantRanged ? rc.ranged : rc.soldier;
+        const barracksBusy = myBarracks.cmd?.type === 'train';
+        if (!barracksBusy) issueTrainCommand(state, myBarracks, nextUnit);
       }
       if (!buildingFarm && state.popCap[1] - state.pop[1] <= 2 && farmCount < ai.maxFarms) {
         const w = freeWorker(myWorkers);
@@ -213,7 +219,8 @@ function keepGathering(state: GameState, workers: Entity[]): void {
 }
 
 function freeWorker(workers: Entity[]): Entity | undefined {
-  return workers.find(w => !w.cmd) ?? workers.find(w => w.cmd?.type === 'gather');
+  return workers.find(w => !w.cmd)
+    ?? workers.find(w => w.cmd?.type === 'gather' && (w.carryGold ?? 0) === 0);
 }
 
 function nearestMine(state: GameState, unit: Entity): Entity | null {
