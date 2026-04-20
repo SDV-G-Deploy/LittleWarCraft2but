@@ -26,6 +26,37 @@ const EDGE_ZONE   = 20;
 const SELECT_DIST = TILE_SIZE * 0.6;
 const UI_HEIGHT   = 96; // must match render/ui.ts PANEL_H
 const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 10;
+const NET_DESYNC_CHECKSUM_INTERVAL_TICKS = SIM_HZ * 2;
+
+function hashFNV1a(prev: number, str: string): number {
+  let h = prev >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function cmdSignature(cmd: { type: string } | null): string {
+  if (!cmd) return '-';
+  const c = cmd as any;
+  if (c.type === 'move') return `m:${c.goal?.x ?? 0},${c.goal?.y ?? 0}:${c.attackMove ? 1 : 0}:${c.path?.length ?? 0}`;
+  if (c.type === 'attack') return `a:${c.targetId ?? -1}`;
+  if (c.type === 'gather') return `g:${c.mineId ?? -1}:${c.phase ?? '?'}:${c.waitTicks ?? 0}`;
+  if (c.type === 'build') return `b:${c.building ?? '?'}:${c.pos?.x ?? 0},${c.pos?.y ?? 0}:${c.phase ?? '?'}`;
+  if (c.type === 'train') return `t:${c.unit ?? '?'}:${c.ticksLeft ?? 0}:${c.queue?.length ?? 0}`;
+  return c.type;
+}
+
+function computeDeterministicStateChecksum(state: { tick: number; entities: Array<{ id: number; owner: number; kind: string; pos: { x: number; y: number }; hp: number; cmd: { type: string } | null }>; gold: [number, number]; pop: [number, number]; popCap: [number, number] }): { tick: number; hashHex: string; entityCount: number } {
+  let hash = 0x811c9dc5;
+  hash = hashFNV1a(hash, `tick:${state.tick}|gold:${state.gold[0]},${state.gold[1]}|pop:${state.pop[0]},${state.pop[1]}|cap:${state.popCap[0]},${state.popCap[1]}`);
+  const entities = [...state.entities].sort((a, b) => a.id - b.id);
+  for (const e of entities) {
+    hash = hashFNV1a(hash, `${e.id}|${e.owner}|${e.kind}|${e.pos.x},${e.pos.y}|${e.hp}|${cmdSignature(e.cmd)}`);
+  }
+  return { tick: state.tick, hashHex: hash.toString(16).padStart(8, '0'), entityCount: entities.length };
+}
 
 // ─── Options ──────────────────────────────────────────────────────────────────
 
@@ -75,6 +106,7 @@ export function startGame(
   const myRC      = RACES[state.races[myOwner]];
   const commandMarkers: CommandMarker[] = [];
   let openingPlanFeedback: { plan: OpeningPlan; untilTick: number } | null = null;
+  let lastNetChecksumLine = '';
 
   /**
    * Emit a command.
@@ -558,6 +590,12 @@ export function startGame(
       profiler.recordPhase('tickAI', profiler.now() - p0);
     }
 
+    if (net && state.tick % NET_DESYNC_CHECKSUM_INTERVAL_TICKS === 0) {
+      const digest = computeDeterministicStateChecksum(state);
+      lastNetChecksumLine = `sync t${digest.tick} h${digest.hashHex} e${digest.entityCount}`;
+      console.info(`[sync] ${lastNetChecksumLine} g${state.gold[0]}/${state.gold[1]} p${state.pop[0]}/${state.popCap[0]}-${state.pop[1]}/${state.popCap[1]}`);
+    }
+
     checkWinLose();
     profiler.sampleState(state);
 
@@ -654,7 +692,7 @@ export function startGame(
     drawCommandMarkers(ctx, cam, commandMarkers, now);
     uiButtons = drawUi(ctx, state, selectedIds, canvas.width, viewH, myOwner, net ? {
       status: net.status,
-      statusMsg: net.statusMsg,
+      statusMsg: lastNetChecksumLine ? `${net.statusMsg} | ${lastNetChecksumLine}` : net.statusMsg,
       stats: net.getStats(),
     } : null, openingPlanFeedback);
     drawGroupBadges();

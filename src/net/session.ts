@@ -153,6 +153,7 @@ export interface SessionStats {
   remoteAnnouncedUpToTick: number;
   currentDelayTicks: number;
   lastPacketAgeMs: number | null;
+  lastInboundSummary: string | null;
 }
 
 export interface NetSession {
@@ -202,6 +203,7 @@ const REMOTE_STALE_TICK_LIMIT = 64;
 const INBOUND_RATE_WINDOW_MS = 1000;
 const MAX_INBOUND_PACKETS_PER_WINDOW = 120;
 const MAX_WAITING_STALL_TICKS = 180;
+const ACCEPT_LOG_INTERVAL_TICKS = 40;
 
 function isInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v);
@@ -291,6 +293,8 @@ export async function createSession(
   let inboundWindowStartedAt = Date.now();
   let inboundPacketsInWindow = 0;
   let lastPacketReceivedAt: number | null = null;
+  let lastInboundSummary: string | null = null;
+  let lastAcceptedTickLogged = -1;
 
   function failConnection(reason: string): void {
     session.status = 'error';
@@ -330,6 +334,12 @@ export async function createSession(
         localQueue.delete(queuedTick);
       }
     }
+  }
+
+  function summarizeInbound(summary: string, log: 'none' | 'info' | 'warn' = 'none'): void {
+    lastInboundSummary = summary;
+    if (log === 'info') console.info(`[net:in] ${summary}`);
+    else if (log === 'warn') console.warn(`[net:in] ${summary}`);
   }
 
   function enqueueRemotePacket(pkt: TickPacket): void {
@@ -431,6 +441,7 @@ export async function createSession(
         remoteAnnouncedUpToTick,
         currentDelayTicks: EXECUTION_DELAY_TICKS,
         lastPacketAgeMs: lastPacketReceivedAt === null ? null : Math.max(0, Date.now() - lastPacketReceivedAt),
+        lastInboundSummary,
       };
     },
 
@@ -471,6 +482,7 @@ export async function createSession(
 
     c.on('data', (raw) => {
       if (!enforceInboundRateLimit()) {
+        summarizeInbound(`reject tick=? reason=rate-limit`, 'warn');
         failConnection('Connection closed: inbound packet flood');
         return;
       }
@@ -479,10 +491,12 @@ export async function createSession(
       try {
         approxSize = JSON.stringify(raw).length;
       } catch {
+        summarizeInbound('reject tick=? reason=malformed-payload', 'warn');
         failConnection('Connection closed: malformed inbound payload');
         return;
       }
       if (approxSize > MAX_PACKET_BYTES) {
+        summarizeInbound(`reject tick=? reason=packet-too-large bytes=${approxSize}`, 'warn');
         failConnection('Connection closed: inbound packet too large');
         return;
       }
@@ -493,12 +507,14 @@ export async function createSession(
       // Host receives guest's race → replies with full config → both start
       if (msg.type === 'hello' && role === 'host') {
         if (!safeHostConfig || !isRace(msg.race)) {
+          summarizeInbound('reject tick=? type=hello reason=invalid-race', 'warn');
           session.status = 'error';
           session.statusMsg = 'Invalid multiplayer hello/config';
           session.onStatusChange?.();
           c.close();
           return;
         }
+        summarizeInbound(`accept tick=? type=hello guestRace=${msg.race}`, 'info');
         const fullCfg: SessionConfig = {
           race:      safeHostConfig.race,
           guestRace: msg.race,
@@ -513,19 +529,33 @@ export async function createSession(
       if (msg.type === 'config' && role === 'guest') {
         const cfg = parseConfig(msg);
         if (!cfg) {
+          summarizeInbound('reject tick=? type=config reason=invalid-config', 'warn');
           session.status = 'error';
           session.statusMsg = 'Invalid multiplayer config from host';
           session.onStatusChange?.();
           c.close();
           return;
         }
+        summarizeInbound(`accept tick=? type=config map=${cfg.mapId} races=${cfg.race}/${cfg.guestRace}`, 'info');
         session.onConfig?.(cfg);
         return;
       }
 
       // Tick packet — only queue if there are actual commands
       const pkt = parseTickPacket(msg);
-      if (pkt) enqueueRemotePacket(pkt);
+      if (pkt) {
+        const summary = `accept tick=${pkt.tick} cmds=${pkt.cmds.length}`;
+        if (pkt.tick !== lastAcceptedTickLogged && (pkt.tick % ACCEPT_LOG_INTERVAL_TICKS === 0 || pkt.cmds.length > 0)) {
+          summarizeInbound(summary, 'info');
+          lastAcceptedTickLogged = pkt.tick;
+        } else {
+          summarizeInbound(summary);
+        }
+        enqueueRemotePacket(pkt);
+        return;
+      }
+
+      summarizeInbound('reject tick=? reason=unknown-payload-shape', 'warn');
     });
 
     c.on('close', () => {
