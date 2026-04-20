@@ -1,4 +1,4 @@
-import type { Entity, EntityKind, GameState, Vec2 } from '../types';
+import type { Entity, EntityKind, GameState, Tile, Vec2 } from '../types';
 import { GATHER_TICKS, GATHER_AMOUNT, MAP_W, MAP_H, SIM_HZ, isUnitKind, isWorkerKind } from '../types';
 import { ticksPerStep } from '../data/units';
 import { getResolvedBuildTicks, getResolvedCost, getResolvedSupplyProvided, getResolvedTileSize } from '../balance/resolver';
@@ -37,9 +37,28 @@ export function computePopCaps(state: GameState): void {
 
 // ─── Gather ───────────────────────────────────────────────────────────────────
 
-export function issueGatherCommand(entity: Entity, mineId: number, currentTick: number): void {
-  entity.cmd = { type: 'gather', mineId, phase: 'tomine', waitTicks: currentTick };
+function resolveGatherTarget(state: GameState, targetId: number): { resourceType: 'gold'; entity: Entity } | { resourceType: 'wood'; tile: Tile } | null {
+  const entity = getEntity(state, targetId);
+  if (entity && entity.kind === 'goldmine' && (entity.goldReserve ?? 0) > 0) {
+    return { resourceType: 'gold', entity };
+  }
+
+  const tx = targetId % MAP_W;
+  const ty = Math.floor(targetId / MAP_W);
+  const tile = state.tiles[ty]?.[tx];
+  if (tile?.kind === 'tree' && (tile.woodReserve ?? 0) > 0) {
+    return { resourceType: 'wood', tile };
+  }
+
+  return null;
+}
+
+export function issueGatherCommand(state: GameState, entity: Entity, targetId: number, currentTick: number): void {
+  const target = resolveGatherTarget(state, targetId);
+  if (!target) return;
+  entity.cmd = { type: 'gather', targetId, resourceType: target.resourceType, phase: 'toresource', waitTicks: currentTick };
   entity.carryGold = 0;
+  entity.carryWood = 0;
   (entity as EntityWithCache)._gatherPath = undefined;
 }
 
@@ -124,6 +143,38 @@ function bestContestedMine(state: GameState, owner: 0 | 1): Entity | null {
   return best;
 }
 
+function getTreeApproachTiles(state: GameState, tx: number, ty: number): Vec2[] {
+  const tiles: Vec2[] = [];
+  for (let y = ty - 1; y <= ty + 1; y++) {
+    for (let x = tx - 1; x <= tx + 1; x++) {
+      if (x === tx && y === ty) continue;
+      if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
+      if (!state.tiles[y]?.[x]?.passable) continue;
+      tiles.push({ x, y });
+    }
+  }
+  tiles.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  return tiles;
+}
+
+function bestTreeApproach(state: GameState, entity: Entity, tx: number, ty: number): { target: Vec2; path: Vec2[] } | null {
+  let best: { target: Vec2; path: Vec2[] } | null = null;
+  let bestScore = Infinity;
+
+  for (const target of getTreeApproachTiles(state, tx, ty)) {
+    const path = findPath(state, entity.pos.x, entity.pos.y, target.x, target.y);
+    if (path === null) continue;
+    const score = path.length * 1000 + Math.abs(entity.pos.x - target.x) + Math.abs(entity.pos.y - target.y);
+    if (!best || score < bestScore) {
+      best = { target, path };
+      bestScore = score;
+      if (path.length === 0) return best;
+    }
+  }
+
+  return best;
+}
+
 export function processGather(state: GameState, entity: Entity): void {
   if (!entity.cmd || entity.cmd.type !== 'gather') return;
   const cmd = entity.cmd;
@@ -134,10 +185,10 @@ export function processGather(state: GameState, entity: Entity): void {
     ec._gatherTarget = undefined;
   };
 
-  const mine = getEntity(state, cmd.mineId);
-  const mineDepleted = !mine || (mine.goldReserve ?? 0) <= 0;
-  if (mineDepleted) {
-    if (cmd.phase === 'returning' || (entity.carryGold ?? 0) > 0) {
+  const target = resolveGatherTarget(state, cmd.targetId);
+  const resourceDepleted = !target;
+  if (resourceDepleted) {
+    if (cmd.phase === 'returning' || (entity.carryGold ?? 0) > 0 || (entity.carryWood ?? 0) > 0) {
       cmd.phase = 'returning';
       clearGatherState();
     } else {
@@ -150,14 +201,16 @@ export function processGather(state: GameState, entity: Entity): void {
   const tps = ticksPerStep(entity.kind);
 
   switch (cmd.phase) {
-    case 'tomine': {
-      if (!mine) {
+    case 'toresource': {
+      if (!target) {
         clearGatherState();
         entity.cmd = null;
         return;
       }
       if (ec._gatherPath === undefined) {
-        const approach = bestMineApproach(state, entity, mine);
+        const approach = target.resourceType === 'gold'
+          ? bestMineApproach(state, entity, target.entity)
+          : bestTreeApproach(state, entity, cmd.targetId % MAP_W, Math.floor(cmd.targetId / MAP_W));
         if (approach === null) {
           clearGatherState();
           entity.cmd = null;
@@ -167,7 +220,6 @@ export function processGather(state: GameState, entity: Entity): void {
         ec._gatherTarget = approach.target;
       }
       if (ec._gatherPath.length === 0) {
-        // already adjacent — start mining
         cmd.phase = 'gathering'; cmd.waitTicks = state.tick; ec._gatherTarget = undefined; return;
       }
       if (state.tick - cmd.waitTicks < tps) return;
@@ -181,17 +233,38 @@ export function processGather(state: GameState, entity: Entity): void {
     }
     case 'gathering': {
       if (state.tick - cmd.waitTicks < GATHER_TICKS) return;
-      if (!mine) {
+      if (!target) {
         clearGatherState();
         entity.cmd = null;
         return;
       }
       const owner = entity.owner as 0 | 1;
       const openingPlan = state.openingPlanSelected[owner];
-      const ecoGatherBonus = getEcoGatherBonus(openingPlan, state.openingCommitmentClaimed[owner], state.tick, entity);
-      const take = Math.min(GATHER_AMOUNT + ecoGatherBonus, mine.goldReserve ?? 0);
-      mine.goldReserve = (mine.goldReserve ?? 0) - take;
-      entity.carryGold = take;
+      const ecoGatherBonus = cmd.resourceType === 'gold'
+        ? getEcoGatherBonus(openingPlan, state.openingCommitmentClaimed[owner], state.tick, entity)
+        : 0;
+      if (cmd.resourceType === 'gold' && target.resourceType === 'gold') {
+        const mine = target.entity;
+        const take = Math.min(GATHER_AMOUNT + ecoGatherBonus, mine.goldReserve ?? 0);
+        mine.goldReserve = (mine.goldReserve ?? 0) - take;
+        entity.carryGold = take;
+      } else if (cmd.resourceType === 'wood' && target.resourceType === 'wood') {
+        const treeTile = target.tile;
+        const take = Math.min(GATHER_AMOUNT, treeTile.woodReserve ?? 0);
+        treeTile.woodReserve = (treeTile.woodReserve ?? 0) - take;
+        entity.carryWood = take;
+        if ((treeTile.woodReserve ?? 0) <= 0) {
+          treeTile.woodReserve = 0;
+          treeTile.kind = 'grass';
+          treeTile.passable = true;
+          delete treeTile.watchPost;
+        }
+      } else {
+        clearGatherState();
+        entity.cmd = null;
+        return;
+      }
+
       cmd.phase = 'returning'; ec._gatherPath = undefined;
       break;
     }
@@ -206,25 +279,25 @@ export function processGather(state: GameState, entity: Entity): void {
         const dropX = th.pos.x + Math.floor(th.tileW / 2);
         const dropY = th.pos.y + th.tileH;
         const raw = findPath(state, entity.pos.x, entity.pos.y, dropX, dropY);
-        // If path home is blocked, credit gold anyway and restart
         ec._gatherPath = raw ?? [];
       }
       if (ec._gatherPath.length === 0) {
         const owner = entity.owner as 0 | 1;
         state.gold[owner] += entity.carryGold ?? 0;
-        if (shouldApplyEcoFirstReturnBonus(state.openingPlanSelected[owner], state.openingCommitmentClaimed[owner], state.tick, entity)) {
+        if ((entity.carryGold ?? 0) > 0 && shouldApplyEcoFirstReturnBonus(state.openingPlanSelected[owner], state.openingCommitmentClaimed[owner], state.tick, entity)) {
           entity.openingPlan = 'eco';
           entity.carryGold = Math.min(getEcoGatherBonusCap(), (entity.carryGold ?? 0) + getEcoGatherBonus('eco', false, state.tick, entity));
           state.gold[owner] += getEcoFirstReturnBonusGold();
           state.openingCommitmentClaimed[owner] = true;
         }
         entity.carryGold = 0;
+        entity.carryWood = 0;
         ec._gatherPath = undefined;
-        if (mineDepleted) {
+        if (resourceDepleted) {
           entity.cmd = null;
           return;
         }
-        cmd.phase = 'tomine';
+        cmd.phase = 'toresource';
         return;
       }
       if (state.tick - cmd.waitTicks < tps) return;

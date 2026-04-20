@@ -7,8 +7,9 @@ export const SIM_HZ = 20;
 export const SIM_TICK_MS = 1000 / SIM_HZ; // 50ms
 export const CORPSE_LIFE_TICKS  = SIM_HZ * 3;   // 3 seconds
 export const MINE_GOLD_INITIAL  = 1500;
-export const GATHER_AMOUNT      = 10;            // gold per trip
-export const GATHER_TICKS       = Math.round(SIM_HZ * 1.8); // 1.8s at mine
+export const TREE_WOOD_INITIAL  = 100;
+export const GATHER_AMOUNT      = 10;            // gold/wood per trip
+export const GATHER_TICKS       = Math.round(SIM_HZ * 1.8); // 1.8s at resource
 
 // ─── Map ──────────────────────────────────────────────────────────────────────
 
@@ -19,6 +20,7 @@ export interface Tile {
   kind: TileKind;
   passable: boolean;
   watchPost?: boolean;
+  woodReserve?: number;
 }
 
 // ─── Map data ─────────────────────────────────────────────────────────────────
@@ -127,7 +129,7 @@ export type Command =
       repathCount: number;
     }
   | { type: 'attack';  targetId: number; cooldownTick: number; chasePath: Vec2[]; chasePathTick: number; chaseStepTick: number }
-  | { type: 'gather';  mineId: number; phase: 'tomine' | 'gathering' | 'returning'; waitTicks: number }
+  | { type: 'gather';  targetId: number; resourceType: 'gold' | 'wood'; phase: 'toresource' | 'gathering' | 'returning'; waitTicks: number }
   | { type: 'build';   building: EntityKind; pos: Vec2; siteId: number; phase: 'moving' | 'building'; stepTick: number }
   | { type: 'train';   unit: EntityKind; ticksLeft: number; queue: EntityKind[]; openingTempoCommit?: boolean };
 
@@ -146,6 +148,7 @@ export interface Entity {
   sightRadius: number;
   goldReserve?: number;   // gold mines only
   carryGold?: number;     // workers carrying gold back
+  carryWood?: number;     // workers carrying wood back
   rallyPoint?: Vec2;      // townhall / barracks: newly trained units walk here
   openingPlan?: OpeningPlan; // player-declared early intent for UI + rally support
   pressureCommittedUntilTick?: number; // early forward-commit window for pressure opener units

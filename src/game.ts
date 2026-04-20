@@ -42,7 +42,7 @@ function cmdSignature(cmd: { type: string } | null): string {
   const c = cmd as any;
   if (c.type === 'move') return `m:${c.goal?.x ?? 0},${c.goal?.y ?? 0}:${c.attackMove ? 1 : 0}:${c.path?.length ?? 0}`;
   if (c.type === 'attack') return `a:${c.targetId ?? -1}`;
-  if (c.type === 'gather') return `g:${c.mineId ?? -1}:${c.phase ?? '?'}:${c.waitTicks ?? 0}`;
+  if (c.type === 'gather') return `g:${c.targetId ?? -1}:${c.resourceType ?? '?'}:${c.phase ?? '?'}:${c.waitTicks ?? 0}`;
   if (c.type === 'build') return `b:${c.building ?? '?'}:${c.pos?.x ?? 0},${c.pos?.y ?? 0}:${c.phase ?? '?'}`;
   if (c.type === 'train') return `t:${c.unit ?? '?'}:${c.ticksLeft ?? 0}:${c.queue?.length ?? 0}`;
   return c.type;
@@ -446,6 +446,13 @@ export function startGame(
             return e && isWorkerKind(e.kind) && e.owner === myOwner;
           });
           if (workerIds.length) emit({ k: 'gather', ids: workerIds, mineId: hitBuilding.id });
+
+        } else if (state.tiles[ty]?.[tx]?.kind === 'tree' && (state.tiles[ty]?.[tx]?.woodReserve ?? 0) > 0) {
+          const workerIds = [...selectedIds].filter(id => {
+            const e = state.entities.find(en => en.id === id);
+            return e && isWorkerKind(e.kind) && e.owner === myOwner;
+          });
+          if (workerIds.length) emit({ k: 'gather', ids: workerIds, mineId: ty * 64 + tx });
 
         } else {
           const moverIds = [...selectedIds].filter(id => {

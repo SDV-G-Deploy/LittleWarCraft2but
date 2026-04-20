@@ -1,14 +1,20 @@
 import type { GameState, FogState, MapData, Race } from '../types';
-import { MAP_W, MAP_H, SIM_HZ } from '../types';
+import { MAP_W, MAP_H, SIM_HZ, TREE_WOOD_INITIAL } from '../types';
 
 export function createWorld(mapData: MapData, races: [Race, Race]): GameState {
   const fog: FogState[][] = Array.from({ length: MAP_H }, () =>
     Array.from<FogState>({ length: MAP_W }).fill('unseen'),
   );
 
+  const tiles = mapData.tiles.map(row => row.map(tile => {
+    const clone = { ...tile };
+    if (clone.kind === 'tree' && typeof clone.woodReserve !== 'number') clone.woodReserve = TREE_WOOD_INITIAL;
+    return clone;
+  }));
+
   return {
     tick: 0,
-    tiles:    mapData.tiles,
+    tiles,
     fog,
     entities: [],
     blockedTiles: new Uint8Array(MAP_W * MAP_H),

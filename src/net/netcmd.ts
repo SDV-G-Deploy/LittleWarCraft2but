@@ -125,7 +125,7 @@ export function applyNetCmds(
       case 'gather': {
         for (const id of sortUnitIds(cmd.ids)) {
           const e = getEntity(state, id);
-          if (e && e.owner === owner && isWorkerKind(e.kind)) issueGatherCommand(e, cmd.mineId, state.tick);
+          if (e && e.owner === owner && isWorkerKind(e.kind)) issueGatherCommand(state, e, cmd.mineId, state.tick);
         }
         break;
       }

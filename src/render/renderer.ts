@@ -56,7 +56,7 @@ function getUnitMotionSample(
     next = e.cmd.chasePath[0]!;
     stepTick = e.cmd.chaseStepTick;
   } else if (e.cmd.type === 'gather') {
-    if (e.cmd.phase !== 'tomine' && e.cmd.phase !== 'returning') return null;
+    if (e.cmd.phase !== 'toresource' && e.cmd.phase !== 'returning') return null;
     const gatherPath = (e as Entity & { _gatherPath?: { x: number; y: number }[] })._gatherPath;
     if (!Array.isArray(gatherPath) || gatherPath.length === 0) return null;
     next = gatherPath[0]!;
@@ -114,6 +114,20 @@ const MINI_TILE_COLORS: Record<TileKind, string> = {
 // ─── Minimap terrain cache (built once, tiles never change) ──────────────────
 
 let minimapTerrain: HTMLCanvasElement | null = null;
+let minimapTerrainSignature = '';
+
+function buildMinimapTerrainSignature(state: GameState): string {
+  const rows: string[] = [];
+  for (let ty = 0; ty < MAP_H; ty++) {
+    let row = '';
+    for (let tx = 0; tx < MAP_W; tx++) {
+      const tile = state.tiles[ty][tx];
+      row += tile.kind[0] + (tile.watchPost ? '1' : '0');
+    }
+    rows.push(row);
+  }
+  return rows.join('|');
+}
 
 function buildMinimapTerrain(state: GameState): HTMLCanvasElement {
   const mc    = document.createElement('canvas');
@@ -175,7 +189,11 @@ export function drawMinimap(
   viewH_game: number,
   myOwner: 0 | 1 = 0,
 ): void {
-  if (!minimapTerrain) minimapTerrain = buildMinimapTerrain(state);
+  const nextSignature = buildMinimapTerrainSignature(state);
+  if (!minimapTerrain || minimapTerrainSignature !== nextSignature) {
+    minimapTerrain = buildMinimapTerrain(state);
+    minimapTerrainSignature = nextSignature;
+  }
 
   const MX = viewW      - MINI_W - MINI_PAD;
   const MY = viewH_game - MINI_H - MINI_PAD;
@@ -576,6 +594,10 @@ function drawUnit(
     ctx.beginPath();
     ctx.arc(bodySx + TILE_SIZE - 4, bodySy + 4, 3, 0, Math.PI * 2);
     ctx.fill();
+  }
+  if (e.carryWood) {
+    ctx.fillStyle = '#79c85b';
+    ctx.fillRect(bodySx + TILE_SIZE - 8, bodySy + 1, 6, 6);
   }
 
   // Quick role readability

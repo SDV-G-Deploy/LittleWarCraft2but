@@ -546,6 +546,12 @@ function drawEntityInfo(
     }
   }
 
+  if (e.carryWood) {
+    ctx.fillStyle = '#8fdc6d';
+    ctx.font = '11px monospace';
+    ctx.fillText(t('carrying_wood', { amount: e.carryWood }), x, y); y += LINE;
+  }
+
   const centerX = Math.min(MAP_W - 1, Math.max(0, e.pos.x + Math.floor(e.tileW / 2)));
   const centerY = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
   const centerTile = state.tiles[centerY]?.[centerX];

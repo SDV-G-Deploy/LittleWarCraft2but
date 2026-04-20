@@ -252,11 +252,19 @@ function keepGathering(state: GameState, workers: Entity[]): void {
   for (const w of workers) {
     if (w.cmd && w.cmd.type !== 'gather') continue;
     if (w.cmd?.type === 'gather') {
-      const mine = state.entities.find(e => e.id === (w.cmd as Extract<typeof w.cmd, {type:'gather'}>).mineId);
-      if (mine && (mine.goldReserve ?? 0) > 0) continue;
+      const gatherCmd = w.cmd;
+      if (gatherCmd.resourceType === 'gold') {
+        const mine = state.entities.find(e => e.id === gatherCmd.targetId);
+        if (mine && (mine.goldReserve ?? 0) > 0) continue;
+      } else {
+        const tx = gatherCmd.targetId % 64;
+        const ty = Math.floor(gatherCmd.targetId / 64);
+        const tile = state.tiles[ty]?.[tx];
+        if (tile?.kind === 'tree' && (tile.woodReserve ?? 0) > 0) continue;
+      }
     }
     const mine = nearestMine(state, w);
-    if (mine) issueGatherCommand(w, mine.id, state.tick);
+    if (mine) issueGatherCommand(state, w, mine.id, state.tick);
   }
 }
 
