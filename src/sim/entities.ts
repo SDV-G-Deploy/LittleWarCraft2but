@@ -59,6 +59,10 @@ export function spawnEntity(
   };
 
   applyResolvedStatsToEntity(entity, stats, state);
+  if (entity.statHpMax && entity.statHpMax !== entity.hpMax) {
+    entity.hpMax = entity.statHpMax;
+    entity.hp = entity.statHpMax;
+  }
 
   state.entities.push(entity);
   getEntityIndex(state).set(entity.id, entity);
