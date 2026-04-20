@@ -402,17 +402,20 @@ export function runMenu(
     const cx = canvas.width / 2;
     const W  = Math.min(640, canvas.width - 40);
     const x0 = cx - W / 2;
-    let   y  = canvas.height * 0.08;
+    const topPad = Math.max(24, Math.round(canvas.height * 0.06));
+    let y = topPad;
+    const compactHeader = canvas.height < 700;
 
     ctx.textAlign = 'center';
     ctx.fillStyle = GOLD;
-    ctx.font      = 'bold 28px serif';
-    ctx.fillText(t('how_to_play'), cx, y); y += 36;
+    ctx.font      = compactHeader ? 'bold 24px serif' : 'bold 28px serif';
+    ctx.fillText(t('how_to_play'), cx, y);
+    y += compactHeader ? 30 : 36;
 
     ctx.strokeStyle = GOLD_DIM;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + W, y); ctx.stroke();
-    y += 18;
+    y += compactHeader ? 14 : 18;
 
     const sections: Array<{ heading: string; lines: string[] }> = [
       { heading: t('how_goal'), lines: [t('how_goal_1')] },
@@ -424,23 +427,39 @@ export function runMenu(
       { heading: t('how_rally'), lines: [t('how_rally_1'), t('how_rally_2'), t('how_rally_3')] },
     ];
 
+    const contentStartY = y;
+    const rawContentHeight = sections.reduce((sum, sec) => sum + 18 + sec.lines.length * 17 + 8, 0);
+    const backBtnH = 38;
+    const minBackGap = 16;
+    const availableContentBottom = canvas.height - backBtnH - minBackGap - 18;
+    const availableContentHeight = Math.max(180, availableContentBottom - contentStartY);
+    const contentScale = Math.max(0.72, Math.min(1, availableContentHeight / rawContentHeight));
+
+    ctx.save();
+    ctx.translate(x0, contentStartY);
+    ctx.scale(contentScale, contentScale);
+
+    let contentY = 0;
     for (const sec of sections) {
       ctx.textAlign = 'left';
       ctx.fillStyle = GOLD;
       ctx.font      = 'bold 14px monospace';
-      ctx.fillText(sec.heading.toUpperCase(), x0, y); y += 18;
+      ctx.fillText(sec.heading.toUpperCase(), 0, contentY); contentY += 18;
 
       ctx.fillStyle = WHITE;
       ctx.font      = '13px monospace';
       for (const line of sec.lines) {
-        ctx.fillText('  ' + line, x0, y); y += 17;
+        ctx.fillText('  ' + line, 0, contentY); contentY += 17;
       }
-      y += 8;
+      contentY += 8;
     }
+    ctx.restore();
+
+    y = contentStartY + rawContentHeight * contentScale;
 
     // Back button
     const backBtn: MenuButton = {
-      x: cx - 80, y: Math.max(y + 10, canvas.height - 70),
+      x: cx - 80, y: Math.max(y + 8, canvas.height - 62),
       w: 160, h: 38, label: t('back'), action: 'back_title',
     };
     buttons = [backBtn];

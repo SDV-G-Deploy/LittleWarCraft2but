@@ -150,7 +150,18 @@ function drawOpeningChoiceOverlay(
   if (selectedPlan || ticksLeft < 0) return;
 
   const overlayW = Math.min(700, viewW - 24);
-  const overlayH = 124;
+  const compact = overlayW < 560;
+  const veryNarrow = overlayW < 400;
+  const gap = compact ? 8 : 12;
+  const columns = veryNarrow ? 1 : (compact ? 2 : 3);
+  const buttonH = veryNarrow ? 34 : (compact ? 38 : 42);
+  const buttonAreaW = overlayW - 32;
+  const buttonW = columns === 1
+    ? buttonAreaW
+    : Math.floor((buttonAreaW - gap * (columns - 1)) / columns);
+  const rows = Math.ceil(3 / columns);
+  const headerPad = compact ? 76 : 60;
+  const overlayH = headerPad + rows * buttonH + (rows - 1) * gap + 16;
   const x = Math.floor((viewW - overlayW) / 2);
   const y = 12;
   const pulse = 0.5 + 0.5 * Math.sin(state.tick * 0.28);
@@ -171,7 +182,7 @@ function drawOpeningChoiceOverlay(
   }
 
   ctx.fillStyle = '#f5fbff';
-  ctx.font = 'bold 18px monospace';
+  ctx.font = compact ? 'bold 16px monospace' : 'bold 18px monospace';
   ctx.textAlign = 'left';
   ctx.fillText(t('choose_opening', { seconds: Math.ceil(ticksLeft / SIM_HZ) }), x + 16, y + 24);
   ctx.fillStyle = 'rgba(255,255,255,0.78)';
@@ -179,23 +190,29 @@ function drawOpeningChoiceOverlay(
   ctx.fillText(t('opening_pick_once'), x + 16, y + 44);
   ctx.fillStyle = 'rgba(255,230,140,0.92)';
   ctx.font = 'bold 12px monospace';
-  ctx.fillText(t('opening_choice_banner'), x + overlayW - 220, y + 24);
+  if (compact) {
+    ctx.fillText(t('opening_choice_banner'), x + 16, y + 60);
+  } else {
+    ctx.fillText(t('opening_choice_banner'), x + overlayW - 220, y + 24);
+  }
 
-  const btnY = y + 60;
+  const btnY = y + headerPad;
   const labels = [
     { label: getOpeningPlanPresentation('eco').buttonLabel, action: 'plan:eco' },
     { label: getOpeningPlanPresentation('tempo').buttonLabel, action: 'plan:tempo' },
     { label: getOpeningPlanPresentation('pressure').buttonLabel, action: 'plan:pressure' },
   ];
-  const buttonW = 180;
-  const buttonH = 42;
-  const gap = 12;
-  const totalW = labels.length * buttonW + (labels.length - 1) * gap;
-  let bx = x + Math.floor((overlayW - totalW) / 2);
-  for (const item of labels) {
-    drawButton(ctx, bx, btnY, buttonW, buttonH, item.label, true, false, introPulse ? pulse : 0);
-    buttons.push({ x: bx, y: btnY, w: buttonW, h: buttonH, label: item.label, action: item.action });
-    bx += buttonW + gap;
+  for (let i = 0; i < labels.length; i++) {
+    const row = Math.floor(i / columns);
+    const col = i % columns;
+    const rowCount = row === rows - 1 ? labels.length - row * columns : columns;
+    const rowTotalW = rowCount * buttonW + (rowCount - 1) * gap;
+    const rowStartX = x + Math.floor((overlayW - rowTotalW) / 2);
+    const bx = rowStartX + col * (buttonW + gap);
+    const by = btnY + row * (buttonH + gap);
+    const item = labels[i];
+    drawButton(ctx, bx, by, buttonW, buttonH, item.label, true, false, introPulse ? pulse : 0);
+    buttons.push({ x: bx, y: by, w: buttonW, h: buttonH, label: item.label, action: item.action });
   }
 }
 
