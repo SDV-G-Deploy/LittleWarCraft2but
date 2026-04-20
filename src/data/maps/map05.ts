@@ -33,8 +33,12 @@ export function buildMap05(): MapData {
   fill(map, 28, 18, 2, 6, R);
   fill(map, 34, 40, 2, 6, R);
 
-  map[23][31] = P();
-  map[40][32] = P();
+  map[26][31] = P();
+  map[37][32] = P();
+
+  // Slightly widen one staggered lane opening on each wall to strengthen route-choice variety.
+  fill(map, 20, 30, 6, 3, G);
+  fill(map, 38, 20, 6, 3, G);
 
   // Side brush around starts.
   fill(map, 7, 14, 6, 5, T);
@@ -57,8 +61,8 @@ export function buildMap05(): MapData {
       { x: 54, y: 40 },
       { x: 31, y: 31 },
     ],
-    goldMineReserves: [1500, 1500, 1500, 1500, 2300],
+    goldMineReserves: [1600, 1450, 1600, 1450, 2300],
     name: 'Timber Lanes',
-    description: 'Tree walls split the map into staged corridors.\nWatch posts and rock blockers reward lane control.',
+    description: 'Tree walls split the map into staged corridors.\nLane choices, watch posts, and center value reward control.',
   };
 }

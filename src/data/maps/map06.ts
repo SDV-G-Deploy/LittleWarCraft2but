@@ -37,8 +37,8 @@ export function buildMap06(): MapData {
   fill(map, 8, 28, 5, 8, T);
   fill(map, 51, 28, 5, 8, T);
 
-  map[26][32] = P();
-  map[37][31] = P();
+  map[27][31] = P();
+  map[36][32] = P();
 
   fill(map, 12, 12, 2, 2, M);
   fill(map, 50, 50, 2, 2, M);
@@ -59,8 +59,8 @@ export function buildMap06(): MapData {
       { x: 31, y: 31 },
       { x: 28, y: 31 },
     ],
-    goldMineReserves: [1500, 1500, 1500, 1500, 2400, 2400],
+    goldMineReserves: [1600, 1600, 1400, 1400, 2400, 2400],
     name: 'Crown Pit',
-    description: 'Rich center ring creates a hard contest point.\nWatch posts and rocks shape pit entries and control.',
+    description: 'Rich center ring creates a hard contest point.\nWatch posts, entries, and mine risk shape pit control.',
   };
 }

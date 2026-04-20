@@ -43,6 +43,10 @@ export function buildMap01(): MapData {
   fill(map, 26, 22, 3, 20, T);
   fill(map, 29, 26, 5,  3, T);
   fill(map, 34, 30, 3,  8, T);
+
+  // Small route asymmetry around the central forest spine: a tighter direct lane and a wider flank.
+  fill(map, 29, 34, 2, 4, G);
+  fill(map, 33, 24, 4, 3, G);
   fill(map,  5, 38, 4, 5, T);
   fill(map, 15, 44, 5, 4, T);
   fill(map,  9, 52, 3, 5, T);
@@ -70,6 +74,6 @@ export function buildMap01(): MapData {
     ],
     goldMineReserves: [1500, 1500, 2200, 1500, 1500],
     name:        'Verdant Hills',
-    description: 'Dense forests create a natural\nchokepoint in the center.',
+    description: 'Dense forests create a natural\ncenter choke plus wider flank routes.',
   };
 }

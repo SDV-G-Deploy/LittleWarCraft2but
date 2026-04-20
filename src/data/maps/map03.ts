@@ -31,8 +31,12 @@ export function buildMap03(): MapData {
   fill(map, 22, 24, 2, 2, R);
   fill(map, 40, 38, 2, 2, R);
 
-  map[27][31] = P();
-  map[35][32] = P();
+  map[29][29] = P();
+  map[33][34] = P();
+
+  // Add gentle route structure so center remains open but not tactically flat.
+  fill(map, 28, 20, 2, 5, T);
+  fill(map, 34, 39, 2, 5, T);
 
   fill(map, 12, 44, 2, 2, M);
   fill(map, 18, 50, 2, 2, M);
@@ -51,8 +55,8 @@ export function buildMap03(): MapData {
       { x: 44, y: 18 },
       { x: 31, y: 31 },
     ],
-    goldMineReserves: [1500, 1500, 1500, 1500, 2300],
+    goldMineReserves: [1700, 1400, 1700, 1400, 2300],
     name: 'Open Steppe',
-    description: 'Wide open lanes force early scouting and pressure.\nWatch posts and center mine reward active map control.',
+    description: 'Open lanes still reward scouting, but watch posts and mine risk now sharpen center control.',
   };
 }

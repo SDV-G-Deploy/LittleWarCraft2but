@@ -77,6 +77,10 @@ export function buildMap02(): MapData {
   fill(map,  6, 31, 2, 2, M);   // west ford mine, pulled off the border so both sides can actually mine it
   fill(map, 56, 31, 2, 2, M);   // east ford mine, mirrored inward for reachable contested access
 
+  // Flank grass shelves behind the fords create a longer but safer wrap route.
+  fill(map, 2, 23, 6, 4, G);
+  fill(map, 56, 37, 6, 4, G);
+
   return {
     tiles:       map,
     playerStart: { x: 28, y: 8  },
@@ -89,8 +93,8 @@ export function buildMap02(): MapData {
       { x:  6, y: 31 },
       { x: 56, y: 31 },
     ],
-    goldMineReserves: [1500, 1500, 1500, 1500, 2200, 2200],
+    goldMineReserves: [1700, 1400, 1700, 1400, 2200, 2200],
     name:        'River Crossing',
-    description: 'A wide river divides the map.\nTwo fords are the only way through.',
+    description: 'A wide river divides the map.\nFords, flank shelves, and rich side mines shape crossings.',
   };
 }
