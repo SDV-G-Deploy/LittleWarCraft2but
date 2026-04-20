@@ -85,8 +85,16 @@ export function processGather(state: GameState, entity: Entity): void {
   const cmd = entity.cmd;
   const ec  = entity as EntityWithCache;
 
+  const clearGatherState = () => {
+    ec._gatherPath = undefined;
+  };
+
   const mine = getEntity(state, cmd.mineId);
-  if (!mine || (mine.goldReserve ?? 0) <= 0) { entity.cmd = null; return; }
+  if (!mine || (mine.goldReserve ?? 0) <= 0) {
+    clearGatherState();
+    entity.cmd = null;
+    return;
+  }
 
   const tps = ticksPerStep(entity.kind);
 
@@ -96,7 +104,11 @@ export function processGather(state: GameState, entity: Entity): void {
         // target tile just above the mine
         const raw = findPath(state, entity.pos.x, entity.pos.y,
           mine.pos.x, mine.pos.y - 1);
-        if (raw === null) { entity.cmd = null; return; } // truly unreachable — give up
+        if (raw === null) {
+          clearGatherState();
+          entity.cmd = null;
+          return;
+        } // truly unreachable — give up
         ec._gatherPath = raw;
       }
       if (ec._gatherPath.length === 0) {
@@ -125,7 +137,11 @@ export function processGather(state: GameState, entity: Entity): void {
     }
     case 'returning': {
       const th = nearestTownHall(state, entity.owner as 0 | 1, entity.pos.x, entity.pos.y);
-      if (!th) { entity.cmd = null; return; }
+      if (!th) {
+        clearGatherState();
+        entity.cmd = null;
+        return;
+      }
       if (ec._gatherPath === undefined) {
         const dropX = th.pos.x + Math.floor(th.tileW / 2);
         const dropY = th.pos.y + th.tileH;

@@ -420,12 +420,13 @@ function drawCombatVisuals(
   myOwner: 0 | 1,
 ): void {
   const attackEvents = state.recentAttackEvents ?? [];
+  const entityById = state.entityById;
   for (const ev of attackEvents) {
     const age = state.tick - ev.tick;
     if (age < 0 || age > 8) continue;
 
-    const attacker = state.entities.find(e => e.id === ev.attackerId);
-    const target = state.entities.find(e => e.id === ev.targetId);
+    const attacker = entityById?.get(ev.attackerId) ?? state.entities.find(e => e.id === ev.attackerId);
+    const target = entityById?.get(ev.targetId) ?? state.entities.find(e => e.id === ev.targetId);
 
     if (attacker && entityVisible(state, attacker, myOwner)) {
       const { sx, sy } = worldToScreen(attacker.pos.x * TILE_SIZE, attacker.pos.y * TILE_SIZE, cam);

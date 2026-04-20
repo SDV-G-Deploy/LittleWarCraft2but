@@ -100,10 +100,10 @@ export function startGame(
       if (cmd.ids.length === 1) pushMarker('moveExact', cmd.tx, cmd.ty);
     }
     else if (cmd.k === 'attack') {
-      const target = state.entities.find(e => e.id === cmd.targetId);
+      const target = state.entityById?.get(cmd.targetId) ?? state.entities.find(e => e.id === cmd.targetId);
       if (target) pushMarker('attack', target.pos.x + Math.floor(target.tileW / 2), target.pos.y + Math.floor(target.tileH / 2));
     } else if (cmd.k === 'gather') {
-      const mine = state.entities.find(e => e.id === cmd.mineId);
+      const mine = state.entityById?.get(cmd.mineId) ?? state.entities.find(e => e.id === cmd.mineId);
       if (mine) pushMarker('gather', mine.pos.x, mine.pos.y);
     } else if (cmd.k === 'build') pushMarker('build', cmd.tx, cmd.ty);
     else if (cmd.k === 'rally') pushMarker('rally', cmd.tx, cmd.ty);

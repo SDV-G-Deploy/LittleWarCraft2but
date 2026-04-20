@@ -124,14 +124,30 @@ export function processAttack(state: GameState, entity: Entity): void {
   if (!entity.cmd || entity.cmd.type !== 'attack') return;
   const cmd = entity.cmd;
 
+  const clearAttackState = () => {
+    cmd.chasePath = [];
+  };
+
   const target = getEntity(state, cmd.targetId);
-  if (!target) { entity.cmd = null; return; }
+  if (!target) {
+    clearAttackState();
+    entity.cmd = null;
+    return;
+  }
 
   const isStaticAttacker = getResolvedSpeed(entity.kind, state.races[entity.owner]) === 0;
-  if (isStaticAttacker && !isUnitKind(target.kind)) { entity.cmd = null; return; }
+  if (isStaticAttacker && !isUnitKind(target.kind)) {
+    clearAttackState();
+    entity.cmd = null;
+    return;
+  }
 
   // Ranged units (archer, troll) only fight mobile units — not buildings or walls
-  if (isRangedUnit(entity.kind) && !isUnitKind(target.kind)) { entity.cmd = null; return; }
+  if (isRangedUnit(entity.kind) && !isUnitKind(target.kind)) {
+    clearAttackState();
+    entity.cmd = null;
+    return;
+  }
 
   const range  = getResolvedRange(entity.kind, state.races[entity.owner]);
   const dist   = distToEntity(entity.pos.x, entity.pos.y, target);
@@ -154,10 +170,12 @@ export function processAttack(state: GameState, entity: Entity): void {
     if (target.hp <= 0) {
       state.corpses.push({ pos: { ...target.pos }, owner: target.owner, deadTick: state.tick });
       killEntity(state, target.id);
+      clearAttackState();
       entity.cmd = null;
     }
   } else {
     if (isStaticAttacker) {
+      clearAttackState();
       entity.cmd = null;
       return;
     }
