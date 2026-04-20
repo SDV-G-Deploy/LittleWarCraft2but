@@ -27,6 +27,11 @@ export interface AIController {
   workerTarget: number;
   openingPlan: 'eco' | 'tempo' | 'pressure';
   openingChoiceDelayTicks: number;
+  preferredRangedRatio: number;
+  preferredHeavyCap: number;
+  assaultRetargetMine: boolean;
+  towerMinArmy: number;
+  fallbackWaveThreshold: number;
 }
 
 export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
@@ -42,6 +47,11 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       workerTarget: 3,
       openingPlan: 'eco',
       openingChoiceDelayTicks: Math.round(SIM_HZ * 8),
+      preferredRangedRatio: 0.25,
+      preferredHeavyCap: 1,
+      assaultRetargetMine: false,
+      towerMinArmy: 6,
+      fallbackWaveThreshold: 2,
     };
   }
   if (difficulty === 'hard') {
@@ -56,6 +66,11 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       workerTarget: 5,
       openingPlan: 'pressure',
       openingChoiceDelayTicks: Math.round(SIM_HZ * 4),
+      preferredRangedRatio: 0.6,
+      preferredHeavyCap: 3,
+      assaultRetargetMine: true,
+      towerMinArmy: 4,
+      fallbackWaveThreshold: 4,
     };
   }
   return {
@@ -69,6 +84,11 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
     workerTarget: 4,
     openingPlan: 'tempo',
     openingChoiceDelayTicks: Math.round(SIM_HZ * 6),
+    preferredRangedRatio: 0.45,
+    preferredHeavyCap: 2,
+    assaultRetargetMine: true,
+    towerMinArmy: 5,
+    fallbackWaveThreshold: 3,
   };
 }
 
@@ -140,9 +160,10 @@ export function tickAI(state: GameState, ai: AIController): void {
         const soldierCount = mySoldiers.filter(u => u.kind === rc.soldier).length;
         const rangedCount  = mySoldiers.filter(u => u.kind === rc.ranged).length;
         const heavyCount   = mySoldiers.filter(u => u.kind === rc.heavy).length;
-        const wantHeavy    = heavyCount < 2 && soldierCount >= 2 &&
+        const targetRangedCount = Math.max(1, Math.floor((soldierCount + heavyCount) * ai.preferredRangedRatio));
+        const wantHeavy    = heavyCount < ai.preferredHeavyCap && soldierCount >= (ai.difficulty === 'hard' ? 2 : 3) &&
                              state.gold[1] >= getResolvedCost(rc.heavy, state.races[1]);
-        const wantRanged   = !wantHeavy && rangedCount < Math.floor((soldierCount + heavyCount) / 2) &&
+        const wantRanged   = !wantHeavy && rangedCount < targetRangedCount &&
                              state.gold[1] >= getResolvedCost(rc.ranged, state.races[1]);
         const nextUnit = wantHeavy ? rc.heavy : wantRanged ? rc.ranged : rc.soldier;
         const barracksBusy = myBarracks.cmd?.type === 'train';
@@ -155,7 +176,7 @@ export function tickAI(state: GameState, ai: AIController): void {
           if (pos) issueBuildCommand(state, w, 'farm', pos, state.tick);
         }
       }
-      if (!buildingTower && towerCount < ai.maxTowers && myBarracks && mySoldiers.length >= (ai.difficulty === 'easy' ? 5 : 4) && state.gold[1] >= getResolvedCost('tower', state.races[1])) {
+      if (!buildingTower && towerCount < ai.maxTowers && myBarracks && mySoldiers.length >= ai.towerMinArmy && state.gold[1] >= getResolvedCost('tower', state.races[1])) {
         const w = freeWorker(myWorkers);
         if (w) {
           const pos = findBuildSpot(state, myTH, 'tower');
@@ -182,7 +203,7 @@ export function tickAI(state: GameState, ai: AIController): void {
 
         if (nearest) {
           issueAttackCommand(s, nearest.id, state.tick);
-        } else if (ai.difficulty !== 'easy' && contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > (ai.difficulty === 'hard' ? 4 : 6)) {
+        } else if (ai.assaultRetargetMine && contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > (ai.difficulty === 'hard' ? 4 : 6)) {
           const tx = contestedMine.pos.x;
           const ty = contestedMine.pos.y - 1;
           if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
@@ -193,7 +214,7 @@ export function tickAI(state: GameState, ai: AIController): void {
         }
       }
 
-      if (mySoldiers.length === 0) {
+      if (mySoldiers.length <= ai.fallbackWaveThreshold) {
         const growth = ai.difficulty === 'easy' ? 1 : 2;
         const maxWave = ai.difficulty === 'hard' ? 11 : 12;
         ai.attackWaveSize = Math.min(maxWave, ai.attackWaveSize + growth);

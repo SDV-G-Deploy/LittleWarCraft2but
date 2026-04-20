@@ -296,15 +296,28 @@ Definition of done:
 ## Phase H. AI support pass
 Goal: let AI participate in the improved game without pretending AI is the main source of variety.
 
+Status:
+- baseline fairness pass done:
+  - removed offline extra-worker cheat
+  - removed early opening insta-lock advantage
+  - reduced production / worker-pull abuse patterns
+- difficulty split pass done:
+  - easy now leans softer macro / slower pressure
+  - medium now plays the most even tempo-pressure baseline
+  - hard now leans faster map-control pressure without hidden stat/resource cheats
+
 Focus ideas:
 - basic reaction to greed, pressure, and harassment
 - use expansions or defend them at a simple level
 - avoid obviously broken production loops
 - support solo testing of the now-richer match structure
+- keep difficulty differences primarily in behavior feel, not invisible bonuses
 
 Definition of done:
 - AI can exercise the main systems well enough for practice and solo play
 - AI does not need to be brilliant, it just should not collapse the intended gameplay shape
+- easy / medium / hard feel meaningfully different in live playtests
+- stronger difficulties should feel tougher mostly through timing, routing, and commitment choices, not cheating
 
 Suggested commit theme:
 - `ai: support branching gameplay and map pressure basics`
