@@ -44,6 +44,7 @@ Update it when a phase is completed, reframed, or split.
 - main stat read-paths migrated to the balance layer
 - human wall override moved out of ad-hoc sim logic into balance resolution
 - `npm run balance:report` added for quick matchup snapshots
+- `src/balance/tuning.ts` added as a quick manual override layer for live balance tests
 - performance hardening pass set 1 completed:
   - static blocked occupancy grid for non-unit blockers
   - deterministic A* heap
@@ -113,7 +114,8 @@ If a pass is only UI/local render, targeted review is not required every time.
 
 Infrastructure note:
 - the balance foundation is now good enough
-- avoid further balance-system plumbing unless a concrete gameplay iteration need appears
+- a simple manual tuning layer now exists in `src/balance/tuning.ts` for fast live-test balance edits
+- avoid deeper balance-system plumbing unless a concrete gameplay iteration need appears
 - next sessions should primarily spend energy on gameplay changes, playtests, and faction identity tuning
 
 Performance note:

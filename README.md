@@ -25,6 +25,7 @@ Recent completed passes:
 - opening definitions moved into `src/balance/openings.ts`
 - combat bonus rules moved into `src/balance/modifiers.ts`
 - balance report foundation added via `src/balance/report.ts` and `npm run balance:report`
+- quick manual balance tuning file added at `src/balance/tuning.ts`
 
 Current state:
 - build green
@@ -35,7 +36,7 @@ Current state:
 - PeerJS/TURN production wiring is aligned for `SERVER` mode manual tests
 - DIRECT fallback remains available for comparison/fallback checks
 - network safety is no longer the main design bottleneck
-- balance-system foundation is now in place and good enough for fast gameplay iteration
+- balance-system foundation is now in place and now includes a simple manual tuning layer for fast gameplay iteration
 - gameplay variety is back to being the main design focus
 - performance hardening pass set 1 landed:
   - static blocked occupancy grid for non-unit blockers
@@ -123,6 +124,26 @@ Practical reading:
 
 Related map rule:
 - during the early opening clash window, fights near contested mines hit harder, so early pressure and greedy mining collide more clearly
+
+## Quick balance tuning
+
+For fast live tests, edit:
+- `src/balance/tuning.ts`
+
+Current layering is:
+1. `src/balance/base.ts`
+2. `src/balance/races.ts`
+3. `src/balance/tuning.ts`
+
+Use `tuning.ts` for quick temporary overrides without touching the base faction definitions.
+Example:
+- `human.farm.supplyProvided = 5`
+- `human.footman.armor = 5`
+- `orc.grunt.cost.gold = 110`
+
+After changes:
+- run `npm run build`
+- test live on `w2.kislota.today`
 
 ## Useful commands
 

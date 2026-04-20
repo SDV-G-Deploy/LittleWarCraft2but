@@ -3,7 +3,7 @@ import type { SessionStats, SessionStatus } from '../net/session';
 import { SIM_HZ, TILE_SIZE, MAP_H, MAP_W, isUnitKind, isWorkerKind } from '../types';
 import { STATS } from '../data/units';
 import { RACES, ownerRace } from '../data/races';
-import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedTileSize } from '../balance/resolver';
+import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedSupplyProvided, getResolvedTileSize } from '../balance/resolver';
 import { getOpeningPlanLockTicks, getOpeningPlanPresentation } from '../balance/openings';
 import type { Camera } from './camera';
 import { isValidPlacement } from '../sim/economy';
@@ -493,11 +493,7 @@ function drawEntityInfo(
 
   // ── Food slots (farms / town halls) ────────────────────────────────────────
   if (e.kind === 'farm' || e.kind === 'townhall') {
-    const supplyProvided = e.kind === 'townhall'
-      ? 4
-      : state.races[e.owner] === 'human'
-        ? 5
-        : 4;
+    const supplyProvided = getResolvedSupplyProvided(e.kind, state.races[e.owner]);
     ctx.fillStyle = '#ffcc88';
     ctx.font = '11px monospace';
     ctx.fillText(`+${supplyProvided} food slots`, x, y); y += LINE;

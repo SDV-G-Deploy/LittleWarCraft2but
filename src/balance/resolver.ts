@@ -3,6 +3,7 @@ import { SIM_HZ } from '../types';
 import { BASE_ENTITY_BLUEPRINTS } from './base';
 import { RACE_BALANCE_PROFILES } from './races';
 import type { EntityBalanceStats, EntityBlueprint, RaceBalanceProfile, ResolvedEntityStats } from './schema';
+import { BALANCE_TUNING } from './tuning';
 
 function mergeEntityStats(base: EntityBlueprint, override?: Partial<EntityBalanceStats> & { cost?: { gold?: number } }): EntityBalanceStats {
   return {
@@ -33,7 +34,15 @@ export function resolveEntityBlueprint(kind: EntityKind, race?: Race | null): En
   if (!race) return base;
 
   const profile = resolveRaceProfile(race);
-  const mergedStats = mergeEntityStats(base, profile.entityOverrides[kind]);
+  const raceOverride = profile.entityOverrides[kind];
+  const tuningOverride = BALANCE_TUNING.races?.[race]?.[kind];
+  const mergedStats = mergeEntityStats(
+    {
+      ...base,
+      ...mergeEntityStats(base, raceOverride),
+    },
+    tuningOverride,
+  );
   return {
     ...base,
     ...mergedStats,
