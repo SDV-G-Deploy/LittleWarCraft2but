@@ -189,7 +189,7 @@ type WireMessage =
 
 const VALID_RACES = new Set<Race>(['human', 'orc']);
 const VALID_MAP_IDS = new Set<MapId>([1, 2, 3, 4, 5, 6]);
-const VALID_BUILDINGS = new Set<EntityKind>(['townhall', 'barracks', 'farm', 'wall']);
+const VALID_BUILDINGS = new Set<EntityKind>(['townhall', 'barracks', 'farm', 'wall', 'tower']);
 const VALID_TRAIN_UNITS = new Set<EntityKind>(['worker', 'footman', 'archer', 'knight', 'peon', 'grunt', 'troll', 'ogreFighter']);
 
 const MAX_PACKET_BYTES = 16 * 1024;
@@ -282,6 +282,7 @@ export async function createSession(
   let localBuf: NetCmd[] = [];
   const localQueue = new Map<number, NetCmd[]>();
   const remoteQueue = new Map<number, NetCmd[]>();
+  const remoteReceivedTicks = new Set<number>();
 
   let queuedRemoteCmdCount = 0;
   let queuedLocalCmdCount = 0;
@@ -310,6 +311,9 @@ export async function createSession(
 
   function dropStaleRemoteTicks(currentTick: number): void {
     const oldestAllowedTick = currentTick - REMOTE_STALE_TICK_LIMIT;
+    for (const queuedTick of remoteReceivedTicks) {
+      if (queuedTick < oldestAllowedTick) remoteReceivedTicks.delete(queuedTick);
+    }
     for (const [queuedTick, cmds] of remoteQueue) {
       if (queuedTick < oldestAllowedTick) {
         queuedRemoteCmdCount -= cmds.length;
@@ -330,14 +334,15 @@ export async function createSession(
 
   function enqueueRemotePacket(pkt: TickPacket): void {
     remoteAnnouncedUpToTick = Math.max(remoteAnnouncedUpToTick, pkt.tick);
+    remoteReceivedTicks.add(pkt.tick);
+
+    if (pkt.cmds.length === 0) return;
 
     const prev = remoteQueue.get(pkt.tick);
     if (prev) {
       queuedRemoteCmdCount -= prev.length;
       remoteQueue.delete(pkt.tick);
     }
-
-    if (pkt.cmds.length === 0) return;
 
     remoteQueue.set(pkt.tick, [...pkt.cmds]);
     queuedRemoteCmdCount += pkt.cmds.length;
@@ -395,7 +400,7 @@ export async function createSession(
       dropStaleRemoteTicks(tick);
       dropStaleLocalTicks(tick);
 
-      if (remoteAnnouncedUpToTick < tick) {
+      if (remoteAnnouncedUpToTick < tick || !remoteReceivedTicks.has(tick)) {
         waitingStallTicks++;
         if (waitingStallTicks > MAX_WAITING_STALL_TICKS) {
           failConnection('Connection closed: lockstep timeout waiting for peer');
