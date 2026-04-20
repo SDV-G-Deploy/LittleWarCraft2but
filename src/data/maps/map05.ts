@@ -64,6 +64,10 @@ export function buildMap05(): MapData {
       { x: 31, y: 31 },
     ],
     goldMineReserves: [1600, 1450, 1600, 1450, 2300],
+    blockers: [
+      { x: 26, y: 22, tileW: 2, tileH: 1 },
+      { x: 36, y: 40, tileW: 2, tileH: 1 },
+    ],
     name: 'Timber Lanes',
     description: 'Tree walls split the map into staged corridors.\nLane choices, watch posts, and center value reward control.',
   };

@@ -36,6 +36,7 @@ export interface SpriteCache {
   pigsty:    [HTMLCanvasElement, HTMLCanvasElement];
   watchtower:[HTMLCanvasElement, HTMLCanvasElement];
   // Neutral
+  barrier:  HTMLCanvasElement;
   goldmine: HTMLCanvasElement;
   // FX
   corpse:   HTMLCanvasElement;
@@ -905,6 +906,28 @@ function makeTower(T: number, owner: 0 | 1, orc: boolean): HTMLCanvasElement {
   return c;
 }
 
+function makeBarrier(T: number): HTMLCanvasElement {
+  const W = T * 2; const H = T;
+  const [c, ctx] = oc(W, H);
+
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(0, 5, W, H - 5);
+  ctx.fillStyle = WD_M;
+  for (let x = 1; x < W - 1; x += 8) {
+    ctx.fillRect(x, 3, 6, H - 5);
+    ctx.fillStyle = WD_L;
+    ctx.fillRect(x, 3, 1, H - 5);
+    ctx.fillStyle = WD_M;
+  }
+
+  ctx.fillStyle = MT_D;
+  ctx.fillRect(0, H - 5, W, 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(W - 2, 0, 2, H);
+
+  return c;
+}
+
 function makeGoldmine(T: number): HTMLCanvasElement {
   const W = T * 2; const H = T * 2;
   const [c, ctx] = oc(W, H);
@@ -1630,6 +1653,7 @@ export function buildSpriteCache(T: number): SpriteCache {
     pigsty:    [makePigsty(T, 0),    makePigsty(T, 1)],
     watchtower:[makeTower(T, 0, true), makeTower(T, 1, true)],
     // Neutral
+    barrier:  makeBarrier(T),
     goldmine: makeGoldmine(T),
     // FX
     corpse:   makeCorpse(T),

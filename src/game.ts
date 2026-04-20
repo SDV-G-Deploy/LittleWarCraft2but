@@ -163,6 +163,13 @@ export function startGame(
     mine.goldReserve = mapData.goldMineReserves?.[index] ?? MINE_GOLD_INITIAL;
   }
 
+  // ── Spawn neutral destructible blockers ───────────────────────────────────
+  for (const blocker of mapData.blockers ?? []) {
+    const entity = spawnEntity(state, 'barrier', 0, { x: blocker.x, y: blocker.y });
+    entity.tileW = blocker.tileW ?? entity.tileW;
+    entity.tileH = blocker.tileH ?? entity.tileH;
+  }
+
   // ── Spawn AI / guest base ─────────────────────────────────────────────────
   const as_ = mapData.aiStart;
   spawnEntity(state, 'townhall',    1, as_);

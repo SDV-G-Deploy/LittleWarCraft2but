@@ -31,8 +31,16 @@ export interface MapData {
   aiStart:     Vec2;
   goldMines:   Vec2[];   // top-left tile of each 2×2 mine
   goldMineReserves?: number[]; // optional per-mine reserves aligned with goldMines
+  blockers?: BlockerPlacement[];
   name:        string;
   description: string;
+}
+
+export interface BlockerPlacement {
+  x: number;
+  y: number;
+  tileW?: number;
+  tileH?: number;
 }
 
 // ─── Geometry ─────────────────────────────────────────────────────────────────
@@ -55,6 +63,7 @@ export type EntityKind =
   | 'worker'  | 'footman' | 'archer' | 'knight'         // human units
   | 'peon'    | 'grunt'   | 'troll'  | 'ogreFighter'    // orc units
   | 'townhall' | 'barracks' | 'farm' | 'wall' | 'tower' // shared buildings (sprite varies by race)
+  | 'barrier'                                            // neutral destructible route blocker
   | 'goldmine'                                           // resource node
   | 'construction';                                      // building-in-progress scaffold
 
