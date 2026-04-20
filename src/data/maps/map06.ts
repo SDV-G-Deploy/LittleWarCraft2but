@@ -38,14 +38,14 @@ export function buildMap06(): MapData {
   fill(map, 51, 28, 5, 8, T);
 
   map[27][31] = P();
-  map[36][32] = P();
+  map[29][29] = P();
 
   fill(map, 12, 12, 2, 2, M);
   fill(map, 50, 50, 2, 2, M);
   fill(map, 12, 50, 2, 2, M);
   fill(map, 50, 12, 2, 2, M);
   fill(map, 31, 31, 2, 2, M);
-  fill(map, 28, 31, 2, 2, M);
+  fill(map, 26, 31, 2, 2, M);
 
   return {
     tiles: map,
@@ -57,7 +57,7 @@ export function buildMap06(): MapData {
       { x: 12, y: 50 },
       { x: 50, y: 12 },
       { x: 31, y: 31 },
-      { x: 28, y: 31 },
+      { x: 26, y: 31 },
     ],
     goldMineReserves: [1600, 1600, 1400, 1400, 2400, 2400],
     name: 'Crown Pit',

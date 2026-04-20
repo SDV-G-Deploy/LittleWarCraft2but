@@ -37,8 +37,9 @@ export function buildMap05(): MapData {
   map[37][32] = P();
 
   // Slightly widen one staggered lane opening on each wall to strengthen route-choice variety.
+  // Keep this pair rotation-mirrored so neither spawn gets a cleaner center-to-side pivot.
   fill(map, 20, 30, 6, 3, G);
-  fill(map, 38, 20, 6, 3, G);
+  fill(map, 38, 31, 6, 3, G);
 
   // Side brush around starts.
   fill(map, 7, 14, 6, 5, T);
@@ -46,8 +47,8 @@ export function buildMap05(): MapData {
 
   fill(map, 8, 26, 2, 2, M);
   fill(map, 8, 38, 2, 2, M);
-  fill(map, 54, 24, 2, 2, M);
-  fill(map, 54, 40, 2, 2, M);
+  fill(map, 54, 25, 2, 2, M);
+  fill(map, 54, 37, 2, 2, M);
   fill(map, 31, 31, 2, 2, M);
 
   return {
@@ -57,8 +58,8 @@ export function buildMap05(): MapData {
     goldMines: [
       { x: 8, y: 26 },
       { x: 8, y: 38 },
-      { x: 54, y: 24 },
-      { x: 54, y: 40 },
+      { x: 54, y: 25 },
+      { x: 54, y: 37 },
       { x: 31, y: 31 },
     ],
     goldMineReserves: [1600, 1450, 1600, 1450, 2300],
