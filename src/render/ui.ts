@@ -583,6 +583,8 @@ function drawEntityInfo(
     ctx.fillStyle = '#ffe97a';
     ctx.font = 'bold 12px monospace';
     ctx.fillText(`${state.gold[myOwner]}g`, x + 90, y);
+    ctx.fillStyle = '#8fdc6d';
+    ctx.fillText(`${state.wood[myOwner]}w`, x + 140, y);
     y += LINE;
 
     if (popFull || popNearFull) {
@@ -773,20 +775,20 @@ function collectButtons(
 
   // ── Production buildings ────────────────────────────────────────────────────
   if (e.kind === 'townhall') {
-    const workerCost = resolveEntityStatsForOwner(rc.worker, state.races, myOwner).cost.gold;
-    const barracksCost = getResolvedCost('barracks');
+    const workerCost = resolveEntityStatsForOwner(rc.worker, state.races, myOwner).cost;
+    const barracksCost = getResolvedCost('barracks', state.races[myOwner]);
     const workerBusy = e.cmd?.type === 'train';
     const selectedPlan = getSelectedOpeningPlan(state, myOwner);
-    addButton(`${translateDisplayLabel(rc.workerLabel)} [V]\n[${workerCost}g]`, `train:${rc.worker}`,
-      state.gold[myOwner] < workerCost);
-    if (!workerBusy && state.gold[myOwner] >= workerCost) {
+    addButton(`${translateDisplayLabel(rc.workerLabel)} [V]\n[${workerCost.gold}g${workerCost.wood ? ` ${workerCost.wood}w` : ''}]`, `train:${rc.worker}`,
+      state.gold[myOwner] < workerCost.gold || state.wood[myOwner] < workerCost.wood);
+    if (!workerBusy && state.gold[myOwner] >= workerCost.gold && state.wood[myOwner] >= workerCost.wood) {
       addButton(t('worker_spike'), `train:${rc.worker}`);
     }
   }
   if (e.kind === 'barracks') {
-    const soldierCost = resolveEntityStatsForOwner(rc.soldier, state.races, myOwner).cost.gold;
-    const rangedCost  = resolveEntityStatsForOwner(rc.ranged, state.races, myOwner).cost.gold;
-    const heavyCost   = resolveEntityStatsForOwner(rc.heavy, state.races, myOwner).cost.gold;
+    const soldierCost = resolveEntityStatsForOwner(rc.soldier, state.races, myOwner).cost;
+    const rangedCost  = resolveEntityStatsForOwner(rc.ranged, state.races, myOwner).cost;
+    const heavyCost   = resolveEntityStatsForOwner(rc.heavy, state.races, myOwner).cost;
     const myUnits = state.entities.filter(en => en.owner === myOwner && isUnitKind(en.kind));
     const soldierCount = myUnits.filter(en => en.kind === rc.soldier).length;
     const rangedCount = myUnits.filter(en => en.kind === rc.ranged).length;
@@ -801,19 +803,19 @@ function collectButtons(
     const wantsRanged = rangedCount + queuedRanged < Math.max(1, Math.floor((frontlineMass + anchorCount) / 2));
     const wantsHeavy = anchorCount < 2 && frontlineMass >= 2;
 
-    addButton(`${translateDisplayLabel(rc.soldierLabel)} [T]\n[${soldierCost}g]`, `train:${rc.soldier}`,
-      state.gold[myOwner] < soldierCost);
-    addButton(`${translateDisplayLabel(rc.rangedLabel)} [A]\n[${rangedCost}g]`, 'train_ranged',
-      state.gold[myOwner] < rangedCost);
-    addButton(`${translateDisplayLabel(rc.heavyLabel)} [H]\n[${heavyCost}g]`, `train:${rc.heavy}`,
-      state.gold[myOwner] < heavyCost);
-    if (state.gold[myOwner] >= soldierCost && wantsFrontline) {
+    addButton(`${translateDisplayLabel(rc.soldierLabel)} [T]\n[${soldierCost.gold}g${soldierCost.wood ? ` ${soldierCost.wood}w` : ''}]`, `train:${rc.soldier}`,
+      state.gold[myOwner] < soldierCost.gold || state.wood[myOwner] < soldierCost.wood);
+    addButton(`${translateDisplayLabel(rc.rangedLabel)} [A]\n[${rangedCost.gold}g${rangedCost.wood ? ` ${rangedCost.wood}w` : ''}]`, 'train_ranged',
+      state.gold[myOwner] < rangedCost.gold || state.wood[myOwner] < rangedCost.wood);
+    addButton(`${translateDisplayLabel(rc.heavyLabel)} [H]\n[${heavyCost.gold}g${heavyCost.wood ? ` ${heavyCost.wood}w` : ''}]`, `train:${rc.heavy}`,
+      state.gold[myOwner] < heavyCost.gold || state.wood[myOwner] < heavyCost.wood);
+    if (state.gold[myOwner] >= soldierCost.gold && state.wood[myOwner] >= soldierCost.wood && wantsFrontline) {
       addButton(t('frontline_add'), `train:${rc.soldier}`);
     }
-    if (state.gold[myOwner] >= rangedCost && wantsRanged) {
+    if (state.gold[myOwner] >= rangedCost.gold && state.wood[myOwner] >= rangedCost.wood && wantsRanged) {
       addButton(t('backline_add'), `train:${rc.ranged}`);
     }
-    if (state.gold[myOwner] >= heavyCost && wantsHeavy) {
+    if (state.gold[myOwner] >= heavyCost.gold && state.wood[myOwner] >= heavyCost.wood && wantsHeavy) {
       addButton(t('anchor_add'), `train:${rc.heavy}`);
     }
   }
@@ -827,11 +829,11 @@ function collectButtons(
     const hasBarracks = state.entities.some(en => en.owner === myOwner && en.kind === 'barracks');
     const barrLabel = translateDisplayLabel(rc.barrLabel);
     const farmLabel = translateDisplayLabel(rc.farmLabel);
-    addButton(`${barrLabel} [B]\n[${barrCost}g]`, 'build:barracks', state.gold[myOwner] < barrCost);
-    addButton(`${farmLabel} [F]\n[${farmCost}g]`, 'build:farm',     state.gold[myOwner] < farmCost);
-    addButton(`${translateDisplayLabel(rc.towerLabel)} [G]\n[${towerCost}g]`, 'build:tower', state.gold[myOwner] < towerCost || !hasBarracks);
-    addButton(`${t('wall')} [W]\n[${wallCost}g]`,  'build:wall',     state.gold[myOwner] < wallCost);
-    if (state.gold[myOwner] >= wallCost) {
+    addButton(`${barrLabel} [B]\n[${barrCost.gold}g${barrCost.wood ? ` ${barrCost.wood}w` : ''}]`, 'build:barracks', state.gold[myOwner] < barrCost.gold || state.wood[myOwner] < barrCost.wood);
+    addButton(`${farmLabel} [F]\n[${farmCost.gold}g${farmCost.wood ? ` ${farmCost.wood}w` : ''}]`, 'build:farm',     state.gold[myOwner] < farmCost.gold || state.wood[myOwner] < farmCost.wood);
+    addButton(`${translateDisplayLabel(rc.towerLabel)} [G]\n[${towerCost.gold}g${towerCost.wood ? ` ${towerCost.wood}w` : ''}]`, 'build:tower', state.gold[myOwner] < towerCost.gold || state.wood[myOwner] < towerCost.wood || !hasBarracks);
+    addButton(`${t('wall')} [W]\n[${wallCost.gold}g${wallCost.wood ? ` ${wallCost.wood}w` : ''}]`,  'build:wall',     state.gold[myOwner] < wallCost.gold || state.wood[myOwner] < wallCost.wood);
+    if (state.gold[myOwner] >= wallCost.gold && state.wood[myOwner] >= wallCost.wood) {
       addButton(t('hold_line'), 'build:wall');
     }
   }
@@ -845,7 +847,10 @@ function collectButtons(
   if (!isNeutralOwner(e.owner) && e.kind !== 'goldmine' && getResolvedSpeed(e.kind, usesRaceProfile(e.owner) ? state.races[e.owner] : null) === 0) {
     const isConst  = e.kind === 'construction';
     const srcKind  = isConst ? (e.constructionOf ?? e.kind) : e.kind;
-    const refund   = Math.floor(getResolvedCost(srcKind, usesRaceProfile(e.owner) ? state.races[e.owner] : null) * (isConst ? 1.0 : 0.8));
+    const refundCost = getResolvedCost(srcKind, usesRaceProfile(e.owner) ? state.races[e.owner] : null);
+    const refundGold = Math.floor(refundCost.gold * (isConst ? 1.0 : 0.8));
+    const refundWood = Math.floor(refundCost.wood * (isConst ? 1.0 : 0.8));
+    const refund = `${refundGold}g${refundWood ? ` ${refundWood}w` : ''}`;
     const btnLabel = isConst ? t('cancel', { amount: refund }) : t('demolish', { amount: refund });
     addButton(btnLabel, 'demolish', false, true);
   }

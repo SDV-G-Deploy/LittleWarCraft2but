@@ -801,6 +801,8 @@ function drawHUD(ctx: CanvasRenderingContext2D, state: GameState, myOwner: 0 | 1
   ctx.fillStyle = '#ffe97a';
   ctx.font = 'bold 13px monospace';
   ctx.fillText(`${state.gold[myOwner]}g`, 24, 20);
+  ctx.fillStyle = '#8fdc6d';
+  ctx.fillText(`${state.wood[myOwner]}w`, 24, 36);
   // Pop icon (small person silhouette)
   ctx.fillStyle = popFull ? '#ff5555' : '#55dd55';
   ctx.beginPath();

@@ -5,7 +5,7 @@ import { RACE_BALANCE_PROFILES } from './races';
 import type { EntityBalanceStats, EntityBlueprint, RaceBalanceProfile, ResolvedEntityStats } from './schema';
 import { BALANCE_TUNING } from './tuning';
 
-function mergeEntityStats(base: EntityBlueprint, override?: Partial<EntityBalanceStats> & { cost?: { gold?: number } }): EntityBalanceStats {
+function mergeEntityStats(base: EntityBlueprint, override?: Partial<EntityBalanceStats> & { cost?: { gold?: number; wood?: number } }): EntityBalanceStats {
   return {
     hp: override?.hp ?? base.hp,
     damage: override?.damage ?? base.damage,
@@ -15,6 +15,7 @@ function mergeEntityStats(base: EntityBlueprint, override?: Partial<EntityBalanc
     sight: override?.sight ?? base.sight,
     cost: {
       gold: override?.cost?.gold ?? base.cost.gold,
+      wood: override?.cost?.wood ?? base.cost.wood,
     },
     buildTicks: override?.buildTicks ?? base.buildTicks,
     attackTicks: override?.attackTicks ?? base.attackTicks,
@@ -99,8 +100,8 @@ export function getResolvedArmor(entity: Entity): number {
   return entity.statArmor ?? BASE_ENTITY_BLUEPRINTS[entity.kind].armor;
 }
 
-export function getResolvedCost(kind: EntityKind, race?: Race | null): number {
-  return resolveEntityStats(kind, race).cost.gold;
+export function getResolvedCost(kind: EntityKind, race?: Race | null): { gold: number; wood: number } {
+  return resolveEntityStats(kind, race).cost;
 }
 
 export function getResolvedBuildTicks(kind: EntityKind, race?: Race | null): number {

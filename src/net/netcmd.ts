@@ -187,7 +187,9 @@ export function applyNetCmds(
         // Construction sites refund 100% (no work was wasted); finished buildings 80%
         const srcKind  = b.kind === 'construction' ? (b.constructionOf ?? b.kind) : b.kind;
         const refundPct = b.kind === 'construction' ? 1.0 : 0.8;
-        state.gold[owner] += Math.floor(getResolvedCost(srcKind, state.races[owner]) * refundPct);
+        const refund = getResolvedCost(srcKind, state.races[owner]);
+        state.gold[owner] += Math.floor(refund.gold * refundPct);
+        state.wood[owner] += Math.floor(refund.wood * refundPct);
         killEntity(state, b.id);
         break;
       }

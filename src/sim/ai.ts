@@ -177,13 +177,17 @@ export function tickAI(state: GameState, ai: AIController): void {
         const rangedCount  = mySoldiers.filter(u => u.kind === rc.ranged).length;
         const heavyCount   = mySoldiers.filter(u => u.kind === rc.heavy).length;
         const targetRangedCount = Math.max(1, Math.floor((soldierCount + heavyCount) * ai.preferredRangedRatio));
+        const heavyCost    = getResolvedCost(rc.heavy, state.races[1]);
+        const rangedCost   = getResolvedCost(rc.ranged, state.races[1]);
+        const soldierCost  = getResolvedCost(rc.soldier, state.races[1]);
         const wantHeavy    = heavyCount < ai.preferredHeavyCap && soldierCount >= (ai.difficulty === 'hard' ? 2 : 3) &&
-                             state.gold[1] >= getResolvedCost(rc.heavy, state.races[1]);
+                             state.gold[1] >= heavyCost.gold && state.wood[1] >= heavyCost.wood;
         const wantRanged   = !wantHeavy && rangedCount < targetRangedCount &&
-                             state.gold[1] >= getResolvedCost(rc.ranged, state.races[1]);
+                             state.gold[1] >= rangedCost.gold && state.wood[1] >= rangedCost.wood;
+        const canSoldier   = state.gold[1] >= soldierCost.gold && state.wood[1] >= soldierCost.wood;
         const nextUnit = wantHeavy ? rc.heavy : wantRanged ? rc.ranged : rc.soldier;
         const barracksBusy = myBarracks.cmd?.type === 'train';
-        if (!barracksBusy) issueTrainCommand(state, myBarracks, nextUnit);
+        if (!barracksBusy && (wantHeavy || wantRanged || canSoldier)) issueTrainCommand(state, myBarracks, nextUnit);
       }
       if (!buildingFarm && state.popCap[1] - state.pop[1] <= 2 && farmCount < ai.maxFarms) {
         const w = freeWorker(myWorkers);
@@ -192,7 +196,8 @@ export function tickAI(state: GameState, ai: AIController): void {
           if (pos) issueBuildCommand(state, w, 'farm', pos, state.tick);
         }
       }
-      if (!buildingTower && towerCount < ai.maxTowers && myBarracks && mySoldiers.length >= ai.towerMinArmy && state.gold[1] >= getResolvedCost('tower', state.races[1])) {
+      const towerCost = getResolvedCost('tower', state.races[1]);
+      if (!buildingTower && towerCount < ai.maxTowers && myBarracks && mySoldiers.length >= ai.towerMinArmy && state.gold[1] >= towerCost.gold && state.wood[1] >= towerCost.wood) {
         const w = freeWorker(myWorkers);
         if (w) {
           const pos = findBuildSpot(state, myTH, 'tower');

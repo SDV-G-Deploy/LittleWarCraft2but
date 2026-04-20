@@ -10,6 +10,7 @@ export interface UnitStats {
   speed: number;
   sight: number;
   cost: number;
+  woodCost: number;
   buildTicks: number;
   attackTicks: number;
   tileW: number;
@@ -26,6 +27,7 @@ function toUnitStats(kind: EntityKind): UnitStats {
     speed: base.speed,
     sight: base.sight,
     cost: base.cost.gold,
+    woodCost: base.cost.wood,
     buildTicks: base.buildTicks,
     attackTicks: base.attackTicks,
     tileW: base.tileW,
@@ -47,6 +49,7 @@ export function getResolvedUnitStats(kind: EntityKind, race?: Race | null): Unit
     speed: resolved.speed,
     sight: resolved.sight,
     cost: resolved.cost.gold,
+    woodCost: resolved.cost.wood,
     buildTicks: resolved.buildTicks,
     attackTicks: resolved.attackTicks,
     tileW: resolved.tileW,

@@ -2,6 +2,7 @@ import type { EntityKind, Race } from '../types';
 
 export interface CostProfile {
   gold: number;
+  wood: number;
 }
 
 export interface EntityBalanceStats {

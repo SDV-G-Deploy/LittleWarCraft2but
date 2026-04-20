@@ -178,6 +178,7 @@ export interface GameState {
   corpses: Corpse[];
   nextId: number;
   gold:   [number, number];
+  wood:   [number, number];
   pop:    [number, number];
   popCap: [number, number];
   races:  [Race, Race];   // races[0]=player, races[1]=AI

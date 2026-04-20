@@ -48,9 +48,9 @@ function cmdSignature(cmd: { type: string } | null): string {
   return c.type;
 }
 
-function computeDeterministicStateChecksum(state: { tick: number; entities: Array<{ id: number; owner: number; kind: string; pos: { x: number; y: number }; hp: number; cmd: { type: string } | null }>; gold: [number, number]; pop: [number, number]; popCap: [number, number] }): { tick: number; hashHex: string; entityCount: number } {
+function computeDeterministicStateChecksum(state: { tick: number; entities: Array<{ id: number; owner: number; kind: string; pos: { x: number; y: number }; hp: number; cmd: { type: string } | null }>; gold: [number, number]; wood: [number, number]; pop: [number, number]; popCap: [number, number] }): { tick: number; hashHex: string; entityCount: number } {
   let hash = 0x811c9dc5;
-  hash = hashFNV1a(hash, `tick:${state.tick}|gold:${state.gold[0]},${state.gold[1]}|pop:${state.pop[0]},${state.pop[1]}|cap:${state.popCap[0]},${state.popCap[1]}`);
+  hash = hashFNV1a(hash, `tick:${state.tick}|gold:${state.gold[0]},${state.gold[1]}|wood:${state.wood[0]},${state.wood[1]}|pop:${state.pop[0]},${state.pop[1]}|cap:${state.popCap[0]},${state.popCap[1]}`);
   const entities = [...state.entities].sort((a, b) => a.id - b.id);
   for (const e of entities) {
     hash = hashFNV1a(hash, `${e.id}|${e.owner}|${e.kind}|${e.pos.x},${e.pos.y}|${e.hp}|${cmdSignature(e.cmd)}`);
@@ -632,7 +632,7 @@ export function startGame(
     if (net && state.tick % NET_DESYNC_CHECKSUM_INTERVAL_TICKS === 0) {
       const digest = computeDeterministicStateChecksum(state);
       lastNetChecksumLine = `sync t${digest.tick} h${digest.hashHex} e${digest.entityCount}`;
-      console.info(`[sync] ${lastNetChecksumLine} g${state.gold[0]}/${state.gold[1]} p${state.pop[0]}/${state.popCap[0]}-${state.pop[1]}/${state.popCap[1]}`);
+      console.info(`[sync] ${lastNetChecksumLine} g${state.gold[0]}/${state.gold[1]} w${state.wood[0]}/${state.wood[1]} p${state.pop[0]}/${state.popCap[0]}-${state.pop[1]}/${state.popCap[1]}`);
     }
 
     checkWinLose();

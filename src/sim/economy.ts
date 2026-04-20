@@ -284,6 +284,7 @@ export function processGather(state: GameState, entity: Entity): void {
       if (ec._gatherPath.length === 0) {
         const owner = entity.owner as 0 | 1;
         state.gold[owner] += entity.carryGold ?? 0;
+        state.wood[owner] += entity.carryWood ?? 0;
         if ((entity.carryGold ?? 0) > 0 && shouldApplyEcoFirstReturnBonus(state.openingPlanSelected[owner], state.openingCommitmentClaimed[owner], state.tick, entity)) {
           entity.openingPlan = 'eco';
           entity.carryGold = Math.min(getEcoGatherBonusCap(), (entity.carryGold ?? 0) + getEcoGatherBonus('eco', false, state.tick, entity));
@@ -317,7 +318,9 @@ export function refundCancelledTrainCommand(state: GameState, building: Entity):
   const owner = building.owner as 0 | 1;
   const queue = [building.cmd.unit, ...building.cmd.queue];
   for (const queuedUnit of queue) {
-    state.gold[owner] += getResolvedCost(queuedUnit, state.races[owner]);
+    const cost = getResolvedCost(queuedUnit, state.races[owner]);
+    state.gold[owner] += cost.gold;
+    state.wood[owner] += cost.wood;
   }
 
   building.cmd = null;
@@ -330,17 +333,20 @@ export function issueTrainCommand(
 ): boolean {
   if (!isUnitKind(unit)) return false; // only unit kinds can be trained
   const cost = getResolvedCost(unit, state.races[building.owner as 0 | 1]);
-  if (state.gold[building.owner as 0 | 1] < cost) return false;
+  if (state.gold[building.owner as 0 | 1] < cost.gold) return false;
+  if (state.wood[building.owner as 0 | 1] < cost.wood) return false;
   if (state.pop[building.owner as 0 | 1] >= state.popCap[building.owner as 0 | 1]) return false;
 
   if (building.cmd?.type === 'train') {
     if (building.cmd.queue.length >= 5) return false;
     building.cmd.queue.push(unit);
-    state.gold[building.owner as 0 | 1] -= cost;
+    state.gold[building.owner as 0 | 1] -= cost.gold;
+    state.wood[building.owner as 0 | 1] -= cost.wood;
     return true;
   }
 
-  state.gold[building.owner as 0 | 1] -= cost;
+  state.gold[building.owner as 0 | 1] -= cost.gold;
+  state.wood[building.owner as 0 | 1] -= cost.wood;
   const owner = building.owner as 0 | 1;
   const openingPlan = state.openingPlanSelected[owner];
   let ticksLeft = getResolvedBuildTicks(unit, state.races[building.owner as 0 | 1]);
@@ -519,13 +525,15 @@ export function issueBuildCommand(
   const stats = {
     ...getResolvedTileSize(building),
     buildTicks: getResolvedBuildTicks(building),
-    cost: getResolvedCost(building),
+    cost: getResolvedCost(building, state.races[worker.owner as 0 | 1]),
   };
   const cost = stats.cost;
-  if (state.gold[worker.owner as 0 | 1] < cost) return false;
+  if (state.gold[worker.owner as 0 | 1] < cost.gold) return false;
+  if (state.wood[worker.owner as 0 | 1] < cost.wood) return false;
   if (!isValidPlacement(state, building, pos.x, pos.y)) return false;
 
-  state.gold[worker.owner as 0 | 1] -= cost;
+  state.gold[worker.owner as 0 | 1] -= cost.gold;
+  state.wood[worker.owner as 0 | 1] -= cost.wood;
 
   // Spawn the construction scaffold immediately so it:
   //  - Reserves the tile footprint (blocks further placement)
