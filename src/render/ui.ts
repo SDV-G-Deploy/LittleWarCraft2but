@@ -4,6 +4,7 @@ import { SIM_HZ, TILE_SIZE, MAP_H, MAP_W, isUnitKind, isWorkerKind, isNeutralOwn
 import { STATS } from '../data/units';
 import { ownerRace, ownerRaceProfile } from '../data/races';
 import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedSupplyProvided, getResolvedTileSize } from '../balance/resolver';
+import { resolveAttackBonus } from '../balance/modifiers';
 import { getOpeningPlanLockTicks, getOpeningPlanPresentation } from '../balance/openings';
 import type { Camera } from './camera';
 import { isValidPlacement } from '../sim/economy';
@@ -19,6 +20,37 @@ const PORTRAIT_W = 80;
 const MAX_BTN_COLS = 6;
 const OPENING_PLAN_LOCK_TICKS = getOpeningPlanLockTicks();
 const PRODUCTION_SLOTS = 5;
+
+function getMilitaryArmorBase(kind: EntityKind): number {
+  return kind === 'footman' ? 4
+    : kind === 'archer' ? 0
+    : kind === 'knight' ? 6
+    : kind === 'grunt' ? 4
+    : kind === 'troll' ? 0
+    : kind === 'ogreFighter' ? 4
+    : 0;
+}
+
+function getUnitDisplayedAttack(state: GameState, e: Entity): number {
+  const base = resolveEntityStatsForEntity(state, e).damage;
+  if (!(e.kind === 'footman' || e.kind === 'knight' || e.kind === 'grunt' || e.kind === 'ogreFighter')) return base;
+  const bonus = resolveAttackBonus({ state, attacker: e, target: { ...e, owner: e.owner === 0 ? 1 : 0 } });
+  return base + bonus;
+}
+
+function getLumberMillUpgradeSummary(state: GameState, owner: 0 | 1): string[] {
+  const profile = ownerRaceProfile(state.races, owner);
+  const upgrades = state.upgrades[owner];
+  const race = state.races[owner];
+  const buildingHpNow = race === 'human'
+    ? upgrades.buildingHpLevel * 20
+    : upgrades.buildingHpLevel * 10;
+  return [
+    `${profile.upgrades.meleeAttack.label}: +${profile.upgrades.meleeAttack.perLevel} per lvl, level ${upgrades.meleeAttackLevel}/${profile.upgrades.meleeAttack.maxLevel}`,
+    `${profile.upgrades.armor.label}: +${profile.upgrades.armor.perLevel} per lvl, level ${upgrades.armorLevel}/${profile.upgrades.armor.maxLevel}`,
+    `${profile.upgrades.buildingHp.label}: +${profile.upgrades.buildingHp.perLevel}% per lvl, level ${upgrades.buildingHpLevel}/${profile.upgrades.buildingHp.maxLevel} (now +${buildingHpNow}%)`,
+  ];
+}
 
 export interface UiButton {
   x: number; y: number;
@@ -475,10 +507,14 @@ function drawEntityInfo(
       ? (stats.attackTicks / 20).toFixed(1) + 's'
       : '—';
     const rngStr = stats.range > 1 ? `${stats.range}` : 'melee';
+    const shownAtk = getUnitDisplayedAttack(state, e);
+    const shownDef = e.kind === 'footman' || e.kind === 'archer' || e.kind === 'knight' || e.kind === 'grunt' || e.kind === 'troll' || e.kind === 'ogreFighter'
+      ? (e.statArmor ?? stats.armor)
+      : stats.armor;
     ctx.fillStyle = '#ffcc88';
     ctx.font = '10px monospace';
     ctx.fillText(
-      `ATK:${stats.damage}  DEF:${stats.armor}  RNG:${rngStr}  SPD:${atkSpd}`,
+      `ATK:${shownAtk}  DEF:${shownDef}  RNG:${rngStr}  SPD:${atkSpd}`,
       x, y,
     ); y += LINE;
 
@@ -570,6 +606,14 @@ function drawEntityInfo(
     ctx.fillStyle = '#ffcc88';
     ctx.font = '11px monospace';
     ctx.fillText(t('food_slots', { amount: supplyProvided }), x, y); y += LINE;
+  }
+
+  if (e.kind === 'lumbermill' && e.owner === myOwner) {
+    ctx.fillStyle = '#8fdc6d';
+    ctx.font = '10px monospace';
+    for (const line of getLumberMillUpgradeSummary(state, myOwner)) {
+      ctx.fillText(line, x, y); y += LINE - 1;
+    }
   }
 
   // ── Pop + treasury (player-owned, non-goldmine) ─────────────────────────────
@@ -723,8 +767,8 @@ function drawEntityInfo(
     ctx.fillStyle = '#ffe97a';
     ctx.font = '11px monospace';
     const label =
-      e.cmd.phase === 'gathering'  ? t('mining')         :
-      e.cmd.phase === 'returning'  ? t('returning_gold') :
+      e.cmd.phase === 'gathering'  ? (e.cmd.resourceType === 'wood' ? t('chopping_wood') : t('mining')) :
+      e.cmd.phase === 'returning'  ? (e.cmd.resourceType === 'wood' ? t('returning_wood') : t('returning_gold')) :
       t('walking_to_mine');
     ctx.fillText(label, x, y);
   }
