@@ -420,11 +420,15 @@ export function processBuild(state: GameState, entity: Entity): void {
   const ec  = entity as EntityWithCache;
   const tps = ticksPerStep(entity.kind);
 
+  const clearBuildState = () => {
+    ec._buildPath = undefined;
+  };
+
   // Construction site must exist — if demolished, abandon this command
   const site = getEntity(state, cmd.siteId);
   if (!site || site.kind !== 'construction') {
     entity.cmd = null;
-    ec._buildPath = undefined;
+    clearBuildState();
     return;
   }
 
@@ -437,14 +441,17 @@ export function processBuild(state: GameState, entity: Entity): void {
       ec._buildPath = findPath(state, entity.pos.x, entity.pos.y, adjX, adjY) ?? [];
     }
     if (ec._buildPath.length === 0) {
-      cmd.phase = 'building'; return;
+      cmd.phase = 'building';
+      clearBuildState();
+      return;
     }
     if (state.tick - cmd.stepTick < tps) return;
     const next = ec._buildPath.shift()!;
     entity.pos.x = next.x; entity.pos.y = next.y;
     cmd.stepTick = state.tick;
     if (ec._buildPath.length === 0) {
-      cmd.phase = 'building'; ec._buildPath = undefined;
+      cmd.phase = 'building';
+      clearBuildState();
     }
 
   } else {
@@ -456,7 +463,7 @@ export function processBuild(state: GameState, entity: Entity): void {
       killEntity(state, site.id);
       spawnEntity(state, cmd.building, owner, pos);
       entity.cmd = null;
-      ec._buildPath = undefined;
+      clearBuildState();
     }
   }
 }
