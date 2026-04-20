@@ -7,6 +7,19 @@ Update it when a phase is completed, reframed, or split.
 
 ### Done recently
 - gameplay/UI first pass
+- forest harvesting pass completed:
+  - each forest tile now stores `100 wood`
+  - each worker trip takes `10 wood`
+  - depleted forest converts into passable grass
+  - workers can right-click forest and automatically return wood to base
+- wood economy pass completed:
+  - wood is now a real player resource alongside gold
+  - HUD / UI / build costs / train costs / refunds now account for wood
+  - AI now respects wood-gated costs too
+- lumber mill tech pass v1 completed:
+  - new `lumbermill` building added
+  - `tower` now requires lumber mill tech
+  - first-pass global upgrades added: `meleeAttack1`, `armor1`, `buildingHp1`
 - local command feedback markers
 - online status strip
 - `statusMsg` surfaced in online UI
@@ -126,8 +139,9 @@ If a pass is only UI/local render, targeted review is not required every time.
 
 Immediate project note:
 - map-balance correction pass v1 is now done
+- wood / lumber-mill economy pass is now in and needs explicit gameplay verification
 - next useful step is live validation, not another blind architecture pass
-- if more map work is needed, keep it point-fix only and driven by concrete spawn-side findings
+- if more map work is needed later, keep it point-fix only and driven by concrete spawn-side findings
 
 Infrastructure note:
 - the balance foundation is now good enough
@@ -143,6 +157,27 @@ Performance note:
 - after LOS pass, likely order is:
   1. allocation churn reduction (`shift`, repeated arrays/maps/strings in hot paths)
   2. only then reconsider spatial buckets if profiling still points there
+
+## Immediate verification pass: forest + lumber mill
+
+Goal:
+- verify that the newly added wood loop is mechanically correct, readable, and not silently broken
+
+Checklist:
+- forest starts at `100 wood` per tile
+- worker takes `10 wood` per gather cycle
+- worker returns wood to Town Hall / Great Hall automatically
+- player wood increases only on return
+- depleted forest becomes passable grass
+- cleared tile updates pathing correctly
+- lumber mill can be built normally
+- tower is properly gated behind lumber mill
+- lumber mill upgrades spend resources correctly and cannot be bought twice
+- `Melee +1` affects melee combat correctly
+- `Armor +1` affects military armor correctly
+- `Building HP +15%` affects existing and future player buildings correctly
+
+If any issue appears, prefer narrow mechanical fixes over more feature expansion.
 
 ## Phase C. Branching gameplay decisions
 Goal: make early and midgame branch into distinct player plans.

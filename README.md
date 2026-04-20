@@ -34,6 +34,19 @@ Recent completed passes:
 
 Current state:
 - build green
+- forest harvesting is now in the game:
+  - each forest tile starts with `100 wood`
+  - each worker harvest cycle takes `10 wood`
+  - when a forest tile reaches `0`, it turns into passable grass
+  - workers can right-click forest to harvest it and return wood automatically to Town Hall / Great Hall
+- wood is now a real economy resource shown in HUD/UI and required by units/buildings
+- lumber mill tech pass is now in the game:
+  - `Lumber Mill` is a new tech building
+  - towers now require both `Barracks` and `Lumber Mill`
+  - Lumber Mill sells first-pass global upgrades:
+    - `Melee +1`
+    - `Armor +1`
+    - `Building HP +15%`
 - main multiplayer determinism blocker from review was fixed
 - follow-up lockstep packet/disconnect issues were fixed too
 - recent determinism-sensitive changes were verified with targeted review passes
@@ -110,9 +123,11 @@ The next meaningful gains should come from:
 - playtest-driven follow-up on whether eco / tempo / pressure now diverge enough in real matches
 
 Immediate next `/new` target:
-- validate the updated pool in live playtests
-- check whether the fixed contested/center mines create better early expansion pressure
-- do follow-up point edits only if a specific map still shows clear spawn-side advantage
+- verify the new forest/wood/lumber-mill loop end to end in live/manual play
+- confirm workers can harvest forest, carry wood home, and credit it correctly
+- confirm depleted forest turns into passable grass and pathing updates correctly
+- confirm Lumber Mill can be built, towers are gated by it, and all three upgrades apply correctly
+- only after that, return to broader map-balance validation and follow-up point edits
 
 AI support pass is now good enough to stop being the blocker.
 The next likely source of unfair matches is map imbalance, not bot behavior.
@@ -158,6 +173,22 @@ Example:
 After changes:
 - run `npm run build`
 - test live on `w2.kislota.today`
+
+## Current wood / lumber-mill verification checklist
+
+Use this checklist in the next validation session:
+- build a worker economy and harvest at least one forest tile
+- confirm each forest tile starts at `100 wood`
+- confirm each trip removes `10 wood`
+- confirm worker returns wood automatically to Town Hall / Great Hall
+- confirm HUD wood value increases after return, not on chop start
+- confirm tile becomes passable grass at `0 wood`
+- confirm units can path through the cleared tile after depletion
+- build a `Lumber Mill`
+- confirm `Tower` is blocked before Lumber Mill and available after Lumber Mill
+- buy `Melee +1`, then confirm melee units deal +1 damage
+- buy `Armor +1`, then confirm military units gain +1 armor
+- buy `Building HP +15%`, then confirm existing player buildings gain HP and new ones inherit the bonus
 
 ## Useful commands
 
