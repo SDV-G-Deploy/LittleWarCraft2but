@@ -2,7 +2,7 @@ import type { GameState, Entity, Vec2 } from '../types';
 import { MAP_W, MAP_H, isUnitKind, isRangedUnit } from '../types';
 import { findPath } from './pathfinding';
 import { ticksPerStep } from '../data/units';
-import { processAttack, issueAttackCommand } from './combat';
+import { processAttack, issueAttackCommand, isTargetAttackableNow } from './combat';
 import { processGather, processTrain, processBuild } from './economy';
 import { isTileBlockedByEntity } from './entities';
 import { profiler } from './profiler';
@@ -268,7 +268,10 @@ export function autoAttackPass(state: GameState): void {
     const best = acquireNearestTarget(state, entity, (target) => {
       if (target.kind === 'goldmine') return false;
       if (isRangedUnit(entity.kind) && !isUnitKind(target.kind)) return false;
-      if (isArmedBuilding && !isUnitKind(target.kind)) return false;
+      if (isArmedBuilding) {
+        if (!isUnitKind(target.kind)) return false;
+        if (!isTargetAttackableNow(state, entity, target)) return false;
+      }
       return true;
     });
     if (best) issueAttackCommand(entity, best.id, state.tick);

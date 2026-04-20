@@ -38,6 +38,37 @@ function distToEntity(ax: number, ay: number, target: Entity): number {
   return chebyshev(ax, ay, nx, ny);
 }
 
+/**
+ * Chebyshev distance between attacker and target footprints.
+ * Falls back to point→footprint when attacker is 1×1.
+ */
+function distBetweenEntities(attacker: Entity, target: Entity): number {
+  const ax0 = attacker.pos.x;
+  const ay0 = attacker.pos.y;
+  const ax1 = attacker.pos.x + attacker.tileW - 1;
+  const ay1 = attacker.pos.y + attacker.tileH - 1;
+
+  const tx0 = target.pos.x;
+  const ty0 = target.pos.y;
+  const tx1 = target.pos.x + target.tileW - 1;
+  const ty1 = target.pos.y + target.tileH - 1;
+
+  const nx = Math.max(tx0, Math.min(ax0, tx1));
+  const ny = Math.max(ty0, Math.min(ay0, ty1));
+  const mx = Math.max(ax0, Math.min(tx0, ax1));
+  const my = Math.max(ay0, Math.min(ty0, ay1));
+  return chebyshev(nx, ny, mx, my);
+}
+
+export function isTargetAttackableNow(state: GameState, attacker: Entity, target: Entity): boolean {
+  const range = getResolvedRange(attacker.kind, state.races[attacker.owner]);
+  if (distBetweenEntities(attacker, target) > range) return false;
+  if (range <= 1) return true;
+  // Towers are elevated by design: they shoot over buildings/objects.
+  if (attacker.kind === 'tower') return true;
+  return hasLOSToEntity(state, attacker, target, range);
+}
+
 function isLOSBlockingTile(state: GameState, tx: number, ty: number): boolean {
   if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return false;
 
@@ -60,7 +91,7 @@ function isLOSBlockingTile(state: GameState, tx: number, ty: number): boolean {
  * occupies any tile between (ax,ay) and (bx,by).
  * Walls are transparent; trees/goldmines are ignored (only buildings block).
  */
-function hasLOS(state: GameState, ax: number, ay: number, bx: number, by: number): boolean {
+function hasLOS(state: GameState, ax: number, ay: number, bx: number, by: number, attacker?: Entity): boolean {
   let x = ax, y = ay;
   const dx = Math.abs(bx - ax), dy = -Math.abs(by - ay);
   const sx = ax < bx ? 1 : -1, sy = ay < by ? 1 : -1;
@@ -71,6 +102,13 @@ function hasLOS(state: GameState, ax: number, ay: number, bx: number, by: number
     if (e2 >= dy) { err += dy; x += sx; }
     if (e2 <= dx) { err += dx; y += sy; }
     if (x === bx && y === by) break; // reached target tile — stop
+
+    // Ignore tiles inside the attacker's own footprint.
+    if (attacker &&
+        x >= attacker.pos.x && x < attacker.pos.x + attacker.tileW &&
+        y >= attacker.pos.y && y < attacker.pos.y + attacker.tileH) {
+      continue;
+    }
 
     // Check if this intermediate tile holds a LOS-blocking building.
     if (isLOSBlockingTile(state, x, y)) return false;
@@ -83,10 +121,14 @@ function hasLOS(state: GameState, ax: number, ay: number, bx: number, by: number
  * any target footprint tile that is both in range and visible is valid.
  */
 function hasLOSToEntity(state: GameState, attacker: Entity, target: Entity, range: number): boolean {
-  for (let ty = target.pos.y; ty < target.pos.y + target.tileH; ty++) {
-    for (let tx = target.pos.x; tx < target.pos.x + target.tileW; tx++) {
-      if (chebyshev(attacker.pos.x, attacker.pos.y, tx, ty) > range) continue;
-      if (hasLOS(state, attacker.pos.x, attacker.pos.y, tx, ty)) return true;
+  for (let ay = attacker.pos.y; ay < attacker.pos.y + attacker.tileH; ay++) {
+    for (let ax = attacker.pos.x; ax < attacker.pos.x + attacker.tileW; ax++) {
+      for (let ty = target.pos.y; ty < target.pos.y + target.tileH; ty++) {
+        for (let tx = target.pos.x; tx < target.pos.x + target.tileW; tx++) {
+          if (chebyshev(ax, ay, tx, ty) > range) continue;
+          if (hasLOS(state, ax, ay, tx, ty, attacker)) return true;
+        }
+      }
     }
   }
   return false;
@@ -152,11 +194,7 @@ export function processAttack(state: GameState, entity: Entity): void {
     return;
   }
 
-  const range  = getResolvedRange(entity.kind, state.races[entity.owner]);
-  const dist   = distToEntity(entity.pos.x, entity.pos.y, target);
-  const losOk  = range <= 1 || hasLOSToEntity(state, entity, target, range);
-
-  if (dist <= range && losOk) {
+  if (isTargetAttackableNow(state, entity, target)) {
     // ── In range with LOS: attack ───────────────────────────────────────────
     cmd.chasePath = [];
     if (state.tick < cmd.cooldownTick) return;
