@@ -1,5 +1,6 @@
 import type { GameState, TileKind, Entity } from '../types';
 import { TILE_SIZE, MAP_W, MAP_H, CORPSE_LIFE_TICKS, isUnitKind } from '../types';
+import { ticksPerStep } from '../data/units';
 import type { Camera } from './camera';
 import { worldToScreen } from './camera';
 import { buildSpriteCache, type SpriteCache } from './sprites';
@@ -13,10 +14,6 @@ function getSprites(): SpriteCache {
 }
 
 interface UnitRenderState {
-  prevX: number;
-  prevY: number;
-  currX: number;
-  currY: number;
   facingX: -1 | 0 | 1;
 }
 
@@ -322,29 +319,32 @@ function drawEntities(
       if (isUnit) {
         renderState = unitRenderCache.get(e.id);
         if (!renderState) {
-          renderState = {
-            prevX: e.pos.x,
-            prevY: e.pos.y,
-            currX: e.pos.x,
-            currY: e.pos.y,
-            facingX: 0,
-          };
+          renderState = { facingX: 0 };
           unitRenderCache.set(e.id, renderState);
         }
 
-        if (renderState.currX !== e.pos.x || renderState.currY !== e.pos.y) {
-          const dx = e.pos.x - renderState.currX;
-          renderState.prevX = renderState.currX;
-          renderState.prevY = renderState.currY;
-          renderState.currX = e.pos.x;
-          renderState.currY = e.pos.y;
+        if (e.cmd?.type === 'move' && e.cmd.path.length > 0) {
+          const next = e.cmd.path[0]!;
+          const dx = next.x - e.pos.x;
           if (dx !== 0) renderState.facingX = dx > 0 ? 1 : -1;
-        }
 
-        renderX = renderState.prevX + (renderState.currX - renderState.prevX) * clampedAlpha;
-        renderY = renderState.prevY + (renderState.currY - renderState.prevY) * clampedAlpha;
-        const hasStepDelta = renderState.currX !== renderState.prevX || renderState.currY !== renderState.prevY;
-        stepProgress = hasStepDelta ? clampedAlpha : 0;
+          const baseTps = ticksPerStep(e.kind, state.races[e.owner]);
+          const speedBoostActive =
+            typeof e.cmd.speedMult === 'number' &&
+            e.cmd.speedMult > 1 &&
+            typeof e.cmd.speedMultUntilTick === 'number' &&
+            state.tick <= e.cmd.speedMultUntilTick;
+          const speedMult = e.cmd.speedMult ?? 1;
+          const tps = speedBoostActive
+            ? Math.max(1, Math.floor(baseTps / speedMult))
+            : baseTps;
+          const elapsedTicks = Math.max(0, state.tick - e.cmd.stepTick) + clampedAlpha;
+          const progress = Math.max(0, Math.min(1, elapsedTicks / Math.max(1, tps)));
+
+          renderX = e.pos.x + (next.x - e.pos.x) * progress;
+          renderY = e.pos.y + (next.y - e.pos.y) * progress;
+          stepProgress = progress;
+        }
       }
 
       const wx = renderX * TILE_SIZE;
@@ -356,10 +356,6 @@ function drawEntities(
 
       if (isUnit) {
         drawUnit(ctx, sp, e, sx, sy, selected, renderState, stepProgress);
-        if (renderState && clampedAlpha >= 0.999) {
-          renderState.prevX = renderState.currX;
-          renderState.prevY = renderState.currY;
-        }
       } else {
         drawBuilding(ctx, sp, e, sx, sy, pw, ph, selected, state);
       }
