@@ -95,7 +95,7 @@ export function canAttack(attacker: Owner, target: Owner): boolean {
 export type EntityKind =
   | 'worker'  | 'footman' | 'archer' | 'knight'         // human units
   | 'peon'    | 'grunt'   | 'troll'  | 'ogreFighter'    // orc units
-  | 'townhall' | 'barracks' | 'farm' | 'wall' | 'tower' // shared buildings (sprite varies by race)
+  | 'townhall' | 'barracks' | 'lumbermill' | 'farm' | 'wall' | 'tower' // shared buildings (sprite varies by race)
   | 'barrier'                                            // neutral destructible route blocker
   | 'goldmine'                                           // resource node
   | 'construction';                                      // building-in-progress scaffold
@@ -182,6 +182,7 @@ export interface GameState {
   pop:    [number, number];
   popCap: [number, number];
   races:  [Race, Race];   // races[0]=player, races[1]=AI
+  upgrades: [PlayerUpgradeState, PlayerUpgradeState];
   mapName?: string;
   mapDescription?: string;
   contestedMineBonusUntilTick: number;
@@ -205,4 +206,10 @@ export interface ProjectileVisualEvent {
   end: Vec2;
   startTick: number;
   durationTicks: number;
+}
+
+export interface PlayerUpgradeState {
+  meleeAttack1: boolean;
+  armor1: boolean;
+  buildingHp1: boolean;
 }

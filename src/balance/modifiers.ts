@@ -21,6 +21,10 @@ function isHumanMilitaryUnit(entity: Entity): boolean {
   return entity.kind === 'footman' || entity.kind === 'archer' || entity.kind === 'knight';
 }
 
+function isMeleeMilitary(entity: Entity): boolean {
+  return entity.kind === 'footman' || entity.kind === 'knight' || entity.kind === 'grunt' || entity.kind === 'ogreFighter';
+}
+
 function isNearOwnTownHall(state: GameState, entity: Entity, radius: number): boolean {
   const ownTownHall = state.entities.find(e => e.owner === entity.owner && e.kind === 'townhall');
   if (!ownTownHall) return false;
@@ -81,6 +85,16 @@ export const ATTACK_MODIFIER_RULES: AttackModifierRule[] = [
       isUnitKind(attacker.kind) &&
       typeof attacker.pressureCommittedUntilTick === 'number' &&
       state.tick <= attacker.pressureCommittedUntilTick
+        ? 1
+        : 0
+    ),
+  },
+  {
+    id: 'lumbermill_melee_attack_1',
+    description: 'Lumbermill upgrade grants +1 damage to melee military units.',
+    apply: ({ state, attacker }) => (
+      isMeleeMilitary(attacker) &&
+      state.upgrades[attacker.owner as 0 | 1]?.meleeAttack1
         ? 1
         : 0
     ),

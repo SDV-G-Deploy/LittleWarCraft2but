@@ -25,6 +25,10 @@ export function createWorld(mapData: MapData, races: [Race, Race]): GameState {
     pop:      [0, 0],
     popCap:   [4, 4],
     races,
+    upgrades: [
+      { meleeAttack1: false, armor1: false, buildingHp1: false },
+      { meleeAttack1: false, armor1: false, buildingHp1: false },
+    ],
     mapName: mapData.name,
     mapDescription: mapData.description,
     contestedMineBonusUntilTick: SIM_HZ * 64,

@@ -261,6 +261,7 @@ export function startGame(
       // Worker build hotkeys (covers worker + peon)
       if (isWorkerKind(firstSel.kind)) {
         if (e.key === 'b' || e.key === 'B') { placementMode = { building: 'barracks' }; return; }
+        if (e.key === 'l' || e.key === 'L') { placementMode = { building: 'lumbermill' }; return; }
         if (e.key === 'f' || e.key === 'F') { placementMode = { building: 'farm' };     return; }
         if (e.key === 'g' || e.key === 'G') { placementMode = { building: 'tower' };    return; }
         if (e.key === 'w' || e.key === 'W') { placementMode = { building: 'wall' };     return; }
@@ -527,6 +528,13 @@ export function startGame(
     } else if (action.startsWith('build:')) {
       placementMode = { building: action.slice(6) as EntityKind };
 
+    } else if (action.startsWith('upgrade:')) {
+      const upgrade = action.slice(8) as 'meleeAttack1' | 'armor1' | 'buildingHp1';
+      for (const id of selectedIds) {
+        const building = state.entities.find(e => e.id === id && e.kind === 'lumbermill' && e.owner === myOwner);
+        if (building) { emit({ k: 'upgrade', buildingId: building.id, upgrade }); break; }
+      }
+
     } else if (action === 'stop') {
       const ids = [...selectedIds].filter(id => state.entities.some(en => en.id === id && en.owner === myOwner));
       if (ids.length) emit({ k: 'stop', ids });
@@ -544,7 +552,7 @@ export function startGame(
   }
 
   // ── Win / lose detection ───────────────────────────────────────────────────
-  const BLDG_KINDS = new Set(['townhall', 'barracks', 'farm', 'tower']);
+  const BLDG_KINDS = new Set(['townhall', 'barracks', 'lumbermill', 'farm', 'tower']);
   function checkWinLose(): void {
     if (gameResult !== 'playing') return;
     const hasMyTH      = state.entities.some(e => e.owner === myOwner   && e.kind === 'townhall');

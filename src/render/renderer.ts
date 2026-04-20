@@ -650,6 +650,8 @@ function drawBuilding(
     sprite = sp.goldmine;
   } else if (renderKind === 'barrier') {
     sprite = sp.barrier;
+  } else if (renderKind === 'lumbermill') {
+    sprite = isOrc ? sp.warmill[e.owner as 0 | 1] : sp.barracks[e.owner as 0 | 1];
   } else if (renderKind === 'wall') {
     sprite = sp.wall[e.owner as 0 | 1];
   } else if (renderKind === 'townhall') {

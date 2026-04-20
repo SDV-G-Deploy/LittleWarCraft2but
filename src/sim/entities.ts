@@ -58,7 +58,7 @@ export function spawnEntity(
     statArmor: stats.armor,
   };
 
-  applyResolvedStatsToEntity(entity, stats);
+  applyResolvedStatsToEntity(entity, stats, state);
 
   state.entities.push(entity);
   getEntityIndex(state).set(entity.id, entity);

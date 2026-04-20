@@ -84,12 +84,14 @@ export function resolveEntityStatsForEntity(state: GameState, entity: Entity): R
   return resolveEntityStats(entity.kind, race);
 }
 
-export function applyResolvedStatsToEntity(entity: Entity, stats: ResolvedEntityStats): void {
+export function applyResolvedStatsToEntity(entity: Entity, stats: ResolvedEntityStats, state?: GameState): void {
   entity.tileW = stats.tileW;
   entity.tileH = stats.tileH;
   entity.sightRadius = stats.sight;
-  entity.statHpMax = stats.hp;
-  entity.statArmor = stats.armor;
+  const ownerUpgrades = state && usesRaceProfile(entity.owner) ? state.upgrades[entity.owner] : null;
+  const buildingHpBonus = ownerUpgrades?.buildingHp1 && stats.speed === 0 && entity.kind !== 'goldmine' && entity.kind !== 'barrier' ? 1.15 : 1;
+  entity.statHpMax = Math.round(stats.hp * buildingHpBonus);
+  entity.statArmor = stats.armor + ((ownerUpgrades?.armor1 && (entity.kind === 'footman' || entity.kind === 'archer' || entity.kind === 'knight' || entity.kind === 'grunt' || entity.kind === 'troll' || entity.kind === 'ogreFighter')) ? 1 : 0);
 }
 
 export function getResolvedHpMax(entity: Entity): number {

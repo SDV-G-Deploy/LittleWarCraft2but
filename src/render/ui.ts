@@ -324,6 +324,7 @@ function translateDisplayLabel(label: string): string {
     case 'Great Hall': return t('unit_great_hall');
     case 'Barracks': return t('unit_barracks');
     case 'War Mill': return t('unit_war_mill');
+    case 'Lumber Mill': return t('unit_lumber_mill');
     case 'Farm': return t('unit_farm');
     case 'Pig Farm': return t('unit_pig_farm');
     case 'Guard Tower': return t('unit_guard_tower');
@@ -823,19 +824,32 @@ function collectButtons(
   // ── Worker build menu (workers + peons both show build buttons) ─────────────
   if (isWorkerKind(e.kind)) {
     const barrCost = getResolvedCost('barracks', state.races[myOwner]);
+    const lumberCost = getResolvedCost('lumbermill', state.races[myOwner]);
     const farmCost = getResolvedCost('farm', state.races[myOwner]);
     const wallCost = getResolvedCost('wall', state.races[myOwner]);
     const towerCost = getResolvedCost('tower', state.races[myOwner]);
     const hasBarracks = state.entities.some(en => en.owner === myOwner && en.kind === 'barracks');
+    const hasLumbermill = state.entities.some(en => en.owner === myOwner && en.kind === 'lumbermill');
     const barrLabel = translateDisplayLabel(rc.barrLabel);
     const farmLabel = translateDisplayLabel(rc.farmLabel);
     addButton(`${barrLabel} [B]\n[${barrCost.gold}g${barrCost.wood ? ` ${barrCost.wood}w` : ''}]`, 'build:barracks', state.gold[myOwner] < barrCost.gold || state.wood[myOwner] < barrCost.wood);
+    addButton(`${t('lumber_mill')} [L]\n[${lumberCost.gold}g${lumberCost.wood ? ` ${lumberCost.wood}w` : ''}]`, 'build:lumbermill', state.gold[myOwner] < lumberCost.gold || state.wood[myOwner] < lumberCost.wood || hasLumbermill);
     addButton(`${farmLabel} [F]\n[${farmCost.gold}g${farmCost.wood ? ` ${farmCost.wood}w` : ''}]`, 'build:farm',     state.gold[myOwner] < farmCost.gold || state.wood[myOwner] < farmCost.wood);
-    addButton(`${translateDisplayLabel(rc.towerLabel)} [G]\n[${towerCost.gold}g${towerCost.wood ? ` ${towerCost.wood}w` : ''}]`, 'build:tower', state.gold[myOwner] < towerCost.gold || state.wood[myOwner] < towerCost.wood || !hasBarracks);
+    addButton(`${translateDisplayLabel(rc.towerLabel)} [G]\n[${towerCost.gold}g${towerCost.wood ? ` ${towerCost.wood}w` : ''}]`, 'build:tower', state.gold[myOwner] < towerCost.gold || state.wood[myOwner] < towerCost.wood || !hasBarracks || !hasLumbermill);
     addButton(`${t('wall')} [W]\n[${wallCost.gold}g${wallCost.wood ? ` ${wallCost.wood}w` : ''}]`,  'build:wall',     state.gold[myOwner] < wallCost.gold || state.wood[myOwner] < wallCost.wood);
     if (state.gold[myOwner] >= wallCost.gold && state.wood[myOwner] >= wallCost.wood) {
       addButton(t('hold_line'), 'build:wall');
     }
+  }
+
+  if (e.kind === 'lumbermill') {
+    const upgrades = state.upgrades[myOwner];
+    const meleeCost = { gold: 120, wood: 80 };
+    const armorCost = { gold: 120, wood: 80 };
+    const buildingHpCost = { gold: 90, wood: 120 };
+    addButton(`Melee +1\n[${meleeCost.gold}g ${meleeCost.wood}w]`, 'upgrade:meleeAttack1', upgrades.meleeAttack1 || state.gold[myOwner] < meleeCost.gold || state.wood[myOwner] < meleeCost.wood);
+    addButton(`Armor +1\n[${armorCost.gold}g ${armorCost.wood}w]`, 'upgrade:armor1', upgrades.armor1 || state.gold[myOwner] < armorCost.gold || state.wood[myOwner] < armorCost.wood);
+    addButton(`Bld HP +15%\n[${buildingHpCost.gold}g ${buildingHpCost.wood}w]`, 'upgrade:buildingHp1', upgrades.buildingHp1 || state.gold[myOwner] < buildingHpCost.gold || state.wood[myOwner] < buildingHpCost.wood);
   }
 
   // ── Stop (any player unit/building with an active command) ──────────────────

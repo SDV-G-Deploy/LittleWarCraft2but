@@ -24,7 +24,8 @@ export type NetCmd =
   | { k: 'set_plan'; buildingId: number; plan: OpeningPlan }
   | { k: 'rally';   buildingId: number; tx: number; ty: number; plan?: OpeningPlan }
   | { k: 'demolish';buildingId: number }
-  | { k: 'resume';  workerId: number; siteId: number };
+  | { k: 'resume';  workerId: number; siteId: number }
+  | { k: 'upgrade'; buildingId: number; upgrade: 'meleeAttack1' | 'armor1' | 'buildingHp1' };
 
 export interface TickPacket {
   tick: number;
@@ -198,6 +199,39 @@ export function applyNetCmds(
         const s = getEntity(state, cmd.siteId);
         if (w && s && w.owner === owner && s.owner === owner && isWorkerKind(w.kind) && s.kind === 'construction') {
           issueResumeBuildCommand(w, s, state.tick);
+        }
+        break;
+      }
+      case 'upgrade': {
+        const b = getEntity(state, cmd.buildingId);
+        if (!b || b.owner !== owner || b.kind !== 'lumbermill') break;
+        const upgrades = state.upgrades[owner];
+        if (upgrades[cmd.upgrade]) break;
+        const costs = {
+          meleeAttack1: { gold: 120, wood: 80 },
+          armor1: { gold: 120, wood: 80 },
+          buildingHp1: { gold: 90, wood: 120 },
+        } as const;
+        const cost = costs[cmd.upgrade];
+        if (state.gold[owner] < cost.gold || state.wood[owner] < cost.wood) break;
+        state.gold[owner] -= cost.gold;
+        state.wood[owner] -= cost.wood;
+        upgrades[cmd.upgrade] = true;
+        if (cmd.upgrade === 'buildingHp1') {
+          for (const e of state.entities) {
+            if (e.owner !== owner || e.kind === 'goldmine' || isUnitKind(e.kind)) continue;
+            const nextMax = Math.round(e.hpMax * 1.15);
+            const hpRatio = e.hpMax > 0 ? e.hp / e.hpMax : 1;
+            e.hpMax = nextMax;
+            e.hp = Math.round(nextMax * hpRatio);
+            e.statHpMax = nextMax;
+          }
+        }
+        if (cmd.upgrade === 'armor1') {
+          for (const e of state.entities) {
+            if (e.owner !== owner || !isUnitKind(e.kind)) continue;
+            e.statArmor = (e.statArmor ?? 0) + 1;
+          }
         }
         break;
       }
