@@ -9,10 +9,13 @@ import { findPath } from './pathfinding';
 // ─── Issue ────────────────────────────────────────────────────────────────────
 
 export function issueAttackCommand(entity: Entity, targetId: number, currentTick: number): void {
+  const existingAttack = entity.cmd?.type === 'attack' ? entity.cmd : null;
+
   entity.cmd = {
     type: 'attack',
     targetId,
-    cooldownTick: 0,
+    // Preserve fire cadence across re-issue (same-target spam and retarget).
+    cooldownTick: existingAttack?.cooldownTick ?? 0,
     chasePath: [],
     chasePathTick: currentTick, // align movement cadence to now, not epoch
     chaseStepTick: currentTick,
