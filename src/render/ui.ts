@@ -12,7 +12,7 @@ import { t, getLanguage } from '../i18n';
 
 // ─── Layout constants ──────────────────────────────────────────────────────────
 
-const PANEL_H    = 112;
+const PANEL_H    = 132;
 const BTN_W      = 112;
 const BTN_H      = 40;
 const BTN_PAD    = 8;
@@ -20,6 +20,48 @@ const PORTRAIT_W = 80;
 const MAX_BTN_COLS = 6;
 const OPENING_PLAN_LOCK_TICKS = getOpeningPlanLockTicks();
 const PRODUCTION_SLOTS = 5;
+
+function drawTopHud(ctx: CanvasRenderingContext2D, state: GameState, viewW: number, myOwner: 0 | 1): void {
+  const gold = state.gold[myOwner];
+  const wood = state.wood[myOwner];
+  const pop = state.pop[myOwner];
+  const popCap = state.popCap[myOwner];
+  const popFull = pop >= popCap;
+  const popNearFull = !popFull && popCap > 0 && popCap - pop <= 1;
+
+  const boxY = 8;
+  const boxH = 44;
+  const leftW = 268;
+  const rightW = 126;
+
+  ctx.fillStyle = 'rgba(14,18,22,0.86)';
+  ctx.fillRect(8, boxY, leftW, boxH);
+  ctx.fillRect(284, boxY, rightW, boxH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.strokeRect(8.5, boxY + 0.5, leftW - 1, boxH - 1);
+  ctx.strokeRect(284.5, boxY + 0.5, rightW - 1, boxH - 1);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = 'bold 11px monospace';
+  ctx.fillText('RESOURCES', 18, boxY + 13);
+  ctx.fillText('SUPPLY', 296, boxY + 13);
+
+  ctx.fillStyle = '#ffe97a';
+  ctx.font = 'bold 21px monospace';
+  ctx.fillText(`${gold}G`, 18, boxY + 34);
+  ctx.fillStyle = '#8fdc6d';
+  ctx.fillText(`${wood}W`, 142, boxY + 34);
+
+  ctx.fillStyle = popFull ? '#ff6666' : popNearFull ? '#ffbb66' : '#88ff88';
+  ctx.font = 'bold 20px monospace';
+  ctx.fillText(`${pop}/${popCap}`, 296, boxY + 34);
+
+  if (popFull || popNearFull) {
+    ctx.fillStyle = popFull ? '#ff8a8a' : '#ffd18a';
+    ctx.font = 'bold 10px monospace';
+    ctx.fillText(popFull ? t('food_full') : t('food_almost_full'), 346, boxY + 34);
+  }
+}
 
 function getMilitaryArmorBase(kind: EntityKind): number {
   return kind === 'footman' ? 4
@@ -96,6 +138,7 @@ export function drawUi(
   ctx.lineTo(viewW, panelY);
   ctx.stroke();
 
+  drawTopHud(ctx, state, viewW, myOwner);
   if (onlineStatus) drawOnlineStrip(ctx, viewW, panelY, onlineStatus);
   drawOpeningChoiceOverlay(ctx, state, viewW, panelY, myOwner, buttons);
   drawOpeningChoiceConfirmation(ctx, state, viewW, myOwner, openingPlanFeedback);
@@ -300,8 +343,8 @@ function drawEmptyPanel(
   panelY: number,
   viewW: number,
 ): void {
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.font = '12px monospace';
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.font = 'bold 14px monospace';
   ctx.textAlign = 'center';
   ctx.fillText(t('select_a_unit'), viewW / 2, panelY + PANEL_H / 2 + 4);
   ctx.textAlign = 'left';
@@ -496,12 +539,12 @@ function drawEntityInfo(
     isNeutralOwner(e.owner) ? 'NEUTRAL' : e.kind.toUpperCase();
 
   // Running Y cursor — everything flows downward from here
-  const LINE = 13;
-  let y = panelY + 16;
+  const LINE = 15;
+  let y = panelY + 18;
 
   // ── Name ───────────────────────────────────────────────────────────────────
   ctx.fillStyle = '#eee';
-  ctx.font = 'bold 13px monospace';
+  ctx.font = 'bold 15px monospace';
   ctx.fillText(displayName.toUpperCase(), x, y); y += LINE + 1;
 
   if (isProductionBuilding) {
@@ -509,8 +552,8 @@ function drawEntityInfo(
   }
 
   // ── HP ─────────────────────────────────────────────────────────────────────
-  ctx.fillStyle = '#aaa';
-  ctx.font = '11px monospace';
+  ctx.fillStyle = '#b8c0c8';
+  ctx.font = 'bold 12px monospace';
   ctx.fillText(`HP: ${e.hp} / ${getResolvedHpMax(e)}`, x, y); y += LINE;
 
   // ── Combat stats (mobile units only) ───────────────────────────────────────
@@ -524,7 +567,7 @@ function drawEntityInfo(
       ? (e.statArmor ?? stats.armor)
       : stats.armor;
     ctx.fillStyle = '#ffcc88';
-    ctx.font = '10px monospace';
+    ctx.font = '11px monospace';
     ctx.fillText(
       `ATK:${shownAtk}  DEF:${shownDef}  RNG:${rngStr}  SPD:${atkSpd}`,
       x, y,
@@ -540,8 +583,8 @@ function drawEntityInfo(
       )
       : (isNeutralOwner(e.owner) ? 'world object' : null);
     if (roleLabel) {
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.font = '10px monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.62)';
+      ctx.font = '11px monospace';
       ctx.fillText(roleLabel, x, y); y += LINE - 1;
     }
   }
@@ -550,13 +593,13 @@ function drawEntityInfo(
       ? (stats.attackTicks / 20).toFixed(1) + 's'
       : '—';
     ctx.fillStyle = '#ffcc88';
-    ctx.font = '10px monospace';
+    ctx.font = '11px monospace';
     ctx.fillText(
       `ATK:${stats.damage}  DEF:${stats.armor}  RNG:${stats.range}  SPD:${atkSpd}`,
       x, y,
     ); y += LINE;
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '10px monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.62)';
+    ctx.font = '11px monospace';
     ctx.fillText(t('role_static_defense'), x, y); y += LINE - 1;
   }
 
@@ -576,8 +619,8 @@ function drawEntityInfo(
     const mineLabel = isContested ? t('mine_contested') : myDist < enemyDist
       ? t('mine_safer')
       : t('mine_outer');
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '10px monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.62)';
+    ctx.font = '11px monospace';
     ctx.fillText(mineLabel, x, y); y += LINE - 1;
 
     const actionHint = isContested
@@ -585,7 +628,7 @@ function drawEntityInfo(
       : myDist < enemyDist
         ? t('mine_hint_safer')
         : t('mine_hint_outer');
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillStyle = 'rgba(255,255,255,0.46)';
     ctx.fillText(actionHint, x, y); y += LINE - 1;
 
     if (isContested && state.tick <= state.contestedMineBonusUntilTick) {
@@ -597,7 +640,7 @@ function drawEntityInfo(
 
   if (e.carryWood) {
     ctx.fillStyle = '#8fdc6d';
-    ctx.font = '11px monospace';
+    ctx.font = 'bold 12px monospace';
     ctx.fillText(t('carrying_wood', { amount: e.carryWood }), x, y); y += LINE;
   }
 
@@ -616,41 +659,19 @@ function drawEntityInfo(
   if (e.kind === 'farm' || e.kind === 'townhall') {
     const supplyProvided = getResolvedSupplyProvided(e.kind, usesRaceProfile(e.owner) ? state.races[e.owner] : null);
     ctx.fillStyle = '#ffcc88';
-    ctx.font = '11px monospace';
+    ctx.font = 'bold 12px monospace';
     ctx.fillText(t('food_slots', { amount: supplyProvided }), x, y); y += LINE;
   }
 
   if (e.kind === 'lumbermill' && e.owner === myOwner) {
     ctx.fillStyle = '#8fdc6d';
-    ctx.font = '10px monospace';
+    ctx.font = '11px monospace';
     for (const line of getLumberMillUpgradeSummary(state, myOwner)) {
       ctx.fillText(line, x, y); y += LINE - 1;
     }
   }
 
-  // ── Pop + treasury (player-owned, non-goldmine) ─────────────────────────────
-  if (e.owner === myOwner && e.kind !== 'goldmine') {
-    const pop = state.pop[myOwner];
-    const popCap = state.popCap[myOwner];
-    const popFull = pop >= popCap;
-    const popNearFull = !popFull && popCap > 0 && popCap - pop <= 1;
-    ctx.fillStyle = popFull ? '#ff6666' : popNearFull ? '#ffbb66' : '#88ff88';
-    ctx.font = '11px monospace';
-    ctx.fillText(t('pop', { pop, cap: popCap }), x, y);
-    ctx.fillStyle = '#ffe97a';
-    ctx.font = 'bold 12px monospace';
-    ctx.fillText(`${state.gold[myOwner]}g`, x + 90, y);
-    ctx.fillStyle = '#8fdc6d';
-    ctx.fillText(`${state.wood[myOwner]}w`, x + 140, y);
-    y += LINE;
-
-    if (popFull || popNearFull) {
-      ctx.fillStyle = popFull ? '#ff7777' : '#ffcc88';
-      ctx.font = '10px monospace';
-      ctx.fillText(popFull ? t('food_full') : t('food_almost_full'), x, y);
-      y += LINE - 1;
-    }
-  }
+  // treasury + supply moved to top HUD
 
   // ── Carry gold (workers) ────────────────────────────────────────────────────
   if (e.carryGold) {

@@ -21,7 +21,7 @@ export function createWorld(mapData: MapData, races: [Race, Race]): GameState {
     corpses:  [],
     nextId:   1,
     gold:     [500, 500],
-    wood:     [0, 0],
+    wood:     [40, 40],
     pop:      [0, 0],
     popCap:   [4, 4],
     races,

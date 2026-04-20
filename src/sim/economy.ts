@@ -158,6 +158,28 @@ function getTreeApproachTiles(state: GameState, tx: number, ty: number): Vec2[] 
   return tiles;
 }
 
+function findNearestTreeTarget(state: GameState, entity: Entity, fromTx: number, fromTy: number): number | null {
+  let bestId: number | null = null;
+  let bestScore = Infinity;
+
+  for (let ty = Math.max(0, fromTy - 8); ty <= Math.min(MAP_H - 1, fromTy + 8); ty++) {
+    for (let tx = Math.max(0, fromTx - 8); tx <= Math.min(MAP_W - 1, fromTx + 8); tx++) {
+      const tile = state.tiles[ty]?.[tx];
+      if (tile?.kind !== 'tree' || (tile.woodReserve ?? 0) <= 0) continue;
+      const approach = bestTreeApproach(state, entity, tx, ty);
+      if (!approach) continue;
+      const directBias = Math.abs(tx - fromTx) + Math.abs(ty - fromTy);
+      const score = approach.path.length * 1000 + directBias;
+      if (score < bestScore) {
+        bestScore = score;
+        bestId = ty * MAP_W + tx;
+      }
+    }
+  }
+
+  return bestId;
+}
+
 function bestTreeApproach(state: GameState, entity: Entity, tx: number, ty: number): { target: Vec2; path: Vec2[] } | null {
   let best: { target: Vec2; path: Vec2[] } | null = null;
   let bestScore = Infinity;
@@ -186,8 +208,16 @@ export function processGather(state: GameState, entity: Entity): void {
     ec._gatherTarget = undefined;
   };
 
-  const target = resolveGatherTarget(state, cmd.targetId);
-  const resourceDepleted = !target;
+  let target = resolveGatherTarget(state, cmd.targetId);
+  let resourceDepleted = !target;
+  if (resourceDepleted && cmd.resourceType === 'wood') {
+    const nextTreeId = findNearestTreeTarget(state, entity, cmd.targetId % MAP_W, Math.floor(cmd.targetId / MAP_W));
+    if (nextTreeId !== null) {
+      cmd.targetId = nextTreeId;
+      target = resolveGatherTarget(state, cmd.targetId);
+      resourceDepleted = !target;
+    }
+  }
   if (resourceDepleted) {
     if (cmd.phase === 'returning' || (entity.carryGold ?? 0) > 0 || (entity.carryWood ?? 0) > 0) {
       cmd.phase = 'returning';

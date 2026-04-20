@@ -27,6 +27,7 @@ export interface SpriteCache {
   // Human buildings  [0]=player  [1]=AI
   townhall: [HTMLCanvasElement, HTMLCanvasElement];
   barracks: [HTMLCanvasElement, HTMLCanvasElement];
+  lumbermill: [HTMLCanvasElement, HTMLCanvasElement];
   farm:     [HTMLCanvasElement, HTMLCanvasElement];
   wall:     [HTMLCanvasElement, HTMLCanvasElement];
   tower:    [HTMLCanvasElement, HTMLCanvasElement];
@@ -765,6 +766,84 @@ function makeBarracks(T: number, owner: 0 | 1): HTMLCanvasElement {
   return c;
 }
 
+function makeLumberMill(T: number, owner: 0 | 1): HTMLCanvasElement {
+  const W = T * 3; const H = T * 2;
+  const [c, ctx] = oc(W, H);
+
+  ctx.fillStyle = '#4b3420';
+  ctx.fillRect(0, 8, W, H - 8);
+  stoneTexture(ctx, 0, H - 14, W, 14, ST_VD, ST_D, ST_L, 8, 10);
+
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(4, 10, W - 8, H - 20);
+  ctx.fillStyle = WD_M;
+  for (let x = 6; x < W - 6; x += 8) {
+    ctx.fillRect(x, 12, 4, H - 24);
+  }
+  ctx.fillStyle = WD_L;
+  for (let y = 14; y < H - 10; y += 8) {
+    ctx.fillRect(4, y, W - 8, 2);
+  }
+
+  ctx.fillStyle = ST_M;
+  ctx.beginPath();
+  ctx.moveTo(2, 14);
+  ctx.lineTo(W / 2, 0);
+  ctx.lineTo(W - 2, 14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = ST_L;
+  ctx.beginPath();
+  ctx.moveTo(6, 14);
+  ctx.lineTo(W / 2, 4);
+  ctx.lineTo(W - 6, 14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = TC_M[owner];
+  ctx.fillRect(W / 2 - 2, 4, 4, 10);
+
+  const wheelCx = 18;
+  const wheelCy = H - 16;
+  ctx.strokeStyle = WD_D;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(wheelCx, wheelCy, 10, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = WD_L;
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 8; i++) {
+    const a = (Math.PI * 2 * i) / 8;
+    ctx.beginPath();
+    ctx.moveTo(wheelCx, wheelCy);
+    ctx.lineTo(wheelCx + Math.cos(a) * 9, wheelCy + Math.sin(a) * 9);
+    ctx.stroke();
+  }
+  ctx.fillStyle = MT_M;
+  ctx.beginPath();
+  ctx.arc(wheelCx, wheelCy, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#040404';
+  ctx.fillRect(W - 26, H - 34, 10, 16);
+  ctx.fillRect(W - 42, H - 30, 8, 12);
+  ctx.fillStyle = ST_D;
+  ctx.fillRect(W - 24, H - 42, 6, 12);
+  ctx.fillRect(W - 40, H - 38, 4, 10);
+
+  ctx.fillStyle = WD_M;
+  ctx.fillRect(W - 22, H - 16, 18, 4);
+  ctx.fillRect(W - 20, H - 20, 16, 4);
+  ctx.fillStyle = WD_L;
+  ctx.fillRect(W - 24, H - 16, 2, 10);
+  ctx.fillRect(W - 10, H - 16, 2, 10);
+  ctx.fillRect(W - 28, H - 12, 24, 3);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(0, H - 2, W, 2);
+
+  return c;
+}
+
 function makeFarm(T: number, owner: 0 | 1): HTMLCanvasElement {
   const W = T * 2; const H = T * 2;
   const [c, ctx] = oc(W, H);
@@ -1471,72 +1550,90 @@ function makeWarMill(T: number, owner: 0 | 1): HTMLCanvasElement {
   const W = T * 3; const H = T * 2;
   const [c, ctx] = oc(W, H);
 
-  // ── Rough stone and wood construction ──
-  stoneTexture(ctx, 0, 0, W, H, '#201808', '#342810', '#4a3818', 10, 16);
+  stoneTexture(ctx, 0, H - 16, W, 16, '#201808', '#342810', '#4a3818', 8, 12);
 
-  // ── Heavy wooden beams exposed on facade ──
+  ctx.fillStyle = '#24160a';
+  ctx.fillRect(4, 10, W - 8, H - 18);
   ctx.fillStyle = WD_D;
-  ctx.fillRect(0, 0, W, 12);       // top beam
-  ctx.fillRect(0, H / 2 - 2, W, 4); // mid beam
+  for (let x = 8; x < W - 8; x += 10) {
+    ctx.fillRect(x, 10, 5, H - 18);
+  }
   ctx.fillStyle = WD_M;
-  ctx.fillRect(0, 0, W, 4);        // top beam highlight
-
-  // ── Battlements with spikes ──
-  ctx.fillStyle = '#302010';
-  for (let x = 4; x < W - 4; x += 10) {
-    ctx.fillRect(x, 0, 7, 12);
-    // Spike on each merlon
-    ctx.fillStyle = ORC_TUSK;
-    ctx.beginPath();
-    ctx.moveTo(x + 2, 0);
-    ctx.lineTo(x + 3, -5);
-    ctx.lineTo(x + 5, 0);
-    ctx.fill();
-    ctx.fillStyle = '#302010';
+  for (let y = 14; y < H - 10; y += 8) {
+    ctx.fillRect(4, y, W - 8, 2);
   }
 
-  // ── Wide reinforced gate ──
-  const gx = W / 2 - 14;
-  ctx.fillStyle = '#1c1208';
-  ctx.fillRect(gx, H - 28, 28, 28);
-  // Iron-banded door planks
-  ctx.fillStyle = WD_D;
-  ctx.fillRect(gx + 2, H - 26, 11, 26);
-  ctx.fillRect(gx + 15, H - 26, 11, 26);
-  // Metal bands
-  ctx.fillStyle = MT_D;
-  for (const dy of [6, 14, 20]) {
-    ctx.fillRect(gx + 2, H - 26 + dy, 11, 3);
-    ctx.fillRect(gx + 15, H - 26 + dy, 11, 3);
-  }
-  // Iron bolts
-  ctx.fillStyle = MT_M;
-  for (const [dx, dy] of [[5, 4], [8, 12], [5, 18]]) {
-    ctx.beginPath(); ctx.arc(gx + dx + 2, H - 26 + dy, 2, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(gx + 15 + dx + 2, H - 26 + dy, 2, 0, Math.PI * 2); ctx.fill();
-  }
-  // Gate frame
-  ctx.strokeStyle = MT_D; ctx.lineWidth = 2;
-  ctx.strokeRect(gx, H - 28, 28, 28);
-
-  // ── Arrow slits ──
-  ctx.fillStyle = '#040404';
-  for (const wx of [12, W - 16]) {
-    ctx.fillRect(wx, H - 38, 4, 12);
-    ctx.fillRect(wx - 2, H - 33, 8, 4);
-  }
-
-  // ── Flagpole with team color ──
-  ctx.fillStyle = WD_D;
-  ctx.fillRect(W - 14, 0, 2, 20);
-  ctx.fillStyle = TC_M[owner];
+  ctx.fillStyle = '#362010';
   ctx.beginPath();
-  ctx.moveTo(W - 12, 2);
-  ctx.lineTo(W - 2, 7);
-  ctx.lineTo(W - 12, 13);
+  ctx.moveTo(2, 14);
+  ctx.lineTo(W / 2, 2);
+  ctx.lineTo(W - 2, 14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#4a2c18';
+  ctx.beginPath();
+  ctx.moveTo(6, 14);
+  ctx.lineTo(W / 2, 5);
+  ctx.lineTo(W - 6, 14);
+  ctx.closePath();
   ctx.fill();
 
-  // Bottom shadow
+  for (const sx of [10, 24, 38, 52, 66, 80]) {
+    ctx.fillStyle = ORC_TUSK;
+    ctx.beginPath();
+    ctx.moveTo(sx, 8);
+    ctx.lineTo(sx + 2, 0);
+    ctx.lineTo(sx + 5, 8);
+    ctx.fill();
+  }
+
+  const wheelCx = 20;
+  const wheelCy = H - 18;
+  ctx.strokeStyle = '#1f1208';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(wheelCx, wheelCy, 11, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = WD_M;
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 8; i++) {
+    const a = (Math.PI * 2 * i) / 8;
+    ctx.beginPath();
+    ctx.moveTo(wheelCx, wheelCy);
+    ctx.lineTo(wheelCx + Math.cos(a) * 10, wheelCy + Math.sin(a) * 10);
+    ctx.stroke();
+  }
+  ctx.fillStyle = MT_M;
+  ctx.beginPath();
+  ctx.arc(wheelCx, wheelCy, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#120804';
+  ctx.fillRect(W - 26, H - 34, 12, 18);
+  ctx.fillRect(W - 44, H - 30, 9, 13);
+  ctx.fillStyle = '#3a2616';
+  ctx.fillRect(W - 23, H - 44, 7, 12);
+  ctx.fillRect(W - 41, H - 39, 5, 10);
+
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(W - 30, H - 15, 24, 4);
+  ctx.fillRect(W - 26, H - 19, 18, 4);
+  ctx.fillStyle = WD_L;
+  ctx.fillRect(W - 32, H - 15, 2, 9);
+  ctx.fillRect(W - 10, H - 15, 2, 9);
+  ctx.fillRect(W - 36, H - 11, 30, 3);
+
+  ctx.fillStyle = TC_M[owner];
+  ctx.fillRect(W / 2 - 2, 4, 4, 10);
+  ctx.fillStyle = WD_D;
+  ctx.fillRect(W / 2 + 14, 4, 2, 16);
+  ctx.fillStyle = TC_M[owner];
+  ctx.beginPath();
+  ctx.moveTo(W / 2 + 16, 5);
+  ctx.lineTo(W / 2 + 26, 10);
+  ctx.lineTo(W / 2 + 16, 15);
+  ctx.fill();
+
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.fillRect(0, H - 2, W, 2);
 
@@ -1644,6 +1741,7 @@ export function buildSpriteCache(T: number): SpriteCache {
     // Human buildings
     townhall: [makeTownhall(T, 0), makeTownhall(T, 1)],
     barracks: [makeBarracks(T, 0), makeBarracks(T, 1)],
+    lumbermill: [makeLumberMill(T, 0), makeLumberMill(T, 1)],
     farm:     [makeFarm(T, 0), makeFarm(T, 1)],
     wall:     [makeWall(T, 0), makeWall(T, 1)],
     tower:    [makeTower(T, 0, false), makeTower(T, 1, false)],

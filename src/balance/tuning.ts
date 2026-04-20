@@ -9,7 +9,18 @@ export const BALANCE_TUNING: BalanceTuningConfig = {
   races: {
     human: {
       farm: {
-        supplyProvided: 5,
+        cost: { gold: 180, wood: 40 },
+      },
+      lumbermill: {
+        cost: { gold: 160, wood: 60 },
+      },
+    },
+    orc: {
+      farm: {
+        cost: { gold: 180, wood: 30 },
+      },
+      lumbermill: {
+        cost: { gold: 160, wood: 60 },
       },
     },
   },
