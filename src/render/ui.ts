@@ -46,16 +46,16 @@ function getLumberMillUpgradeSummary(state: GameState, owner: 0 | 1): string[] {
     ? upgrades.buildingHpLevel * 20
     : upgrades.buildingHpLevel * 10;
   return [
-    `${profile.upgrades.meleeAttack.label}: +${profile.upgrades.meleeAttack.perLevel} per lvl, level ${upgrades.meleeAttackLevel}/${profile.upgrades.meleeAttack.maxLevel}`,
-    `${profile.upgrades.armor.label}: +${profile.upgrades.armor.perLevel} per lvl, level ${upgrades.armorLevel}/${profile.upgrades.armor.maxLevel}`,
-    `${profile.upgrades.buildingHp.label}: +${profile.upgrades.buildingHp.perLevel}% per lvl, level ${upgrades.buildingHpLevel}/${profile.upgrades.buildingHp.maxLevel} (now +${buildingHpNow}%)`,
+    `${t('upgrade_attack')}: +${profile.upgrades.meleeAttack.perLevel} ${t('upgrade_per_level')}, ${t('upgrade_level_word')} ${upgrades.meleeAttackLevel}/${profile.upgrades.meleeAttack.maxLevel}`,
+    `${t('upgrade_defense')}: +${profile.upgrades.armor.perLevel} ${t('upgrade_per_level')}, ${t('upgrade_level_word')} ${upgrades.armorLevel}/${profile.upgrades.armor.maxLevel}`,
+    `${t('upgrade_building_hp')}: +${profile.upgrades.buildingHp.perLevel}% ${t('upgrade_per_level')}, ${t('upgrade_level_word')} ${upgrades.buildingHpLevel}/${profile.upgrades.buildingHp.maxLevel} (${t('upgrade_now_bonus')} +${buildingHpNow}%)`,
   ];
 }
 
 function getUpgradeTargetHint(id: 'meleeAttack' | 'armor' | 'buildingHp', race: 'human' | 'orc'): string {
-  if (id === 'meleeAttack') return race === 'human' ? 'Footman, Knight' : 'Grunt, Ogre';
-  if (id === 'armor') return race === 'human' ? 'Footman, Archer, Knight' : 'Grunt, Troll, Ogre';
-  return race === 'human' ? 'All player buildings' : 'All player buildings';
+  if (id === 'meleeAttack') return race === 'human' ? t('upgrade_targets_melee_human') : t('upgrade_targets_melee_orc');
+  if (id === 'armor') return race === 'human' ? t('upgrade_targets_armor_human') : t('upgrade_targets_armor_orc');
+  return t('upgrade_targets_buildings');
 }
 
 export interface UiButton {
@@ -899,9 +899,9 @@ function collectButtons(
     const melee = profile.upgrades.meleeAttack;
     const armor = profile.upgrades.armor;
     const buildingHp = profile.upgrades.buildingHp;
-    addButton(`${melee.label} +${melee.perLevel} lvl ${upgrades.meleeAttackLevel}/${melee.maxLevel}\n${getUpgradeTargetHint('meleeAttack', race)} [${melee.cost.wood}w]`, 'upgrade:meleeAttack', upgrades.meleeAttackLevel >= melee.maxLevel || state.gold[myOwner] < melee.cost.gold || state.wood[myOwner] < melee.cost.wood);
-    addButton(`${armor.label} +${armor.perLevel} lvl ${upgrades.armorLevel}/${armor.maxLevel}\n${getUpgradeTargetHint('armor', race)} [${armor.cost.wood}w]`, 'upgrade:armor', upgrades.armorLevel >= armor.maxLevel || state.gold[myOwner] < armor.cost.gold || state.wood[myOwner] < armor.cost.wood);
-    addButton(`${buildingHp.label} +${buildingHp.perLevel}% lvl ${upgrades.buildingHpLevel}/${buildingHp.maxLevel}\n${getUpgradeTargetHint('buildingHp', race)} [${buildingHp.cost.wood}w]`, 'upgrade:buildingHp', upgrades.buildingHpLevel >= buildingHp.maxLevel || state.gold[myOwner] < buildingHp.cost.gold || state.wood[myOwner] < buildingHp.cost.wood);
+    addButton(`${t('upgrade_attack')} +${melee.perLevel} ${t('upgrade_level')} ${upgrades.meleeAttackLevel}/${melee.maxLevel}\n${getUpgradeTargetHint('meleeAttack', race)} [${melee.cost.wood}w]`, 'upgrade:meleeAttack', upgrades.meleeAttackLevel >= melee.maxLevel || state.gold[myOwner] < melee.cost.gold || state.wood[myOwner] < melee.cost.wood);
+    addButton(`${t('upgrade_defense')} +${armor.perLevel} ${t('upgrade_level')} ${upgrades.armorLevel}/${armor.maxLevel}\n${getUpgradeTargetHint('armor', race)} [${armor.cost.wood}w]`, 'upgrade:armor', upgrades.armorLevel >= armor.maxLevel || state.gold[myOwner] < armor.cost.gold || state.wood[myOwner] < armor.cost.wood);
+    addButton(`${t('upgrade_building_hp')} +${buildingHp.perLevel}% ${t('upgrade_level')} ${upgrades.buildingHpLevel}/${buildingHp.maxLevel}\n${getUpgradeTargetHint('buildingHp', race)} [${buildingHp.cost.wood}w]`, 'upgrade:buildingHp', upgrades.buildingHpLevel >= buildingHp.maxLevel || state.gold[myOwner] < buildingHp.cost.gold || state.wood[myOwner] < buildingHp.cost.wood);
   }
 
   // ── Stop (any player unit/building with an active command) ──────────────────
