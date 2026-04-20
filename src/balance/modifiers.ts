@@ -75,11 +75,12 @@ export const ATTACK_MODIFIER_RULES: AttackModifierRule[] = [
   },
   {
     id: 'opening_pressure_bonus',
-    description: 'Pressure-tagged opening units deal +1 damage early.',
+    description: 'Pressure-tagged opening units deal +1 damage during their forward-commit window.',
     apply: ({ state, attacker }) => (
       attacker.openingPlan === 'pressure' &&
       isUnitKind(attacker.kind) &&
-      state.tick <= SIM_HZ * 18
+      typeof attacker.pressureCommittedUntilTick === 'number' &&
+      state.tick <= attacker.pressureCommittedUntilTick
         ? 1
         : 0
     ),

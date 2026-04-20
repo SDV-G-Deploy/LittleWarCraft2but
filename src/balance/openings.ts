@@ -24,6 +24,7 @@ export interface OpeningPlanDefinition {
     firstMilitarySpeedBoostMult: number;
     firstMilitarySpeedBoostTicks: number;
     attackMoveCommit: boolean;
+    forwardCommitTicks: number;
   };
   ui: OpeningPlanPresentation;
 }
@@ -69,6 +70,7 @@ export const OPENING_PLAN_DEFINITIONS: Record<OpeningPlan, OpeningPlanDefinition
       firstMilitarySpeedBoostMult: 1.2,
       firstMilitarySpeedBoostTicks: SIM_HZ * 5,
       attackMoveCommit: true,
+      forwardCommitTicks: SIM_HZ * 18,
     },
     ui: {
       title: 'Pressure opening',
@@ -132,6 +134,10 @@ export function getPressureSpeedBoostMult(): number {
 
 export function getPressureSpeedBoostTicks(): number {
   return OPENING_PLAN_DEFINITIONS.pressure.pressure?.firstMilitarySpeedBoostTicks ?? 0;
+}
+
+export function getPressureForwardCommitTicks(): number {
+  return OPENING_PLAN_DEFINITIONS.pressure.pressure?.forwardCommitTicks ?? 0;
 }
 
 export function shouldPressureAttackMoveCommit(selectedPlan: OpeningPlan | null, claimed: boolean, currentTick: number, entity: Entity): boolean {

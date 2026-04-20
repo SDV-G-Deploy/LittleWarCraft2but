@@ -106,6 +106,7 @@ export interface Entity {
   carryGold?: number;     // workers carrying gold back
   rallyPoint?: Vec2;      // townhall / barracks: newly trained units walk here
   openingPlan?: OpeningPlan; // player-declared early intent for UI + rally support
+  pressureCommittedUntilTick?: number; // early forward-commit window for pressure opener units
   constructionOf?: EntityKind;  // 'construction' entities: target building kind
   underAttackTick?: number;     // recent damage marker for UI / harassment readability
   statHpMax?: number;           // optional runtime max HP override for race-specific variants

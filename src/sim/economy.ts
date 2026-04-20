@@ -7,6 +7,7 @@ import {
   getEcoFirstReturnBonusGold,
   getEcoGatherBonus,
   getEcoGatherBonusCap,
+  getPressureForwardCommitTicks,
   getPressureSpeedBoostMult,
   getPressureSpeedBoostTicks,
   isOpeningWindowActive,
@@ -244,6 +245,7 @@ export function processTrain(state: GameState, building: Entity): void {
       } else if (shouldPressureAttackMoveCommit(openingPlan, state.openingCommitmentClaimed[owner], state.tick, newUnit)) {
         openingPressureAttackMove = true;
         newUnit.openingPlan = 'pressure';
+        newUnit.pressureCommittedUntilTick = state.tick + getPressureForwardCommitTicks();
         state.openingCommitmentClaimed[owner] = true;
       }
     }

@@ -560,6 +560,10 @@ function drawEntityInfo(
     if (openingCopy) {
       ctx.fillText(openingCopy.body, x, y); y += LINE - 1;
     }
+    if (selectedPlan === 'pressure' && !openingSpent) {
+      ctx.fillStyle = 'rgba(255,200,120,0.52)';
+      ctx.fillText('1st military gets an 18s forward-commit damage window', x, y); y += LINE - 1;
+    }
   }
 
   // ── Rally point (townhall / barracks, player-owned) ────────────────────────
@@ -607,6 +611,8 @@ function drawEntityInfo(
       if (selectedPlan === 'pressure' && !state.openingCommitmentClaimed[myOwner]) {
         ctx.fillStyle = 'rgba(255,200,120,0.42)';
         ctx.fillText('Pressure fallback: first military commits toward enemy Town Hall', x, y); y += LINE - 1;
+        ctx.fillStyle = 'rgba(255,170,120,0.34)';
+        ctx.fillText('That unit keeps +1 damage while its forward-commit window lasts', x, y); y += LINE - 1;
       }
     }
   }
