@@ -34,7 +34,7 @@ export function buildMap05(): MapData {
   fill(map, 34, 40, 2, 6, R);
 
   map[26][31] = P();
-  map[37][32] = P();
+  map[30][27] = P();
 
   // Slightly widen one staggered lane opening on each wall to strengthen route-choice variety.
   // Keep this pair rotation-mirrored so neither spawn gets a cleaner center-to-side pivot.
@@ -49,6 +49,7 @@ export function buildMap05(): MapData {
   fill(map, 8, 38, 2, 2, M);
   fill(map, 54, 25, 2, 2, M);
   fill(map, 54, 37, 2, 2, M);
+
   fill(map, 31, 31, 2, 2, M);
 
   return {
