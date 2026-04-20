@@ -8,7 +8,7 @@ import type { EntityKind, GameState, OpeningPlan } from '../types';
 import { SIM_HZ, isUnitKind, isWorkerKind } from '../types';
 import { getResolvedCost } from '../balance/resolver';
 import { issueAttackCommand } from '../sim/combat';
-import { issueGatherCommand, issueTrainCommand, issueBuildCommand, issueResumeBuildCommand } from '../sim/economy';
+import { issueGatherCommand, issueTrainCommand, issueBuildCommand, issueResumeBuildCommand, refundCancelledTrainCommand } from '../sim/economy';
 import { issueMoveCommand } from '../sim/commands';
 import { getEntity, killEntity } from '../sim/entities';
 
@@ -141,6 +141,10 @@ export function applyNetCmds(
         for (const id of sortUnitIds(cmd.ids)) {
           const e = getEntity(state, id);
           if (!e || e.owner !== owner) continue;
+          if (e.cmd?.type === 'train') {
+            refundCancelledTrainCommand(state, e);
+            continue;
+          }
           e.cmd = null;
           (e as typeof e & { _gatherPath?: unknown; _buildPath?: unknown })._gatherPath = undefined;
           (e as typeof e & { _gatherPath?: unknown; _buildPath?: unknown })._buildPath = undefined;

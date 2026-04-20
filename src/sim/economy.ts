@@ -90,16 +90,27 @@ export function processGather(state: GameState, entity: Entity): void {
   };
 
   const mine = getEntity(state, cmd.mineId);
-  if (!mine || (mine.goldReserve ?? 0) <= 0) {
-    clearGatherState();
-    entity.cmd = null;
-    return;
+  const mineDepleted = !mine || (mine.goldReserve ?? 0) <= 0;
+  if (mineDepleted) {
+    if (cmd.phase === 'returning' || (entity.carryGold ?? 0) > 0) {
+      cmd.phase = 'returning';
+      clearGatherState();
+    } else {
+      clearGatherState();
+      entity.cmd = null;
+      return;
+    }
   }
 
   const tps = ticksPerStep(entity.kind);
 
   switch (cmd.phase) {
     case 'tomine': {
+      if (!mine) {
+        clearGatherState();
+        entity.cmd = null;
+        return;
+      }
       if (ec._gatherPath === undefined) {
         // target tile just above the mine
         const raw = findPath(state, entity.pos.x, entity.pos.y,
@@ -126,6 +137,11 @@ export function processGather(state: GameState, entity: Entity): void {
     }
     case 'gathering': {
       if (state.tick - cmd.waitTicks < GATHER_TICKS) return;
+      if (!mine) {
+        clearGatherState();
+        entity.cmd = null;
+        return;
+      }
       const owner = entity.owner as 0 | 1;
       const openingPlan = state.openingPlanSelected[owner];
       const ecoGatherBonus = getEcoGatherBonus(openingPlan, state.openingCommitmentClaimed[owner], state.tick, entity);
@@ -159,7 +175,12 @@ export function processGather(state: GameState, entity: Entity): void {
           state.openingCommitmentClaimed[owner] = true;
         }
         entity.carryGold = 0;
-        cmd.phase = 'tomine'; ec._gatherPath = undefined;
+        ec._gatherPath = undefined;
+        if (mineDepleted) {
+          entity.cmd = null;
+          return;
+        }
+        cmd.phase = 'tomine';
         return;
       }
       if (state.tick - cmd.waitTicks < tps) return;
@@ -172,6 +193,18 @@ export function processGather(state: GameState, entity: Entity): void {
 }
 
 // ─── Train ────────────────────────────────────────────────────────────────────
+
+export function refundCancelledTrainCommand(state: GameState, building: Entity): void {
+  if (!building.cmd || building.cmd.type !== 'train') return;
+
+  const owner = building.owner as 0 | 1;
+  const queue = [building.cmd.unit, ...building.cmd.queue];
+  for (const queuedUnit of queue) {
+    state.gold[owner] += getResolvedCost(queuedUnit, state.races[owner]);
+  }
+
+  building.cmd = null;
+}
 
 export function issueTrainCommand(
   state: GameState,
