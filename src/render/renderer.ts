@@ -18,7 +18,6 @@ interface UnitRenderState {
   currX: number;
   currY: number;
   facingX: -1 | 0 | 1;
-  bobPhase: number;
 }
 
 const unitRenderCache = new Map<number, UnitRenderState>();
@@ -302,26 +301,6 @@ function drawEntities(
 
   for (const e of state.entities) {
     if (!isUnitKind(e.kind)) continue;
-    let renderState = unitRenderCache.get(e.id);
-    if (!renderState) {
-      renderState = {
-        prevX: e.pos.x,
-        prevY: e.pos.y,
-        currX: e.pos.x,
-        currY: e.pos.y,
-        facingX: 0,
-        bobPhase: 0,
-      };
-      unitRenderCache.set(e.id, renderState);
-    } else if (renderState.currX !== e.pos.x || renderState.currY !== e.pos.y) {
-      const dx = e.pos.x - renderState.currX;
-      renderState.prevX = renderState.currX;
-      renderState.prevY = renderState.currY;
-      renderState.currX = e.pos.x;
-      renderState.currY = e.pos.y;
-      if (dx !== 0) renderState.facingX = dx > 0 ? 1 : -1;
-      renderState.bobPhase = (renderState.bobPhase + 1) % 8;
-    }
     visibleUnitIds.add(e.id);
   }
 
@@ -338,11 +317,34 @@ function drawEntities(
 
       let renderX = e.pos.x;
       let renderY = e.pos.y;
+      let renderState: UnitRenderState | undefined;
       if (isUnit) {
-        const renderState = unitRenderCache.get(e.id);
-        if (renderState) {
-          renderX = renderState.prevX + (renderState.currX - renderState.prevX) * clampedAlpha;
-          renderY = renderState.prevY + (renderState.currY - renderState.prevY) * clampedAlpha;
+        renderState = unitRenderCache.get(e.id);
+        if (!renderState) {
+          renderState = {
+            prevX: e.pos.x,
+            prevY: e.pos.y,
+            currX: e.pos.x,
+            currY: e.pos.y,
+            facingX: 0,
+          };
+          unitRenderCache.set(e.id, renderState);
+        }
+
+        if (renderState.currX !== e.pos.x || renderState.currY !== e.pos.y) {
+          const dx = e.pos.x - renderState.currX;
+          renderState.prevX = renderState.currX;
+          renderState.prevY = renderState.currY;
+          renderState.currX = e.pos.x;
+          renderState.currY = e.pos.y;
+          if (dx !== 0) renderState.facingX = dx > 0 ? 1 : -1;
+        }
+
+        renderX = renderState.prevX + (renderState.currX - renderState.prevX) * clampedAlpha;
+        renderY = renderState.prevY + (renderState.currY - renderState.prevY) * clampedAlpha;
+        if (clampedAlpha >= 0.999) {
+          renderState.prevX = renderState.currX;
+          renderState.prevY = renderState.currY;
         }
       }
 
@@ -354,7 +356,7 @@ function drawEntities(
       const ph = e.tileH * TILE_SIZE;
 
       if (isUnit) {
-        drawUnit(ctx, sp, e, sx, sy, selected, unitRenderCache.get(e.id));
+        drawUnit(ctx, sp, e, sx, sy, selected, renderState);
       } else {
         drawBuilding(ctx, sp, e, sx, sy, pw, ph, selected, state);
       }
@@ -458,8 +460,11 @@ function drawUnit(
   renderState?: UnitRenderState,
 ): void {
   const moving = !!(e.cmd && (e.cmd.type === 'move' || e.cmd.type === 'build'));
-  const bobOffset = moving ? (renderState?.bobPhase === 1 || renderState?.bobPhase === 5 ? -1 : 0) : 0;
   const facingX = renderState?.facingX ?? 0;
+  const progressX = renderState ? Math.abs(sx / TILE_SIZE - renderState.prevX) : 0;
+  const progressY = renderState ? Math.abs(sy / TILE_SIZE - renderState.prevY) : 0;
+  const stepProgress = Math.max(progressX, progressY);
+  const bobOffset = moving ? Math.round(Math.sin(Math.min(1, stepProgress) * Math.PI) * -1) : 0;
   const bodySx = Math.round(sx);
   const bodySy = Math.round(sy + bobOffset);
   const cx = bodySx + TILE_SIZE / 2;
