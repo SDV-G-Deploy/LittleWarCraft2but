@@ -69,18 +69,34 @@ function drawTopHud(ctx: CanvasRenderingContext2D, state: GameState, viewW: numb
   const popFull = pop >= popCap;
   const popNearFull = !popFull && popCap > 0 && popCap - pop <= 1;
 
-  drawHudChip(ctx, 8, 8, 118, 40, 'GOLD', `${gold}`, '#ffe97a', 'gold');
-  drawHudChip(ctx, 132, 8, 118, 40, 'WOOD', `${wood}`, '#8fdc6d', 'wood');
-  drawHudChip(ctx, 256, 8, 154, 40, 'SUPPLY', `${pop}/${popCap}`, popFull ? '#ff6666' : popNearFull ? '#ffbb66' : '#88ff88', 'supply');
+  const topX = 8;
+  const topY = 8;
+  const gap = 6;
+  const baseChipW = 118;
+  const supplyChipW = 154;
+  const warningW = 116;
+  const chipH = 40;
+  const showWarning = popFull || popNearFull;
 
-  if (popFull || popNearFull) {
+  const totalW = baseChipW + gap + baseChipW + gap + supplyChipW + (showWarning ? gap + warningW : 0);
+  const startX = Math.max(topX, Math.floor((viewW - totalW) / 2));
+
+  let x = startX;
+  drawHudChip(ctx, x, topY, baseChipW, chipH, 'GOLD', `${gold}`, '#ffe97a', 'gold');
+  x += baseChipW + gap;
+  drawHudChip(ctx, x, topY, baseChipW, chipH, 'WOOD', `${wood}`, '#8fdc6d', 'wood');
+  x += baseChipW + gap;
+  drawHudChip(ctx, x, topY, supplyChipW, chipH, 'SUPPLY', `${pop}/${popCap}`, popFull ? '#ff6666' : popNearFull ? '#ffbb66' : '#88ff88', 'supply');
+  x += supplyChipW + gap;
+
+  if (showWarning) {
     ctx.fillStyle = popFull ? 'rgba(120,26,26,0.92)' : 'rgba(110,72,20,0.92)';
-    ctx.fillRect(416, 8, 116, 40);
+    ctx.fillRect(x, topY, warningW, chipH);
     ctx.strokeStyle = popFull ? 'rgba(255,120,120,0.5)' : 'rgba(255,210,120,0.4)';
-    ctx.strokeRect(416.5, 8.5, 115, 39);
+    ctx.strokeRect(x + 0.5, topY + 0.5, warningW - 1, chipH - 1);
     ctx.fillStyle = popFull ? '#ff9c9c' : '#ffd18a';
     ctx.font = 'bold 12px monospace';
-    ctx.fillText(popFull ? t('food_full') : t('food_almost_full'), 428, 32);
+    ctx.fillText(popFull ? t('food_full') : t('food_almost_full'), x + 12, topY + 24);
   }
 }
 
@@ -738,15 +754,14 @@ function drawEntityInfo(
   }
 
   // ── Under attack clarity ───────────────────────────────────────────────────
-  if (typeof e.underAttackTick === 'number' && state.tick - e.underAttackTick <= SIM_HZ * 2) {
+  const isUnderAttackNow = typeof e.underAttackTick === 'number' && state.tick - e.underAttackTick <= SIM_HZ * 2;
+  if (isUnderAttackNow) {
     ctx.fillStyle = '#ff7777';
     ctx.font = 'bold 10px monospace';
     if (isWorkerKind(e.kind)) {
       ctx.fillText(t('harassed'), x, y); y += LINE - 1;
     } else if (e.kind === 'construction') {
       ctx.fillText(t('build_under_pressure'), x, y); y += LINE - 1;
-    } else {
-      ctx.fillText(t('under_attack'), x, y); y += LINE - 1;
     }
   }
 

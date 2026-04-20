@@ -162,22 +162,26 @@ function findNearestTreeTarget(state: GameState, entity: Entity, fromTx: number,
   let bestId: number | null = null;
   let bestScore = Infinity;
 
-  for (let ty = Math.max(0, fromTy - 8); ty <= Math.min(MAP_H - 1, fromTy + 8); ty++) {
-    for (let tx = Math.max(0, fromTx - 8); tx <= Math.min(MAP_W - 1, fromTx + 8); tx++) {
-      const tile = state.tiles[ty]?.[tx];
-      if (tile?.kind !== 'tree' || (tile.woodReserve ?? 0) <= 0) continue;
-      const approach = bestTreeApproach(state, entity, tx, ty);
-      if (!approach) continue;
-      const directBias = Math.abs(tx - fromTx) + Math.abs(ty - fromTy);
-      const score = approach.path.length * 1000 + directBias;
-      if (score < bestScore) {
-        bestScore = score;
-        bestId = ty * MAP_W + tx;
+  const radii = [8, 14, 22];
+  for (const radius of radii) {
+    for (let ty = Math.max(0, fromTy - radius); ty <= Math.min(MAP_H - 1, fromTy + radius); ty++) {
+      for (let tx = Math.max(0, fromTx - radius); tx <= Math.min(MAP_W - 1, fromTx + radius); tx++) {
+        const tile = state.tiles[ty]?.[tx];
+        if (tile?.kind !== 'tree' || (tile.woodReserve ?? 0) <= 0) continue;
+        const approach = bestTreeApproach(state, entity, tx, ty);
+        if (!approach) continue;
+        const directBias = Math.abs(tx - fromTx) + Math.abs(ty - fromTy);
+        const score = approach.path.length * 1000 + directBias;
+        if (score < bestScore) {
+          bestScore = score;
+          bestId = ty * MAP_W + tx;
+        }
       }
     }
+    if (bestId !== null) return bestId;
   }
 
-  return bestId;
+  return null;
 }
 
 function bestTreeApproach(state: GameState, entity: Entity, tx: number, ty: number): { target: Vec2; path: Vec2[] } | null {
