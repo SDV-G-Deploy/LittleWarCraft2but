@@ -1,14 +1,21 @@
 import type { Entity, GameState, ProjectileVisualEvent } from '../types';
-import { MAP_H, MAP_W, SIM_HZ, isUnitKind, isRangedUnit } from '../types';
+import { MAP_H, MAP_W, SIM_HZ, isUnitKind, isRangedUnit, canAttack, usesRaceProfile } from '../types';
+import { getEntity } from './entities';
 import { ticksPerStep } from '../data/units';
 import { getResolvedArmor, getResolvedAttackTicks, getResolvedDamage, getResolvedRange, getResolvedSpeed } from '../balance/resolver';
 import { resolveAttackBonus } from '../balance/modifiers';
-import { getEntity, killEntity } from './entities';
+import { killEntity } from './entities';
 import { findPath } from './pathfinding';
 
 // ─── Issue ────────────────────────────────────────────────────────────────────
 
-export function issueAttackCommand(entity: Entity, targetId: number, currentTick: number): void {
+export function issueAttackCommand(entity: Entity, targetId: number, currentTick: number, state?: GameState): boolean {
+  const target = state ? getEntity(state, targetId) : undefined;
+  if (target) {
+    if (target.kind === 'goldmine') return false;
+    if (!canAttack(entity.owner, target.owner)) return false;
+  }
+
   const existingAttack = entity.cmd?.type === 'attack' ? entity.cmd : null;
 
   entity.cmd = {
@@ -20,6 +27,7 @@ export function issueAttackCommand(entity: Entity, targetId: number, currentTick
     chasePathTick: currentTick, // align movement cadence to now, not epoch
     chaseStepTick: currentTick,
   };
+  return true;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -61,7 +69,7 @@ function distBetweenEntities(attacker: Entity, target: Entity): number {
 }
 
 export function isTargetAttackableNow(state: GameState, attacker: Entity, target: Entity): boolean {
-  const range = getResolvedRange(attacker.kind, state.races[attacker.owner]);
+  const range = getResolvedRange(attacker.kind, usesRaceProfile(attacker.owner) ? state.races[attacker.owner] : null);
   if (distBetweenEntities(attacker, target) > range) return false;
   if (range <= 1) return true;
   // Towers are elevated by design: they shoot over buildings/objects.
@@ -180,8 +188,14 @@ export function processAttack(state: GameState, entity: Entity): void {
     return;
   }
 
-  const isStaticAttacker = getResolvedSpeed(entity.kind, state.races[entity.owner]) === 0;
+  const isStaticAttacker = getResolvedSpeed(entity.kind, usesRaceProfile(entity.owner) ? state.races[entity.owner] : null) === 0;
   if (isStaticAttacker && !isUnitKind(target.kind)) {
+    clearAttackState();
+    entity.cmd = null;
+    return;
+  }
+
+  if (!canAttack(entity.owner, target.owner)) {
     clearAttackState();
     entity.cmd = null;
     return;
@@ -199,14 +213,14 @@ export function processAttack(state: GameState, entity: Entity): void {
     cmd.chasePath = [];
     if (state.tick < cmd.cooldownTick) return;
 
-    const dmg       = getResolvedDamage(entity.kind, state.races[entity.owner]);
+    const dmg       = getResolvedDamage(entity.kind, usesRaceProfile(entity.owner) ? state.races[entity.owner] : null);
     const armor     = getResolvedArmor(target);
     const attackBonus = resolveAttackBonus({ state, attacker: entity, target });
     const netDmg    = Math.max(1, dmg - armor + attackBonus);
     pushAttackVisual(state, entity, target);
     target.hp      -= netDmg;
     target.underAttackTick = state.tick;
-    cmd.cooldownTick = state.tick + getResolvedAttackTicks(entity.kind, state.races[entity.owner]);
+    cmd.cooldownTick = state.tick + getResolvedAttackTicks(entity.kind, usesRaceProfile(entity.owner) ? state.races[entity.owner] : null);
 
     if (target.hp <= 0) {
       state.corpses.push({ pos: { ...target.pos }, owner: target.owner, deadTick: state.tick });
@@ -221,7 +235,7 @@ export function processAttack(state: GameState, entity: Entity): void {
       return;
     }
     // ── Out of range or no LOS: chase toward nearest footprint tile ─────────
-    const tps = ticksPerStep(entity.kind, state.races[entity.owner]);
+    const tps = ticksPerStep(entity.kind, usesRaceProfile(entity.owner) ? state.races[entity.owner] : null);
     if (state.tick - cmd.chaseStepTick < tps) return;
 
     if (cmd.chasePath.length === 0 || state.tick - cmd.chasePathTick >= SIM_HZ) {

@@ -1,6 +1,6 @@
 import type { Entity, EntityKind, GameState, OpeningPlan } from '../types';
 import type { SessionStats, SessionStatus } from '../net/session';
-import { SIM_HZ, TILE_SIZE, MAP_H, MAP_W, isUnitKind, isWorkerKind } from '../types';
+import { SIM_HZ, TILE_SIZE, MAP_H, MAP_W, isUnitKind, isWorkerKind, isNeutralOwner, usesRaceProfile } from '../types';
 import { STATS } from '../data/units';
 import { RACES, ownerRace } from '../data/races';
 import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedSupplyProvided, getResolvedTileSize } from '../balance/resolver';
@@ -75,7 +75,7 @@ export function drawUi(
     sel.slice(0, 10).forEach((e, i) => {
       const bx = 8 + i * (38);
       const by = panelY + 8;
-      const color = ['#6ab0f5', '#f5786a'][e.owner];
+      const color = isNeutralOwner(e.owner) ? '#8e8e8e' : ['#6ab0f5', '#f5786a'][e.owner];
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.arc(bx + 15, by + 15, 12, 0, Math.PI * 2);
@@ -270,11 +270,11 @@ function drawPortrait(
 ): void {
   const px = 8; const py = panelY + 8;
   const pw = PORTRAIT_W - 16; const ph = PANEL_H - 16;
-  const color = ['#3a6aaa', '#aa3a3a'][e.owner];
+  const color = isNeutralOwner(e.owner) ? '#4c4c4c' : ['#3a6aaa', '#aa3a3a'][e.owner];
   ctx.fillStyle = color;
   ctx.fillRect(px, py, pw, ph);
 
-  ctx.fillStyle = ['#6ab0f5', '#f5786a'][e.owner];
+  ctx.fillStyle = isNeutralOwner(e.owner) ? '#bcbcbc' : ['#6ab0f5', '#f5786a'][e.owner];
   ctx.font = 'bold 22px monospace';
   ctx.textAlign = 'center';
   ctx.fillText(e.kind[0].toUpperCase(), px + pw / 2, py + ph / 2 + 8);
@@ -348,6 +348,7 @@ function drawProductionPanel(
   x: number,
   y: number,
 ): number {
+  if (!usesRaceProfile(e.owner)) return y;
   const blockX = x;
   const blockY = y - 2;
   const blockW = 300;
@@ -366,7 +367,7 @@ function drawProductionPanel(
   ctx.fillText(t('production'), innerX, blockY + 10);
 
   if (e.cmd?.type === 'train') {
-    const trainBuildTicks = getResolvedBuildTicks(e.cmd.unit, state.races[e.owner]);
+    const trainBuildTicks = getResolvedBuildTicks(e.cmd.unit, usesRaceProfile(e.owner) ? state.races[e.owner] : null);
     const pct = Math.max(0, Math.min(100, Math.round(100 * (1 - e.cmd.ticksLeft / trainBuildTicks))));
     const currentLabel = formatQueueLabel(e.cmd.unit, e.owner, state);
 
@@ -432,21 +433,22 @@ function drawEntityInfo(
   myOwner: 0 | 1 = 0,
 ): void {
   const stats = resolveEntityStatsForEntity(state, e);
-  const rc    = ownerRace(state.races, e.owner);
+  const rc    = usesRaceProfile(e.owner) ? ownerRace(state.races, e.owner) : null;
   const isProductionBuilding = (e.kind === 'townhall' || e.kind === 'barracks') && e.owner === myOwner;
 
   // ── Race-aware display name ─────────────────────────────────────────────────
   const displayName =
-    e.kind === rc.worker  ? translateDisplayLabel(rc.workerLabel)  :
-    e.kind === rc.soldier ? translateDisplayLabel(rc.soldierLabel) :
-    e.kind === rc.ranged  ? translateDisplayLabel(rc.rangedLabel)  :
-    e.kind === rc.heavy   ? translateDisplayLabel(rc.heavyLabel)   :
-    e.kind === 'townhall' ? translateDisplayLabel(rc.hallLabel)    :
-    e.kind === 'barracks' ? translateDisplayLabel(rc.barrLabel)    :
-    e.kind === 'farm'     ? translateDisplayLabel(rc.farmLabel)    :
-    e.kind === 'tower'    ? translateDisplayLabel(rc.towerLabel)   :
+    rc && e.kind === rc.worker  ? translateDisplayLabel(rc.workerLabel)  :
+    rc && e.kind === rc.soldier ? translateDisplayLabel(rc.soldierLabel) :
+    rc && e.kind === rc.ranged  ? translateDisplayLabel(rc.rangedLabel)  :
+    rc && e.kind === rc.heavy   ? translateDisplayLabel(rc.heavyLabel)   :
+    rc && e.kind === 'townhall' ? translateDisplayLabel(rc.hallLabel)    :
+    rc && e.kind === 'barracks' ? translateDisplayLabel(rc.barrLabel)    :
+    rc && e.kind === 'farm'     ? translateDisplayLabel(rc.farmLabel)    :
+    rc && e.kind === 'tower'    ? translateDisplayLabel(rc.towerLabel)   :
     e.kind === 'goldmine' ? t('gold_mine')  :
-    e.kind.toUpperCase();
+    e.kind === 'barrier' ? 'DESTRUCTIBLE BARRIER' :
+    isNeutralOwner(e.owner) ? 'NEUTRAL' : e.kind.toUpperCase();
 
   // Running Y cursor — everything flows downward from here
   const LINE = 13;
@@ -479,12 +481,15 @@ function drawEntityInfo(
       x, y,
     ); y += LINE;
 
-    const roleLabel =
-      e.kind === rc.heavy ? t('role_elite_frontline') :
-      e.kind === rc.soldier ? t('role_frontline') :
-      e.kind === rc.ranged ? t('role_backline') :
-      isWorkerKind(e.kind) ? t('role_eco') :
-      null;
+    const roleLabel = rc
+      ? (
+        e.kind === rc.heavy ? t('role_elite_frontline') :
+        e.kind === rc.soldier ? t('role_frontline') :
+        e.kind === rc.ranged ? t('role_backline') :
+        isWorkerKind(e.kind) ? t('role_eco') :
+        null
+      )
+      : (isNeutralOwner(e.owner) ? 'world object' : null);
     if (roleLabel) {
       ctx.fillStyle = 'rgba(255,255,255,0.55)';
       ctx.font = '10px monospace';
@@ -554,7 +559,7 @@ function drawEntityInfo(
 
   // ── Food slots (farms / town halls) ────────────────────────────────────────
   if (e.kind === 'farm' || e.kind === 'townhall') {
-    const supplyProvided = getResolvedSupplyProvided(e.kind, state.races[e.owner]);
+    const supplyProvided = getResolvedSupplyProvided(e.kind, usesRaceProfile(e.owner) ? state.races[e.owner] : null);
     ctx.fillStyle = '#ffcc88';
     ctx.font = '11px monospace';
     ctx.fillText(t('food_slots', { amount: supplyProvided }), x, y); y += LINE;
@@ -792,7 +797,7 @@ function collectButtons(
 
     addButton(`${translateDisplayLabel(rc.soldierLabel)} [T]\n[${soldierCost}g]`, `train:${rc.soldier}`,
       state.gold[myOwner] < soldierCost);
-    addButton(`${translateDisplayLabel(rc.rangedLabel)} [A]\n[${rangedCost}g]`, `train:${rc.ranged}`,
+    addButton(`${translateDisplayLabel(rc.rangedLabel)} [A]\n[${rangedCost}g]`, 'train_ranged',
       state.gold[myOwner] < rangedCost);
     addButton(`${translateDisplayLabel(rc.heavyLabel)} [H]\n[${heavyCost}g]`, `train:${rc.heavy}`,
       state.gold[myOwner] < heavyCost);
@@ -831,10 +836,10 @@ function collectButtons(
   }
 
   // ── Demolish / Cancel construction ─────────────────────────────────────────
-  if (e.kind !== 'goldmine' && getResolvedSpeed(e.kind, state.races[e.owner]) === 0) {
+  if (!isNeutralOwner(e.owner) && e.kind !== 'goldmine' && getResolvedSpeed(e.kind, usesRaceProfile(e.owner) ? state.races[e.owner] : null) === 0) {
     const isConst  = e.kind === 'construction';
     const srcKind  = isConst ? (e.constructionOf ?? e.kind) : e.kind;
-    const refund   = Math.floor(getResolvedCost(srcKind, state.races[e.owner]) * (isConst ? 1.0 : 0.8));
+    const refund   = Math.floor(getResolvedCost(srcKind, usesRaceProfile(e.owner) ? state.races[e.owner] : null) * (isConst ? 1.0 : 0.8));
     const btnLabel = isConst ? t('cancel', { amount: refund }) : t('demolish', { amount: refund });
     addButton(btnLabel, 'demolish', false, true);
   }

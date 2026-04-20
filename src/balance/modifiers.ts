@@ -1,5 +1,5 @@
 import type { Entity, GameState } from '../types';
-import { SIM_HZ, isUnitKind } from '../types';
+import { SIM_HZ, isUnitKind, usesRaceProfile } from '../types';
 
 export interface AttackModifierContext {
   state: GameState;
@@ -89,6 +89,7 @@ export const ATTACK_MODIFIER_RULES: AttackModifierRule[] = [
     id: 'human_eco_home_guard_bonus',
     description: 'Human eco opening units deal +1 while defending close to own Town Hall early.',
     apply: ({ state, attacker }) => (
+      usesRaceProfile(attacker.owner) &&
       state.races[attacker.owner] === 'human' &&
       state.openingPlanSelected[attacker.owner] === 'eco' &&
       state.openingCommitmentClaimed[attacker.owner] &&
@@ -103,6 +104,7 @@ export const ATTACK_MODIFIER_RULES: AttackModifierRule[] = [
     id: 'human_tempo_contest_bonus',
     description: 'Human tempo opening units deal +1 near contested mines in the opening timing window.',
     apply: ({ state, attacker, target }) => (
+      usesRaceProfile(attacker.owner) &&
       state.races[attacker.owner] === 'human' &&
       state.openingPlanSelected[attacker.owner] === 'tempo' &&
       state.openingCommitmentClaimed[attacker.owner] &&

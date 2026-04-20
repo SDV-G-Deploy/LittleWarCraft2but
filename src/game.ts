@@ -1,5 +1,5 @@
 import { SIM_TICK_MS, TILE_SIZE, CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL, SIM_HZ,
-         isUnitKind, isWorkerKind, type EntityKind, type Race, type MapId, type OpeningPlan, type AIDifficulty } from './types';
+         isUnitKind, isWorkerKind, NEUTRAL, areHostile, type EntityKind, type Race, type MapId, type OpeningPlan, type AIDifficulty } from './types';
 import { createWorld } from './sim/world';
 import { spawnEntity, killEntity } from './sim/entities';
 import { processCommand, issueMoveCommand, separateUnits, autoAttackPass } from './sim/commands';
@@ -159,13 +159,13 @@ export function startGame(
 
   // ── Spawn gold mines ───────────────────────────────────────────────────────
   for (const [index, pos] of mapData.goldMines.entries()) {
-    const mine = spawnEntity(state, 'goldmine', 0, pos);
+    const mine = spawnEntity(state, 'goldmine', NEUTRAL, pos);
     mine.goldReserve = mapData.goldMineReserves?.[index] ?? MINE_GOLD_INITIAL;
   }
 
   // ── Spawn neutral destructible blockers ───────────────────────────────────
   for (const blocker of mapData.blockers ?? []) {
-    const entity = spawnEntity(state, 'barrier', 0, { x: blocker.x, y: blocker.y });
+    const entity = spawnEntity(state, 'barrier', NEUTRAL, { x: blocker.x, y: blocker.y });
     entity.tileW = blocker.tileW ?? entity.tileW;
     entity.tileH = blocker.tileH ?? entity.tileH;
   }
@@ -187,6 +187,7 @@ export function startGame(
   let placementMode: { building: EntityKind } | null = null;
   let gameResult: 'playing' | 'win' | 'lose' = 'playing';
   let attackMoveHeld = false;
+  let forceAttackHeld = false;
 
   // ── Control groups ─────────────────────────────────────────────────────────
   const controlGroups = new Map<number, number[]>();
@@ -271,17 +272,22 @@ export function startGame(
       // Barracks training
       if (firstSel.kind === 'barracks') {
         if (e.key === 't' || e.key === 'T') { emit({ k: 'train', buildingId: firstSel.id, unit: myRC.soldier }); return; }
-        if (e.key === 'a' || e.key === 'A') { emit({ k: 'train', buildingId: firstSel.id, unit: myRC.ranged  }); return; }
         if (e.key === 'h' || e.key === 'H') { emit({ k: 'train', buildingId: firstSel.id, unit: myRC.heavy   }); return; }
       }
     }
 
-    // A held = attack-move modifier (only if not caught above)
-    if (e.key === 'a' || e.key === 'A') attackMoveHeld = true;
+    // A held = attack-move modifier and direct force-attack click modifier
+    if (e.key === 'a' || e.key === 'A') {
+      attackMoveHeld = true;
+      forceAttackHeld = true;
+    }
   }
 
   function onKeyUp(e: KeyboardEvent): void {
-    if (e.key === 'a' || e.key === 'A') attackMoveHeld = false;
+    if (e.key === 'a' || e.key === 'A') {
+      attackMoveHeld = false;
+      forceAttackHeld = false;
+    }
   }
 
   window.addEventListener('keydown', onKeyDown);
@@ -396,14 +402,28 @@ export function startGame(
           }
         }
 
-        if (hitUnit && hitUnit.owner === peerOwner) {
+        if (forceAttackHeld && hitUnit && areHostile(myOwner, hitUnit.owner)) {
           const attackerIds = [...selectedIds].filter(id => {
             const e = state.entities.find(en => en.id === id);
             return e && isUnitKind(e.kind) && e.owner === myOwner;
           });
           if (attackerIds.length) emit({ k: 'attack', ids: attackerIds, targetId: hitUnit.id });
 
-        } else if (hitBuilding && hitBuilding.owner === peerOwner && hitBuilding.kind !== 'goldmine') {
+        } else if (forceAttackHeld && hitBuilding && areHostile(myOwner, hitBuilding.owner) && hitBuilding.kind !== 'goldmine') {
+          const attackerIds = [...selectedIds].filter(id => {
+            const e = state.entities.find(en => en.id === id);
+            return e && isUnitKind(e.kind) && e.owner === myOwner;
+          });
+          if (attackerIds.length) emit({ k: 'attack', ids: attackerIds, targetId: hitBuilding.id });
+
+        } else if (hitUnit && areHostile(myOwner, hitUnit.owner)) {
+          const attackerIds = [...selectedIds].filter(id => {
+            const e = state.entities.find(en => en.id === id);
+            return e && isUnitKind(e.kind) && e.owner === myOwner;
+          });
+          if (attackerIds.length) emit({ k: 'attack', ids: attackerIds, targetId: hitUnit.id });
+
+        } else if (hitBuilding && areHostile(myOwner, hitBuilding.owner) && hitBuilding.kind !== 'goldmine') {
           const attackerIds = [...selectedIds].filter(id => {
             const e = state.entities.find(en => en.id === id);
             return e && isUnitKind(e.kind) && e.owner === myOwner;
@@ -486,7 +506,12 @@ export function startGame(
 
     action = pendingAction;
 
-    if (action.startsWith('train:')) {
+    if (action === 'train_ranged') {
+      for (const id of selectedIds) {
+        const building = state.entities.find(e => e.id === id && e.kind === 'barracks' && e.owner === myOwner);
+        if (building) { emit({ k: 'train', buildingId: building.id, unit: myRC.ranged }); break; }
+      }
+    } else if (action.startsWith('train:')) {
       const unit = action.slice(6) as EntityKind;
       for (const id of selectedIds) {
         const building = state.entities.find(e => e.id === id && !isUnitKind(e.kind) && e.owner === myOwner);

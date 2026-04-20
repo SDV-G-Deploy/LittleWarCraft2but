@@ -57,7 +57,38 @@ export type AIDifficulty = 'easy' | 'medium' | 'hard';
 
 // ─── Entities ─────────────────────────────────────────────────────────────────
 
-export type Owner = 0 | 1; // 0 = player, 1 = AI
+export const PLAYER_1 = 0;
+export const PLAYER_2 = 1;
+export const NEUTRAL = 2;
+
+export type PlayerOwner = typeof PLAYER_1 | typeof PLAYER_2;
+export type Owner = PlayerOwner | typeof NEUTRAL;
+
+export function isPlayerOwner(owner: Owner): owner is PlayerOwner {
+  return owner === PLAYER_1 || owner === PLAYER_2;
+}
+
+export function isNeutralOwner(owner: Owner): owner is typeof NEUTRAL {
+  return owner === NEUTRAL;
+}
+
+export function usesEconomy(owner: Owner): owner is PlayerOwner {
+  return isPlayerOwner(owner);
+}
+
+export function usesRaceProfile(owner: Owner): owner is PlayerOwner {
+  return isPlayerOwner(owner);
+}
+
+export function areHostile(a: Owner, b: Owner): boolean {
+  if (a === b) return false;
+  if (isNeutralOwner(a) && isNeutralOwner(b)) return false;
+  return true;
+}
+
+export function canAttack(attacker: Owner, target: Owner): boolean {
+  return areHostile(attacker, target);
+}
 
 export type EntityKind =
   | 'worker'  | 'footman' | 'archer' | 'knight'         // human units

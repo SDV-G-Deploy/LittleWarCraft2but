@@ -5,7 +5,7 @@
  */
 
 import type { EntityKind, GameState, OpeningPlan } from '../types';
-import { SIM_HZ, isUnitKind, isWorkerKind } from '../types';
+import { SIM_HZ, isUnitKind, isWorkerKind, areHostile } from '../types';
 import { getResolvedCost } from '../balance/resolver';
 import { issueAttackCommand } from '../sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, issueResumeBuildCommand, refundCancelledTrainCommand } from '../sim/economy';
@@ -114,9 +114,11 @@ export function applyNetCmds(
         break;
       }
       case 'attack': {
+        const target = getEntity(state, cmd.targetId);
+        if (!target || target.kind === 'goldmine' || !areHostile(owner, target.owner)) break;
         for (const id of sortUnitIds(cmd.ids)) {
           const e = getEntity(state, id);
-          if (e && e.owner === owner && isUnitKind(e.kind)) issueAttackCommand(e, cmd.targetId, state.tick);
+          if (e && e.owner === owner && isUnitKind(e.kind)) issueAttackCommand(e, cmd.targetId, state.tick, state);
         }
         break;
       }

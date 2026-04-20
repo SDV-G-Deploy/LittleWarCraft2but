@@ -1,5 +1,5 @@
 import type { GameState, TileKind, Entity } from '../types';
-import { TILE_SIZE, MAP_W, MAP_H, CORPSE_LIFE_TICKS, isUnitKind } from '../types';
+import { TILE_SIZE, MAP_W, MAP_H, CORPSE_LIFE_TICKS, isUnitKind, isNeutralOwner, usesRaceProfile } from '../types';
 import { ticksPerStep } from '../data/units';
 import type { Camera } from './camera';
 import { worldToScreen } from './camera';
@@ -34,13 +34,13 @@ function getUnitMotionSample(
   if (!e.cmd) return null;
 
   let next: { x: number; y: number } | null = null;
-  let tps = ticksPerStep(e.kind, state.races[e.owner]);
+  let tps = ticksPerStep(e.kind, usesRaceProfile(e.owner) ? state.races[e.owner] : null);
   let stepTick = state.tick;
 
   if (e.cmd.type === 'move') {
     if (e.cmd.path.length === 0) return null;
     next = e.cmd.path[0]!;
-    const baseTps = ticksPerStep(e.kind, state.races[e.owner]);
+    const baseTps = ticksPerStep(e.kind, usesRaceProfile(e.owner) ? state.races[e.owner] : null);
     const speedBoostActive =
       typeof e.cmd.speedMult === 'number' &&
       e.cmd.speedMult > 1 &&
@@ -213,6 +213,8 @@ export function drawMinimap(
       const fog = state.fog[Math.min(MAP_H - 1, e.pos.y)][Math.min(MAP_W - 1, e.pos.x)];
       if (fog === 'unseen') continue;
       ctx.fillStyle = '#ffe840';
+    } else if (isNeutralOwner(e.owner)) {
+      ctx.fillStyle = '#b8b8b8';
     } else if (e.owner !== myOwner) {
       // Enemy: obey fog rules (same as entityVisible in main render)
       const cy  = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
@@ -339,7 +341,7 @@ function entityVisible(state: GameState, e: Entity, myOwner: 0 | 1): boolean {
   const cx    = Math.min(MAP_W - 1, Math.max(0, e.pos.x + Math.floor(e.tileW / 2)));
   const cy    = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
   const fog   = state.fog[cy][cx];
-  const enemy = e.owner !== myOwner;
+  const enemy = !isNeutralOwner(e.owner) && e.owner !== myOwner;
   // Enemy units only visible in actively-visible cells
   if (enemy && isUnitKind(e.kind)) return fog === 'visible';
   // Everything else (buildings, mines) visible once explored
@@ -550,7 +552,11 @@ function drawUnit(
   ctx.restore();
 
   if (moving && facingX !== 0) {
-    const dirColor = e.owner === 0 ? 'rgba(128, 184, 255, 0.35)' : 'rgba(255, 176, 176, 0.35)';
+    const dirColor = isNeutralOwner(e.owner)
+      ? 'rgba(210, 210, 210, 0.35)'
+      : e.owner === 0
+        ? 'rgba(128, 184, 255, 0.35)'
+        : 'rgba(255, 176, 176, 0.35)';
     ctx.fillStyle = dirColor;
     const tipX = facingX > 0 ? bodySx + TILE_SIZE - 2 : bodySx + 2;
     ctx.beginPath();
@@ -615,7 +621,7 @@ function drawBuilding(
   }
 
   // Sprite — building look varies by owner's race
-  const ownerRace = state.races[e.owner as 0 | 1] ?? 'human';
+  const ownerRace = usesRaceProfile(e.owner) ? (state.races[e.owner] ?? 'human') : 'human';
   const isOrc     = ownerRace === 'orc';
   let sprite: HTMLCanvasElement;
   if (renderKind === 'goldmine') {

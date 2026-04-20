@@ -411,5 +411,240 @@ A good restart prompt for future `/new` sessions should mention:
   - tick-based throttling only
   - explicit heap/path tie-breaks
   - no risky dynamic unit occupancy yet
-- next concrete target for `/new`: do a dedicated map-balance pass across the current pool, focusing first on spawn fairness, mine fairness, choke asymmetry, watch-post leverage, and route symmetry; prefer small map edits with explicit fairness reasoning, and only return to perf work like LOS-through-grid in `src/sim/combat.ts` after map work is no longer the main blocker
+- map-balance pass, fairness follow-up, and destructible blocker v1 have landed; current strategic priority is now post-blocker gameplay depth, not more blind map churn
+- next concrete target for `/new`: run a narrow gameplay-upgrade pass that adds strategic branching through a very small number of meaningful upgrade choices, then verify them against the updated maps and blocker timings
 - separate worthwhile audit track: inspect the codebase for unnecessary state growth, stale per-entity work after death/removal, duplicate movement plumbing, and only safe/necessary optimizations
+
+## Current gameplay roadmap after map pass + blockers
+
+### Where the project stands now
+- opening-branch pass is done
+- AI fairness / difficulty-feel pass is done
+- dedicated map-balance / map-variety pass is done
+- destructible barrier blockers v1 are in on a narrow rollout
+- current blocker rollout is limited to:
+  - `map05` / Timber Lanes
+  - `map06` / Crown Pit
+- current gameplay reading:
+  - match geography is healthier and less fake
+  - maps now offer better route pressure, greed-vs-safety mining, and local information fights
+  - the next missing layer is not more map novelty first, but stronger army-style / timing branching
+
+### Current interpretation
+The map work improved the floor.
+The next pass should improve the ceiling.
+
+Meaning:
+- less focus on adding more terrain gimmicks immediately
+- more focus on giving players distinct ways to convert map state into a winning plan
+- prefer strategic variety through style, timing, and composition identity before adding more content types
+
+## Ownership architecture pass before blocker verification
+
+### Goal
+Introduce a true neutral-side model for map-owned objects before treating blocker gameplay results as trustworthy.
+
+### Why this now
+Current ownership logic is still fundamentally two-sided:
+- `Owner = 0 | 1`
+- many systems assume `owner !== myOwner` means enemy
+- blockers currently risk inheriting player-side semantics instead of world-side semantics
+
+This is now a design and architecture issue, not just a blocker bug.
+It also unlocks future neutral camps, guarded mines, and map objectives cleanly.
+
+### Required owner model
+Move toward explicit ownership buckets:
+- `PLAYER_1 = 0`
+- `PLAYER_2 = 1`
+- `NEUTRAL = 2`
+
+Important:
+- neutral is not a third full economy faction
+- neutral is a world-side bucket for map entities and future neutral units/camps
+
+### Core rule change
+Stop relying on raw checks like:
+- `owner !== myOwner`
+- `owner === 0`
+- `owner === 1`
+
+Prefer semantic helpers instead, for example:
+- `isPlayerOwner(owner)`
+- `isNeutralOwner(owner)`
+- `areHostile(a, b)`
+- `canAttack(attacker, target)`
+- `usesEconomy(owner)`
+- `usesRaceProfile(owner)`
+
+### First-pass implementation scope
+1. Expand `Owner` type to include neutral
+2. Spawn blockers as `NEUTRAL`
+3. Audit combat targeting so neutral is attackable by both players
+4. Audit AI target selection so neutral does not masquerade as player-owned enemy infrastructure
+5. Audit resolver / race lookup so neutral entities do not try to read race data from player race arrays
+6. Audit UI / render colors and selection so neutral reads as neutral, not as side 0 or side 1
+7. Keep economy / population / opening-plan logic player-only
+
+### Safety rule
+Do not widen this into general multi-faction RTS architecture yet.
+The goal is a narrow, safe three-bucket ownership model, not a full N-player refactor.
+
+### Done condition
+This pass is successful when:
+- blockers are truly neutral in sim and UI
+- both players can attack them normally
+- neutral objects do not pollute race/economy/opening-plan logic
+- the codebase no longer assumes every non-self entity is the opposing player
+
+## Post-blocker verification priority
+
+### Goal
+Confirm that blockers create optional midgame route-timing decisions instead of a mandatory scripted break pattern.
+
+### What to verify first
+1. `map05` / Timber Lanes as the primary blocker test map
+   - best candidate for clean blocker signal
+   - corridor identity already supports alternate-angle play
+   - blocker should open a useful side angle, not the only real route
+
+2. `map06` / Crown Pit as the stress-test map
+   - useful for checking whether blockers become win-more around an already center-heavy map
+   - if blocker use only helps the side that already owns center, the feature is too snowball-friendly there
+
+### Blocker verification questions
+- Is ignoring the blocker still a valid full game plan?
+- Does early blocker damage create a real opportunity cost?
+- Does midgame blocker break open a new angle rather than a solved script?
+- Does fake pressure on the blocker create meaningful reactions?
+- Is the blocker sometimes broken and sometimes ignored across repeated games?
+
+### Interpretation rule
+- If a blocker is broken almost every game at the same timing, it is too central.
+- If a blocker is almost never touched, it is too irrelevant.
+- If it mainly benefits the already-winning player, it is acting as a snowball amplifier, not a variety tool.
+
+## Next major gameplay track: upgrade branching pass
+
+### Why this is next
+Documentation direction and current gameplay feeling now point to the same answer:
+- map-side variety improved meaningfully
+- blockers added dynamic route potential
+- the weakest remaining layer is army-side strategic branching
+
+Therefore the next best gameplay step is:
+- a narrow upgrade pass
+- focused on style identity, not on content count
+
+### Design goal
+Add strategic branching without exploding balance surface, UI complexity, or tech-tree sprawl.
+
+Upgrades should answer:
+- "How do I want to win this match?"
+not:
+- "How do I buy the generic best stat boost?"
+
+### Scope rule
+Do not add a large upgrade tree.
+Start with only 2 to 3 strong, readable, deliberately different branches.
+
+## Upgrade pass v1 direction
+
+### Branch 1. Field Tempo
+Purpose:
+- reward initiative, faster map presence, and better punishment windows
+
+Desired gameplay effect:
+- stronger timing around contested mines
+- better use of flanks, lane pivots, and post-blocker openings
+- more credible early-midgame initiative style
+
+Recommended mechanical shape:
+- small movement-speed bonus for core mobile army units
+- or small train-time improvement for core military production after research completes
+- or both, but only if the total result stays clearly below auto-pick territory
+
+Identity test:
+- player should feel "I chose initiative and timing"
+
+### Branch 2. Line Hold
+Purpose:
+- reward positional staying power and stronger control of fixed contest spaces
+
+Desired gameplay effect:
+- better hold on fords, watch-post lines, lane mouths, and expansion approaches
+- stronger answer to fast pressure without becoming passive auto-defense
+
+Recommended mechanical shape:
+- small survivability bump for frontline core units
+- ideally armor and/or hp, not a generic damage spike
+
+Identity test:
+- player should feel "I chose to own space and survive the first clash"
+
+### Branch 3. Long Reach
+Purpose:
+- reward shape control, better pre-engage posture, and punishment of bad enemy entries
+
+Desired gameplay effect:
+- stronger use of approach geometry on routes, chokes, ring entries, and mine access lines
+- more distinct ranged-control style without introducing a toxic kite-only meta
+
+Recommended mechanical shape:
+- small range or ranged cadence improvement for backline units
+- if range is too fragile, prefer attack cadence or sight-linked support value instead
+
+Identity test:
+- player should feel "I chose to win the approach and fight geometry"
+
+## Upgrade pass v1 implementation constraints
+
+### Hard constraints
+- no new unit for this pass
+- no new building for this pass
+- no second resource
+- no hero layer
+- no bloated faction-specific labyrinth yet
+- no upgrade that is just obviously best in every normal game
+
+### Soft constraints
+- prefer centralized quick-tune knobs in `src/balance/tuning.ts`
+- prefer reuse of the existing opening / modifier patterns where appropriate
+- keep first-pass numbers visible in gameplay feeling, but narrow enough that rollback is cheap
+
+## Practical implementation recommendation
+
+### Suggested first implementation order
+1. Keep blocker rollout narrow and verify it with live/manual tests
+2. Add upgrade system support only as much as needed for v1
+3. Implement exactly three upgrade choices with strong identity
+4. Test on the updated map pool, especially:
+   - `map05` / Timber Lanes
+   - `map06` / Crown Pit
+   - `map04` / Stone Fords
+5. Watch for auto-pick behavior and flattening
+6. Tune or remove weak branches before adding any new content class
+
+### Code-shape recommendation
+Use the current lightweight balance architecture as the foundation:
+- `src/balance/base.ts` for default unit baselines
+- `src/balance/tuning.ts` for quick test-facing knobs
+- `src/balance/modifiers.ts` for narrow state-aware combat deltas where needed
+- existing opening-plan implementation as the model for small, readable player-choice state
+
+Prefer a compact upgrade-state model over a giant tech framework.
+The first pass only needs enough structure to support deliberate branch choice and resolved stat effects.
+
+## Success criteria for upgrade pass v1
+- players can name their chosen style in plain language after the match
+- different branches produce visibly different route and fight behavior
+- map geometry matters more because army style now interacts with it differently
+- no branch becomes an obvious universal first pick
+- the game feels deeper, not merely busier
+
+## Deferred until after upgrade pass evaluation
+Only revisit these if upgrade branching still leaves gameplay too flat:
+1. one new unit
+2. new building for a real tech branch
+3. heroes as a late experimental layer
+4. second resource as a much later, much more expensive experiment

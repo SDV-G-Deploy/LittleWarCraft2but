@@ -24,6 +24,20 @@ They are worth adding because they can create:
 - Optional leverage, not mandatory every game
 - Should create timing choices, not one solved script
 - Must work with current deterministic simulation model
+- Must be truly neutral in ownership semantics, not silently assigned to player 1 / host
+
+## Ownership correction note
+The blocker feature now depends on a small ownership-architecture cleanup before gameplay evaluation is considered trustworthy.
+
+Required ownership model:
+- `PLAYER_1`
+- `PLAYER_2`
+- `NEUTRAL`
+
+Important:
+- `NEUTRAL` is not a third economy faction
+- it is a world-side ownership bucket for blockers and future neutral camps / guarded map objects
+- blocker verification should happen only after blockers are actually spawned and handled as neutral entities in sim, targeting, AI, and UI
 
 ## First-version recommendation
 Implement destructible blockers as neutral map-authored destructible objects that start as impassable and become passable after destruction.
@@ -83,6 +97,7 @@ Avoid placing blockers:
 ## Recommended first pass scope
 ### Phase 1
 - Add blocker support to simulation and rendering
+- Add neutral-ownership support so blockers are genuinely neutral map objects
 - Author 1 to 2 blockers on only 1 or 2 maps
 - Use them on maps that already have strong route identity
 
@@ -166,9 +181,11 @@ Destructible blockers behave more like neutral entities than terrain.
 ## Simulation tasks
 ### 1. Spawn blockers from map data
 At map initialization, instantiate blocker entities from the map definition.
+They should spawn under `NEUTRAL` ownership, not under either player side.
 
 ### 2. Make blockers targetable
-Combat / targeting code must allow units to attack blockers when commanded or when blockers are the chosen attack target.
+Combat / targeting code must allow units from both player sides to attack blockers when commanded or when blockers are the chosen attack target.
+Neutral ownership must not make them untargetable or accidentally friendly to one side.
 
 ### 3. Path blocking while alive
 Alive blockers must count as obstacles for movement/pathing.
@@ -219,6 +236,8 @@ Do not add ambitious blocker-strategy AI before human playtests prove the mechan
 
 ## Networking / determinism implications
 Because LW2B uses deterministic multiplayer logic, blocker support must obey the same simulation rules as unit combat.
+
+Ownership semantics must also remain deterministic and side-agnostic online. In particular, blockers must not inherit host-side / player-0 semantics in multiplayer.
 
 Must be true:
 - blocker spawn is map-determined

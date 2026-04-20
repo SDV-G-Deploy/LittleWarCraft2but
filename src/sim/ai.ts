@@ -219,7 +219,7 @@ export function tickAI(state: GameState, ai: AIController): void {
           : nearestPlayerEntity(state, s, ai.attackRetargetRadius);
 
         if (nearest) {
-          issueAttackCommand(s, nearest.id, state.tick);
+          issueAttackCommand(s, nearest.id, state.tick, state);
         } else if (ai.assaultRetargetMine && contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > ai.attackRetargetRadius) {
           const tx = contestedMine.pos.x;
           const ty = contestedMine.pos.y - 1;
@@ -292,7 +292,7 @@ function findBuildSpot(state: GameState, anchor: Entity, kind: EntityKind): Vec2
 function nearestPlayerEntity(state: GameState, unit: Entity, maxDistance = Infinity): Entity | null {
   let best: Entity | null = null; let bestD = Infinity;
   for (const e of state.entities) {
-    if (e.owner !== 0 || e.kind === 'goldmine') continue;
+    if (e.owner !== 0 || e.kind === 'goldmine' || e.kind === 'barrier') continue;
     const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
     if (d > maxDistance) continue;
     if (d < bestD) { bestD = d; best = e; }
@@ -315,7 +315,7 @@ function bestContestedMine(state: GameState, owner: 0 | 1, ai: AIController): En
   let best: Entity | null = null;
   let bestScore = -Infinity;
   const myTownHall = state.entities.find(e => e.owner === owner && e.kind === 'townhall');
-  const enemyTownHall = state.entities.find(e => e.owner !== owner && e.kind === 'townhall');
+  const enemyTownHall = state.entities.find(e => e.owner === (owner === 0 ? 1 : 0) && e.kind === 'townhall');
   if (!myTownHall || !enemyTownHall) return null;
 
   for (const e of state.entities) {
@@ -336,7 +336,7 @@ function bestExpansionMine(state: GameState, owner: 0 | 1, ai: AIController): En
   let best: Entity | null = null;
   let bestScore = -Infinity;
   const myTownHall = state.entities.find(e => e.owner === owner && e.kind === 'townhall');
-  const enemyTownHall = state.entities.find(e => e.owner !== owner && e.kind === 'townhall');
+  const enemyTownHall = state.entities.find(e => e.owner === (owner === 0 ? 1 : 0) && e.kind === 'townhall');
   if (!myTownHall || !enemyTownHall) return null;
 
   for (const e of state.entities) {

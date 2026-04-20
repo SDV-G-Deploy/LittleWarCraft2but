@@ -1,5 +1,5 @@
 import type { Entity, EntityKind, GameState, Owner, Race } from '../types';
-import { SIM_HZ } from '../types';
+import { SIM_HZ, usesRaceProfile } from '../types';
 import { BASE_ENTITY_BLUEPRINTS } from './base';
 import { RACE_BALANCE_PROFILES } from './races';
 import type { EntityBalanceStats, EntityBlueprint, RaceBalanceProfile, ResolvedEntityStats } from './schema';
@@ -74,12 +74,12 @@ export function resolveEntityStats(kind: EntityKind, race?: Race | null): Resolv
 }
 
 export function resolveEntityStatsForOwner(kind: EntityKind, races: [Race, Race], owner: Owner): ResolvedEntityStats {
-  const race = races[owner] ?? 'human';
+  const race = usesRaceProfile(owner) ? (races[owner] ?? 'human') : null;
   return resolveEntityStats(kind, race);
 }
 
 export function resolveEntityStatsForEntity(state: GameState, entity: Entity): ResolvedEntityStats {
-  const race = state.races[entity.owner] ?? 'human';
+  const race = usesRaceProfile(entity.owner) ? (state.races[entity.owner] ?? 'human') : null;
   return resolveEntityStats(entity.kind, race);
 }
 

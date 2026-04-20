@@ -1,5 +1,5 @@
 import type { GameState, Entity, Vec2 } from '../types';
-import { MAP_W, MAP_H, isUnitKind, isRangedUnit } from '../types';
+import { MAP_W, MAP_H, isUnitKind, isRangedUnit, areHostile, usesRaceProfile } from '../types';
 import { findPath } from './pathfinding';
 import { ticksPerStep } from '../data/units';
 import { processAttack, issueAttackCommand, isTargetAttackableNow } from './combat';
@@ -177,7 +177,7 @@ function acquireNearestTarget(
   let bestDistSq = sight * sight + 1;
 
   for (const target of state.entities) {
-    if (target.owner === unit.owner) continue;
+    if (!areHostile(unit.owner, target.owner)) continue;
     if (!predicate(target)) continue;
     const dx = target.pos.x - unit.pos.x;
     const dy = target.pos.y - unit.pos.y;
@@ -260,8 +260,8 @@ export function autoAttackPass(state: GameState): void {
   for (const entity of state.entities) {
     const isUnit = isUnitKind(entity.kind);
     const isArmedBuilding = !isUnit
-      && getResolvedSpeed(entity.kind, state.races[entity.owner]) === 0
-      && getResolvedRange(entity.kind, state.races[entity.owner]) > 1;
+      && getResolvedSpeed(entity.kind, usesRaceProfile(entity.owner) ? state.races[entity.owner] : null) === 0
+      && getResolvedRange(entity.kind, usesRaceProfile(entity.owner) ? state.races[entity.owner] : null) > 1;
     if (!isUnit && !isArmedBuilding) continue;
     if (entity.cmd !== null) continue; // already has orders
 
@@ -274,7 +274,7 @@ export function autoAttackPass(state: GameState): void {
       }
       return true;
     });
-    if (best) issueAttackCommand(entity, best.id, state.tick);
+    if (best) issueAttackCommand(entity, best.id, state.tick, state);
   }
   profiler.recordAutoAttack(profiler.now() - t0);
 }
@@ -294,10 +294,10 @@ export function processCommand(state: GameState, entity: Entity): void {
           if (isRangedUnit(entity.kind) && !isUnitKind(target.kind)) return false;
           return true;
         });
-        if (best) { issueAttackCommand(entity, best.id, state.tick); return; }
+        if (best) { issueAttackCommand(entity, best.id, state.tick, state); return; }
       }
 
-      const baseTps = ticksPerStep(entity.kind, state.races[entity.owner]);
+      const baseTps = ticksPerStep(entity.kind, usesRaceProfile(entity.owner) ? state.races[entity.owner] : null);
       const speedBoostActive =
         typeof cmd.speedMult === 'number' &&
         cmd.speedMult > 1 &&
