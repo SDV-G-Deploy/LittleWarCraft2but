@@ -32,6 +32,10 @@ export interface AIController {
   assaultRetargetMine: boolean;
   towerMinArmy: number;
   fallbackWaveThreshold: number;
+  expansionMineMinArmy: number;
+  expansionMineReserveMin: number;
+  attackRetargetRadius: number;
+  attackBaseBias: number;
 }
 
 export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
@@ -47,11 +51,15 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       workerTarget: 3,
       openingPlan: 'eco',
       openingChoiceDelayTicks: Math.round(SIM_HZ * 8),
-      preferredRangedRatio: 0.25,
+      preferredRangedRatio: 0.15,
       preferredHeavyCap: 1,
       assaultRetargetMine: false,
       towerMinArmy: 6,
       fallbackWaveThreshold: 2,
+      expansionMineMinArmy: 7,
+      expansionMineReserveMin: 900,
+      attackRetargetRadius: 7,
+      attackBaseBias: 8,
     };
   }
   if (difficulty === 'hard') {
@@ -71,6 +79,10 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       assaultRetargetMine: true,
       towerMinArmy: 4,
       fallbackWaveThreshold: 4,
+      expansionMineMinArmy: 3,
+      expansionMineReserveMin: 500,
+      attackRetargetRadius: 4,
+      attackBaseBias: 0,
     };
   }
   return {
@@ -84,11 +96,15 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
     workerTarget: 4,
     openingPlan: 'tempo',
     openingChoiceDelayTicks: Math.round(SIM_HZ * 6),
-    preferredRangedRatio: 0.45,
+    preferredRangedRatio: 0.4,
     preferredHeavyCap: 2,
     assaultRetargetMine: true,
     towerMinArmy: 5,
     fallbackWaveThreshold: 3,
+    expansionMineMinArmy: 5,
+    expansionMineReserveMin: 700,
+    attackRetargetRadius: 6,
+    attackBaseBias: 3,
   };
 }
 
@@ -192,20 +208,25 @@ export function tickAI(state: GameState, ai: AIController): void {
     // ── Assault: send army toward player base ─────────────────────────────────
     case 'assault': {
       const playerTH = es.find(e => e.owner === 0 && e.kind === 'townhall');
-      const contestedMine = bestContestedMine(state, 1);
+      const contestedMine = bestContestedMine(state, 1, ai);
+      const expansionMine = bestExpansionMine(state, 1, ai);
 
       for (const s of mySoldiers) {
         if (s.cmd && s.cmd.type !== 'move') continue;
 
         const nearest = s.kind === rc.ranged
-          ? (nearestPlayerUnit(state, s) ?? nearestPlayerEntity(state, s))
-          : nearestPlayerEntity(state, s);
+          ? (nearestPlayerUnit(state, s, ai.attackRetargetRadius) ?? nearestPlayerEntity(state, s, ai.attackRetargetRadius))
+          : nearestPlayerEntity(state, s, ai.attackRetargetRadius);
 
         if (nearest) {
           issueAttackCommand(s, nearest.id, state.tick);
-        } else if (ai.assaultRetargetMine && contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > (ai.difficulty === 'hard' ? 4 : 6)) {
+        } else if (ai.assaultRetargetMine && contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > ai.attackRetargetRadius) {
           const tx = contestedMine.pos.x;
           const ty = contestedMine.pos.y - 1;
+          if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
+        } else if (expansionMine && mySoldiers.length >= ai.expansionMineMinArmy) {
+          const tx = expansionMine.pos.x;
+          const ty = expansionMine.pos.y - 1;
           if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
         } else if (playerTH) {
           const tx = playerTH.pos.x + 1;
@@ -268,27 +289,29 @@ function findBuildSpot(state: GameState, anchor: Entity, kind: EntityKind): Vec2
   return null;
 }
 
-function nearestPlayerEntity(state: GameState, unit: Entity): Entity | null {
+function nearestPlayerEntity(state: GameState, unit: Entity, maxDistance = Infinity): Entity | null {
   let best: Entity | null = null; let bestD = Infinity;
   for (const e of state.entities) {
     if (e.owner !== 0 || e.kind === 'goldmine') continue;
     const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
+    if (d > maxDistance) continue;
     if (d < bestD) { bestD = d; best = e; }
   }
   return best;
 }
 
-function nearestPlayerUnit(state: GameState, unit: Entity): Entity | null {
+function nearestPlayerUnit(state: GameState, unit: Entity, maxDistance = Infinity): Entity | null {
   let best: Entity | null = null; let bestD = Infinity;
   for (const e of state.entities) {
     if (e.owner !== 0 || !isUnitKind(e.kind)) continue;
     const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
+    if (d > maxDistance) continue;
     if (d < bestD) { bestD = d; best = e; }
   }
   return best;
 }
 
-function bestContestedMine(state: GameState, owner: 0 | 1): Entity | null {
+function bestContestedMine(state: GameState, owner: 0 | 1, ai: AIController): Entity | null {
   let best: Entity | null = null;
   let bestScore = -Infinity;
   const myTownHall = state.entities.find(e => e.owner === owner && e.kind === 'townhall');
@@ -300,7 +323,28 @@ function bestContestedMine(state: GameState, owner: 0 | 1): Entity | null {
     const myDist = Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y);
     const enemyDist = Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y);
     const centerBias = e.pos.x > 16 && e.pos.x < 48 ? 6 : 0;
-    const score = (e.goldReserve ?? 0) / 100 + centerBias - Math.abs(myDist - enemyDist) * 0.2;
+    const score = (e.goldReserve ?? 0) / 100 + centerBias - Math.abs(myDist - enemyDist) * 0.2 - ai.attackBaseBias * 0.15;
+    if (score > bestScore) {
+      best = e;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+function bestExpansionMine(state: GameState, owner: 0 | 1, ai: AIController): Entity | null {
+  let best: Entity | null = null;
+  let bestScore = -Infinity;
+  const myTownHall = state.entities.find(e => e.owner === owner && e.kind === 'townhall');
+  const enemyTownHall = state.entities.find(e => e.owner !== owner && e.kind === 'townhall');
+  if (!myTownHall || !enemyTownHall) return null;
+
+  for (const e of state.entities) {
+    if (e.kind !== 'goldmine' || (e.goldReserve ?? 0) < ai.expansionMineReserveMin) continue;
+    const myDist = Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y);
+    const enemyDist = Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y);
+    if (myDist >= enemyDist) continue;
+    const score = (e.goldReserve ?? 0) / 100 - myDist * 0.25 + enemyDist * 0.12;
     if (score > bestScore) {
       best = e;
       bestScore = score;
