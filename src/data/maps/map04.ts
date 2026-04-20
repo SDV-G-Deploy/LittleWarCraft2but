@@ -54,7 +54,9 @@ export function buildMap04(): MapData {
       { x: 54, y: 42 },
       { x: 31, y: 31 },
     ],
-    goldMineReserves: [1600, 1400, 1600, 1400, 2300],
+    // Top side mines are safer/faster from both spawns; bottom side mines are slower and more exposed.
+    // Reward the riskier lower expansion pair so the map doesn't collapse into one predictable safe-mine script.
+    goldMineReserves: [1500, 1750, 1500, 1750, 2300],
     name: 'Stone Fords',
     description: 'A vertical river creates repeated ford fights.\nMidline watch posts and uneven mine safety sharpen timing.',
   };

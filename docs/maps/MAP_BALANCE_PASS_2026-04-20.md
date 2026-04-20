@@ -33,6 +33,7 @@ Purpose: correct material fairness problems in the shipped 1v1 map pool with sma
 - Problem: watch posts sat too deep on each home-side approach, giving too much free defensive leverage before the ford fight was really contested.
 - Fix: moved both watch posts closer to the middle crossing line while keeping left-right symmetry.
 - Fix: middle ford mine now has a larger reserve than side mines.
+- Follow-up: side-mine risk/reward retuned so the safer top pair pays less than the slower/exposed lower pair (1500 top, 1750 bottom).
 
 ### Map 05, Timber Lanes
 - Problem: decorative side brush overlapped both start locations, which materially broke starting space and made multiple mines/routes effectively unreachable.
