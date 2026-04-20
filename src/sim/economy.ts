@@ -55,8 +55,53 @@ function nearestTownHall(state: GameState, owner: 0 | 1, px: number, py: number)
 
 type EntityWithCache = Entity & {
   _gatherPath?: Vec2[];
+  _gatherTarget?: Vec2;
   _buildPath?:  Vec2[];
 };
+
+function getMineApproachTiles(state: GameState, mine: Entity): Vec2[] {
+  const tiles: Vec2[] = [];
+  for (let y = mine.pos.y - 1; y <= mine.pos.y + mine.tileH; y++) {
+    for (let x = mine.pos.x - 1; x <= mine.pos.x + mine.tileW; x++) {
+      const insideMine = x >= mine.pos.x && x < mine.pos.x + mine.tileW && y >= mine.pos.y && y < mine.pos.y + mine.tileH;
+      if (insideMine) continue;
+      if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
+      if (!state.tiles[y]?.[x]?.passable) continue;
+      tiles.push({ x, y });
+    }
+  }
+
+  tiles.sort((a, b) => {
+    const aBand = a.y < mine.pos.y ? 0 : a.y >= mine.pos.y + mine.tileH ? 2 : 1;
+    const bBand = b.y < mine.pos.y ? 0 : b.y >= mine.pos.y + mine.tileH ? 2 : 1;
+    if (aBand !== bBand) return aBand - bBand;
+    const aSide = a.x < mine.pos.x ? 0 : a.x >= mine.pos.x + mine.tileW ? 2 : 1;
+    const bSide = b.x < mine.pos.x ? 0 : b.x >= mine.pos.x + mine.tileW ? 2 : 1;
+    if (aSide !== bSide) return aSide - bSide;
+    if (a.y !== b.y) return a.y - b.y;
+    return a.x - b.x;
+  });
+
+  return tiles;
+}
+
+function bestMineApproach(state: GameState, entity: Entity, mine: Entity): { target: Vec2; path: Vec2[] } | null {
+  let best: { target: Vec2; path: Vec2[] } | null = null;
+  let bestScore = Infinity;
+
+  for (const target of getMineApproachTiles(state, mine)) {
+    const path = findPath(state, entity.pos.x, entity.pos.y, target.x, target.y);
+    if (path === null) continue;
+    const score = path.length * 1000 + Math.abs(entity.pos.x - target.x) + Math.abs(entity.pos.y - target.y);
+    if (!best || score < bestScore) {
+      best = { target, path };
+      bestScore = score;
+      if (path.length === 0) return best;
+    }
+  }
+
+  return best;
+}
 
 function bestContestedMine(state: GameState, owner: 0 | 1): Entity | null {
   let best: Entity | null = null;
@@ -86,6 +131,7 @@ export function processGather(state: GameState, entity: Entity): void {
 
   const clearGatherState = () => {
     ec._gatherPath = undefined;
+    ec._gatherTarget = undefined;
   };
 
   const mine = getEntity(state, cmd.mineId);
@@ -111,26 +157,25 @@ export function processGather(state: GameState, entity: Entity): void {
         return;
       }
       if (ec._gatherPath === undefined) {
-        // target tile just above the mine
-        const raw = findPath(state, entity.pos.x, entity.pos.y,
-          mine.pos.x, mine.pos.y - 1);
-        if (raw === null) {
+        const approach = bestMineApproach(state, entity, mine);
+        if (approach === null) {
           clearGatherState();
           entity.cmd = null;
           return;
-        } // truly unreachable — give up
-        ec._gatherPath = raw;
+        }
+        ec._gatherPath = approach.path;
+        ec._gatherTarget = approach.target;
       }
       if (ec._gatherPath.length === 0) {
         // already adjacent — start mining
-        cmd.phase = 'gathering'; cmd.waitTicks = state.tick; return;
+        cmd.phase = 'gathering'; cmd.waitTicks = state.tick; ec._gatherTarget = undefined; return;
       }
       if (state.tick - cmd.waitTicks < tps) return;
       const next = ec._gatherPath.shift()!;
       entity.pos.x = next.x; entity.pos.y = next.y;
       cmd.waitTicks = state.tick;
       if (ec._gatherPath.length === 0) {
-        cmd.phase = 'gathering'; cmd.waitTicks = state.tick; ec._gatherPath = undefined;
+        cmd.phase = 'gathering'; cmd.waitTicks = state.tick; ec._gatherPath = undefined; ec._gatherTarget = undefined;
       }
       break;
     }
