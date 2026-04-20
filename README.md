@@ -37,8 +37,10 @@ Current state:
 - main multiplayer determinism blocker from review was fixed
 - follow-up lockstep packet/disconnect issues were fixed too
 - recent determinism-sensitive changes were verified with targeted review passes
+- a later live `SERVER` mode desync was reproduced, diagnosed, and fixed
 - self-hosted online infra is live on `w2.kislota.today`
 - PeerJS/TURN production wiring is aligned for `SERVER` mode manual tests
+- live re-test after the desync fix stayed synchronized even with tower builds
 - DIRECT fallback remains available for comparison/fallback checks
 - network safety is no longer the main design bottleneck
 - balance-system foundation is now in place and now includes a simple manual tuning layer for fast gameplay iteration
@@ -205,6 +207,7 @@ Examples:
 - client env example: `.env.example`
 - self-host infra example: `infra/compose.yaml`
 - coturn env example: `infra/.env.example`
+- current network architecture notes: `NETWORK_ARCHITECTURE.md`
 
 PeerJS deployment note:
 - production self-host terminates TLS at `https://w2.kislota.today`
@@ -254,6 +257,11 @@ Movement feel follow-up:
   - pressure / attack-move variants that already use move-path stepping
 - chase logic now separates repath timing from per-step visual progress timing, reducing hidden coupling in movement rendering
 
+Attack reissue exploit fix and adjacent-input audit:
+- fixed an attack-click spam exploit where repeated attack reissue/right-click spam could effectively reset attack cooldown
+- fix behavior: reissuing attack now preserves the existing cooldown instead of granting a fresh attack-timing window
+- narrow adjacent audit result: same-class exploit was not confirmed for `stop`, `move`, `gather`, `build`, or resume-style command reissue paths
+
 Balance foundation pass:
 - base stats now live in `src/balance/base.ts`
 - permanent race overrides now live in `src/balance/races.ts`
@@ -270,6 +278,11 @@ Determinism note:
 - the exact move feedback marker is render-only command feedback and does not affect simulation or online state
 - the opening contrast pass only reuses existing synced sim state (`openingPlanSelected`, `openingCommitmentClaimed`, unit-local `openingPlan`) and does not introduce new nondeterministic inputs
 - the latest clarity pass keeps combat timing unchanged and uses lightweight visual-event state only for presentation, so no new network-model rewrite surface was introduced
+
+## Network architecture documentation
+
+For the current multiplayer architecture, deployment coupling, the April 2026 live desync incident/fix, and the current online infra update under consideration for Russia-facing access, see:
+- [NETWORK_ARCHITECTURE.md](./NETWORK_ARCHITECTURE.md)
 
 ## Roadmap
 

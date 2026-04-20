@@ -60,6 +60,11 @@ Update it when a phase is completed, reframed, or split.
   - cleared blocked start macro pockets on Open Steppe and Timber Lanes
   - moved Stone Fords watch posts closer to the actual contest line
   - added richer reserves to center / farther mines across the map pool
+- attack reissue exploit fix completed:
+  - repeated attack reissue/right-click spam no longer resets attack cooldown
+  - attack reissue now preserves current cooldown timing
+- narrow adjacent input-spam audit completed:
+  - no confirmed same-class exploit found in `stop`, `move`, `gather`, `build`, or resume-style command reissue paths
 
 ### Verified
 - build green after each recent pass
@@ -67,6 +72,8 @@ Update it when a phase is completed, reframed, or split.
 - targeted review confirmed multi-id ordering cleanup is clean
 - targeted review found and helped close the ring asymmetry issue
 - targeted review found and helped close the stale-path-after-sidestep issue
+- live `SERVER` mode test after the April 2026 desync fixes stayed synchronized through tower builds in a Serbia <-> Russia run
+- lightweight online desync diagnostics are now available for future live repros
 
 ### Known remaining caution
 - blocked-step sidestep still depends on same-tick entity processing order
@@ -125,6 +132,8 @@ Immediate project note:
 Infrastructure note:
 - the balance foundation is now good enough
 - a simple manual tuning layer now exists in `src/balance/tuning.ts` for fast live-test balance edits
+- the recent `SERVER` mode desync chain was fixed in `src/net/session.ts`; keep future netcode edits narrow and reviewable
+- lightweight desync diagnostics now exist in `src/net/session.ts`, `src/game.ts`, and `src/render/ui.ts` for live comparison
 - avoid deeper balance-system plumbing unless a concrete gameplay iteration need appears
 - next sessions should primarily spend energy on gameplay changes, playtests, faction identity tuning, and now map fairness tuning
 
