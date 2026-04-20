@@ -1,5 +1,5 @@
 import { SIM_TICK_MS, TILE_SIZE, CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL, SIM_HZ,
-         isUnitKind, isWorkerKind, type EntityKind, type Race, type MapId, type OpeningPlan } from './types';
+         isUnitKind, isWorkerKind, type EntityKind, type Race, type MapId, type OpeningPlan, type AIDifficulty } from './types';
 import { createWorld } from './sim/world';
 import { spawnEntity, killEntity } from './sim/entities';
 import { processCommand, issueMoveCommand, separateUnits, autoAttackPass } from './sim/commands';
@@ -33,6 +33,7 @@ export interface GameOptions {
   playerRace: Race;         // host's race → races[0] (same on both clients)
   guestRace?: Race;         // guest's race → races[1]; defaults to opposite if omitted
   mapId:      MapId;
+  aiDifficulty?: AIDifficulty;
   net?:       NetSession;   // present → online 1v1, no AI
   myOwner?:   0 | 1;        // which owner this client controls (default 0)
 }
@@ -134,12 +135,9 @@ export function startGame(
   const as_ = mapData.aiStart;
   spawnEntity(state, 'townhall',    1, as_);
   spawnEntity(state, aiRC.worker,   1, { x: as_.x + 1, y: as_.y + 3 });
-  // Offline vs AI: give AI a second worker head-start.
-  // Online: equal start — each side gets one worker.
-  if (!net) spawnEntity(state, aiRC.worker, 1, { x: as_.x + 2, y: as_.y + 3 });
 
   // ── AI controller ──────────────────────────────────────────────────────────
-  const ai: AIController = createAI();
+  const ai: AIController = createAI(options.aiDifficulty ?? 'medium');
 
   // ── Initial fog reveal ─────────────────────────────────────────────────────
   updateFog(state, myOwner);

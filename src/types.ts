@@ -44,6 +44,7 @@ export interface Vec2 {
 // ─── Race ─────────────────────────────────────────────────────────────────────
 
 export type Race = 'human' | 'orc';
+export type AIDifficulty = 'easy' | 'medium' | 'hard';
 
 // ─── Entities ─────────────────────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import type { Entity, EntityKind, GameState, Vec2 } from '../types';
+import type { AIDifficulty, Entity, EntityKind, GameState, Vec2 } from '../types';
 import { SIM_HZ, isUnitKind } from '../types';
 import { RACES } from '../data/races';
 import { getResolvedCost } from '../balance/resolver';
@@ -17,18 +17,63 @@ function moveGoalNear(entity: Entity, tx: number, ty: number): boolean {
 // ─── Controller state ─────────────────────────────────────────────────────────
 
 export interface AIController {
-  phase:          'economy' | 'military' | 'assault';
-  attackWaveSize: number;   // grows each wave: 6 → 8 → 10 → 12
+  phase: 'economy' | 'military' | 'assault';
+  attackWaveSize: number;
+  difficulty: AIDifficulty;
+  reactionDelayTicks: number;
+  nextDecisionTick: number;
+  maxFarms: number;
+  maxTowers: number;
+  workerTarget: number;
+  openingPlan: 'eco' | 'tempo' | 'pressure';
 }
 
-export function createAI(): AIController {
-  return { phase: 'economy', attackWaveSize: 6 };
+export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
+  if (difficulty === 'easy') {
+    return {
+      phase: 'economy',
+      attackWaveSize: 8,
+      difficulty,
+      reactionDelayTicks: Math.round(SIM_HZ * 1.4),
+      nextDecisionTick: 0,
+      maxFarms: 2,
+      maxTowers: 1,
+      workerTarget: 3,
+      openingPlan: 'eco',
+    };
+  }
+  if (difficulty === 'hard') {
+    return {
+      phase: 'economy',
+      attackWaveSize: 5,
+      difficulty,
+      reactionDelayTicks: Math.round(SIM_HZ * 0.55),
+      nextDecisionTick: 0,
+      maxFarms: 4,
+      maxTowers: 3,
+      workerTarget: 5,
+      openingPlan: 'pressure',
+    };
+  }
+  return {
+    phase: 'economy',
+    attackWaveSize: 6,
+    difficulty,
+    reactionDelayTicks: SIM_HZ,
+    nextDecisionTick: 0,
+    maxFarms: 3,
+    maxTowers: 2,
+    workerTarget: 4,
+    openingPlan: 'tempo',
+  };
 }
 
 // ─── Main tick (runs at 1 Hz) ─────────────────────────────────────────────────
 
 export function tickAI(state: GameState, ai: AIController): void {
-  if (state.tick % SIM_HZ !== 0) return;
+  if (state.tick < ai.nextDecisionTick) return;
+
+  ai.nextDecisionTick = state.tick + ai.reactionDelayTicks;
 
   const es = state.entities;
 
@@ -50,13 +95,20 @@ export function tickAI(state: GameState, ai: AIController): void {
   const buildingBarracks = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'barracks');
   const buildingTower    = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'tower');
 
+  if (!state.openingPlanSelected[1]) {
+    state.openingPlanSelected[1] = ai.openingPlan;
+    for (const e of es) {
+      if (e.owner === 1 && (e.kind === 'townhall' || e.kind === 'barracks')) e.openingPlan = ai.openingPlan;
+    }
+  }
+
   // Always keep workers on gold
   keepGathering(state, myWorkers);
 
   switch (ai.phase) {
     // ── Economy: build workforce, first farm, first barracks ─────────────────
     case 'economy': {
-      if (myWorkers.length < 4) {
+      if (myWorkers.length < ai.workerTarget) {
         issueTrainCommand(state, myTH, rc.worker);
       }
       if (farmCount === 0 && !buildingFarm && myWorkers.length >= 2) {
@@ -90,14 +142,14 @@ export function tickAI(state: GameState, ai: AIController): void {
                              state.gold[1] >= getResolvedCost(rc.ranged, state.races[1]);
         issueTrainCommand(state, myBarracks, wantHeavy ? rc.heavy : wantRanged ? rc.ranged : rc.soldier);
       }
-      if (!buildingFarm && state.popCap[1] - state.pop[1] <= 2 && farmCount < 3) {
+      if (!buildingFarm && state.popCap[1] - state.pop[1] <= 2 && farmCount < ai.maxFarms) {
         const w = freeWorker(myWorkers);
         if (w) {
           const pos = findBuildSpot(state, myTH, 'farm');
           if (pos) issueBuildCommand(state, w, 'farm', pos, state.tick);
         }
       }
-      if (!buildingTower && towerCount < 2 && myBarracks && mySoldiers.length >= 4 && state.gold[1] >= getResolvedCost('tower', state.races[1])) {
+      if (!buildingTower && towerCount < ai.maxTowers && myBarracks && mySoldiers.length >= (ai.difficulty === 'easy' ? 5 : 4) && state.gold[1] >= getResolvedCost('tower', state.races[1])) {
         const w = freeWorker(myWorkers);
         if (w) {
           const pos = findBuildSpot(state, myTH, 'tower');
@@ -124,7 +176,7 @@ export function tickAI(state: GameState, ai: AIController): void {
 
         if (nearest) {
           issueAttackCommand(s, nearest.id, state.tick);
-        } else if (contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > 6) {
+        } else if (ai.difficulty !== 'easy' && contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > (ai.difficulty === 'hard' ? 4 : 6)) {
           const tx = contestedMine.pos.x;
           const ty = contestedMine.pos.y - 1;
           if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
@@ -136,7 +188,9 @@ export function tickAI(state: GameState, ai: AIController): void {
       }
 
       if (mySoldiers.length === 0) {
-        ai.attackWaveSize = Math.min(12, ai.attackWaveSize + 2);
+        const growth = ai.difficulty === 'easy' ? 1 : 2;
+        const maxWave = ai.difficulty === 'hard' ? 11 : 12;
+        ai.attackWaveSize = Math.min(maxWave, ai.attackWaveSize + growth);
         ai.phase = 'military';
       }
       break;

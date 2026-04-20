@@ -4,7 +4,7 @@
  * Calls back into the game with the chosen GameOptions.
  */
 
-import type { Race, MapId, Tile } from './types';
+import type { Race, MapId, Tile, AIDifficulty } from './types';
 import type { GameOptions } from './game';
 import { RACES } from './data/races';
 import { MAP_CATALOG, buildMapById } from './data/maps';
@@ -20,6 +20,7 @@ interface MenuState {
   screen:      MenuScreen;
   playerRace:  Race;
   mapId:       MapId;
+  aiDifficulty: AIDifficulty;
   language:    Language;
   // Online lobby
   netRole?:    'host' | 'guest';
@@ -123,6 +124,7 @@ export function runMenu(
     screen:     'title',
     playerRace: 'human',
     mapId:      1,
+    aiDifficulty: 'medium',
     language:   getLanguage(),
     joinCode:   '',
     guestRace:  'orc',
@@ -225,6 +227,8 @@ export function runMenu(
           ms.guestRace = action.slice(14) as Race;
         } else if (action.startsWith('set_map_')) {
           ms.mapId = parseInt(action.slice(8)) as MapId;
+        } else if (action.startsWith('set_ai_')) {
+          ms.aiDifficulty = action.slice(7) as AIDifficulty;
         } else if (action.startsWith('set_net_mode_')) {
           ms.netMode = action.slice(13) as NetMode;
           ms.netSession?.destroy();
@@ -260,7 +264,7 @@ export function runMenu(
   function startGame(): void {
     running = false;
     origRemove();
-    onStart({ playerRace: ms.playerRace, mapId: ms.mapId });
+    onStart({ playerRace: ms.playerRace, mapId: ms.mapId, aiDifficulty: ms.aiDifficulty });
   }
 
   function startOnlineGame(): void {
@@ -591,6 +595,39 @@ export function runMenu(
     ctx.font      = 'bold 28px serif';
     ctx.fillText(t('choose_map'), cx, cy - 142);
 
+    const newBtns: MenuButton[] = [];
+    const difficultyDefs: Array<{ value: AIDifficulty; label: string; accent: string }> = [
+      { value: 'easy', label: t('ai_easy'), accent: '#79d98a' },
+      { value: 'medium', label: t('ai_medium'), accent: '#e8c84a' },
+      { value: 'hard', label: t('ai_hard'), accent: '#ff8f66' },
+    ];
+
+    ctx.fillStyle = GREY;
+    ctx.font = '11px monospace';
+    ctx.fillText(t('choose_ai_difficulty'), cx, cy - 120);
+
+    const diffBtnY = cy - 106;
+    const diffBtnW = 116;
+    const diffGap = 12;
+    const diffRowW = difficultyDefs.length * diffBtnW + (difficultyDefs.length - 1) * diffGap;
+    const diffStartX = cx - Math.floor(diffRowW / 2);
+    for (let i = 0; i < difficultyDefs.length; i++) {
+      const def = difficultyDefs[i];
+      const bx = diffStartX + i * (diffBtnW + diffGap);
+      const by = diffBtnY;
+      const selected = ms.aiDifficulty === def.value;
+      ctx.fillStyle = selected ? `${def.accent}33` : 'rgba(255,255,255,0.04)';
+      ctx.fillRect(bx, by, diffBtnW, 28);
+      ctx.strokeStyle = selected ? def.accent : PANEL_BD;
+      ctx.lineWidth = selected ? 2 : 1;
+      ctx.strokeRect(bx + 0.5, by + 0.5, diffBtnW - 1, 27);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = selected ? def.accent : WHITE;
+      ctx.font = 'bold 12px monospace';
+      ctx.fillText(def.label, bx + diffBtnW / 2, by + 18);
+      newBtns.push({ x: bx, y: by, w: diffBtnW, h: 28, label: def.label, action: `set_ai_${def.value}` });
+    }
+
     const maps = MAP_CATALOG.map((m) => ({ ...m, action: `map_${m.id}` }));
 
     const cardW = 220;
@@ -600,10 +637,8 @@ export function runMenu(
     const gapY = 16;
     const gridW = cols * cardW + (cols - 1) * gapX;
     const startX = cx - Math.floor(gridW / 2);
-    const cardY0 = cy - 110;
+    const cardY0 = cy - 66;
     const thumbH = 120;
-
-    const newBtns: MenuButton[] = [];
 
     for (let i = 0; i < maps.length; i++) {
       const m      = maps[i];
