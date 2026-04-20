@@ -68,6 +68,7 @@ export function buildMap01(): MapData {
       { x: 52, y: 6  },
       { x: 48, y: 10 },
     ],
+    goldMineReserves: [1500, 1500, 2200, 1500, 1500],
     name:        'Verdant Hills',
     description: 'Dense forests create a natural\nchokepoint in the center.',
   };

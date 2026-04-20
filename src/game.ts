@@ -126,9 +126,9 @@ export function startGame(
   spawnEntity(state, playerRC.worker, 0, { x: ps.x + 4, y: ps.y + 1 });
 
   // ── Spawn gold mines ───────────────────────────────────────────────────────
-  for (const pos of mapData.goldMines) {
+  for (const [index, pos] of mapData.goldMines.entries()) {
     const mine = spawnEntity(state, 'goldmine', 0, pos);
-    mine.goldReserve = MINE_GOLD_INITIAL;
+    mine.goldReserve = mapData.goldMineReserves?.[index] ?? MINE_GOLD_INITIAL;
   }
 
   // ── Spawn AI / guest base ─────────────────────────────────────────────────

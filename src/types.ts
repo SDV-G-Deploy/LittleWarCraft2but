@@ -30,6 +30,7 @@ export interface MapData {
   playerStart: Vec2;
   aiStart:     Vec2;
   goldMines:   Vec2[];   // top-left tile of each 2×2 mine
+  goldMineReserves?: number[]; // optional per-mine reserves aligned with goldMines
   name:        string;
   description: string;
 }

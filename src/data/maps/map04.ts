@@ -34,8 +34,8 @@ export function buildMap04(): MapData {
   fill(map, 24, 27, 3, 2, R);
   fill(map, 37, 35, 3, 2, R);
 
-  map[31][22] = P();
-  map[31][41] = P();
+  map[31][25] = P();
+  map[31][38] = P();
 
   fill(map, 8, 20, 2, 2, M);
   fill(map, 8, 42, 2, 2, M);
@@ -54,6 +54,7 @@ export function buildMap04(): MapData {
       { x: 54, y: 42 },
       { x: 31, y: 31 },
     ],
+    goldMineReserves: [1500, 1500, 1500, 1500, 2300],
     name: 'Stone Fords',
     description: 'A vertical river creates repeatable choke fights.\nWatch posts and rocks sharpen ford timing fights.',
   };

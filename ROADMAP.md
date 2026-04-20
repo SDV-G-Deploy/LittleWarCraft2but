@@ -55,6 +55,11 @@ Update it when a phase is completed, reframed, or split.
   - production panel for Town Hall / Barracks now clearly shows current unit, progress, percent, queue slots, and idle state
   - lightweight on-field attack and hit flashes added for melee and ranged combat readability
   - archer / troll ranged attacks now render simple readability-first projectile cues
+- dedicated map-balance correction pass completed:
+  - fixed unreachable contested mines on River Crossing
+  - cleared blocked start macro pockets on Open Steppe and Timber Lanes
+  - moved Stone Fords watch posts closer to the actual contest line
+  - added richer reserves to center / farther mines across the map pool
 
 ### Verified
 - build green after each recent pass
@@ -112,15 +117,20 @@ If a pass is only UI/local render, targeted review is not required every time.
 
 ## Next passes
 
+Immediate project note:
+- map-balance correction pass v1 is now done
+- next useful step is live validation, not another blind architecture pass
+- if more map work is needed, keep it point-fix only and driven by concrete spawn-side findings
+
 Infrastructure note:
 - the balance foundation is now good enough
 - a simple manual tuning layer now exists in `src/balance/tuning.ts` for fast live-test balance edits
 - avoid deeper balance-system plumbing unless a concrete gameplay iteration need appears
-- next sessions should primarily spend energy on gameplay changes, playtests, and faction identity tuning
+- next sessions should primarily spend energy on gameplay changes, playtests, faction identity tuning, and now map fairness tuning
 
 Performance note:
-- immediate next perf target is `combat.ts` LOS checks via blocker/grid lookup
-- do this before any risky dynamic unit occupancy or spatial-bucket rewrite
+- immediate next perf target remains `combat.ts` LOS checks via blocker/grid lookup
+- but this is no longer the next `/new` priority unless map work is blocked
 - after LOS pass, likely order is:
   1. allocation churn reduction (`shift`, repeated arrays/maps/strings in hot paths)
   2. only then reconsider spatial buckets if profiling still points there
@@ -196,6 +206,15 @@ Suggested commit themes:
 ## Phase F. Map pressure and expansion gameplay
 Goal: make the map itself generate decisions and conflict.
 
+Status:
+- prerequisite fairness pass on the existing map pool is done
+- current need is live validation plus any small follow-up corrections that show up in matches
+
+Immediate map-balance checklist:
+- validate that each start can macro/build cleanly in real play
+- validate that contested mines are now worth fighting over instead of being dead map objects
+- validate that center-rich mines create better expansion tension without forced snowball
+
 Focus ideas:
 - contested resource points
 - risky expansions
@@ -207,10 +226,12 @@ Definition of done:
 - players move because the map creates incentives, not only because it is time to attack
 - map control becomes a meaningful concept
 - expansions create new timing windows, defensive dilemmas, and comeback opportunities
+- the current map pool no longer gives obvious side-based unfair advantage
 
 Suggested commit themes:
 - `design: add contested expansion and map-pressure incentives`
 - `maps: create stronger positional stakes`
+- `maps: rebalance current ladder pool for fair starts and routes`
 
 ## Phase G. Feedback / clarity pass
 Goal: make the richer game easier to read at a glance and reduce silent failure.
@@ -338,14 +359,15 @@ Not before:
 - gameplay/UI passes have delivered visible value
 
 ## Suggested sequencing for future sessions
-1. branching gameplay decisions
+1. map-balance pass on the current pool
 2. direct gameplay/balance tuning from playtest evidence
-3. interesting action layer
-4. army composition depth
-5. map pressure and expansion gameplay
-6. feedback / clarity pass
-7. AI support pass
-8. only then revisit deeper network work or more balance tooling if a concrete problem remains
+3. branching gameplay decisions
+4. interesting action layer
+5. army composition depth
+6. map pressure and expansion gameplay
+7. feedback / clarity pass
+8. AI support pass
+9. only then revisit deeper network work or more balance tooling if a concrete problem remains
 
 ## Recent commit themes
 - `net: normalize multi-unit command ordering for determinism safety`
@@ -380,5 +402,5 @@ A good restart prompt for future `/new` sessions should mention:
   - tick-based throttling only
   - explicit heap/path tie-breaks
   - no risky dynamic unit occupancy yet
-- next concrete target for `/new`: review fresh playtest feedback after the unified movement pass and choose the smallest high-value follow-up, keeping scope out of risky net/determinism rewrites; if shifting back to perf work, LOS through grid/blocker cache in `src/sim/combat.ts` remains the clean next target
+- next concrete target for `/new`: do a dedicated map-balance pass across the current pool, focusing first on spawn fairness, mine fairness, choke asymmetry, watch-post leverage, and route symmetry; prefer small map edits with explicit fairness reasoning, and only return to perf work like LOS-through-grid in `src/sim/combat.ts` after map work is no longer the main blocker
 - separate worthwhile audit track: inspect the codebase for unnecessary state growth, stale per-entity work after death/removal, duplicate movement plumbing, and only safe/necessary optimizations

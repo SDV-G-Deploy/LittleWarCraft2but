@@ -37,8 +37,8 @@ export function buildMap05(): MapData {
   map[40][32] = P();
 
   // Side brush around starts.
-  fill(map, 7, 7, 6, 6, T);
-  fill(map, 51, 51, 6, 6, T);
+  fill(map, 7, 14, 6, 5, T);
+  fill(map, 51, 45, 6, 5, T);
 
   fill(map, 8, 26, 2, 2, M);
   fill(map, 8, 38, 2, 2, M);
@@ -57,6 +57,7 @@ export function buildMap05(): MapData {
       { x: 54, y: 40 },
       { x: 31, y: 31 },
     ],
+    goldMineReserves: [1500, 1500, 1500, 1500, 2300],
     name: 'Timber Lanes',
     description: 'Tree walls split the map into staged corridors.\nWatch posts and rock blockers reward lane control.',
   };

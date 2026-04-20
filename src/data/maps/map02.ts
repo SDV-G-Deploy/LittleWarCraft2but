@@ -74,8 +74,8 @@ export function buildMap02(): MapData {
   fill(map, 20, 45, 2, 2, M);
   fill(map, 40, 45, 2, 2, M);
   // Contested — beside each ford (accessible after crossing river)
-  fill(map,  3, 31, 2, 2, M);   // west ford mine
-  fill(map, 58, 31, 2, 2, M);   // east ford mine (inside border tree gap)
+  fill(map,  6, 31, 2, 2, M);   // west ford mine, pulled off the border so both sides can actually mine it
+  fill(map, 56, 31, 2, 2, M);   // east ford mine, mirrored inward for reachable contested access
 
   return {
     tiles:       map,
@@ -86,9 +86,10 @@ export function buildMap02(): MapData {
       { x: 40, y: 16 },
       { x: 20, y: 45 },
       { x: 40, y: 45 },
-      { x:  3, y: 31 },
-      { x: 58, y: 31 },
+      { x:  6, y: 31 },
+      { x: 56, y: 31 },
     ],
+    goldMineReserves: [1500, 1500, 1500, 1500, 2200, 2200],
     name:        'River Crossing',
     description: 'A wide river divides the map.\nTwo fords are the only way through.',
   };

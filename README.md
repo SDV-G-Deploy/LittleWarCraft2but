@@ -26,6 +26,11 @@ Recent completed passes:
 - combat bonus rules moved into `src/balance/modifiers.ts`
 - balance report foundation added via `src/balance/report.ts` and `npm run balance:report`
 - quick manual balance tuning file added at `src/balance/tuning.ts`
+- dedicated map-balance pass landed for the shipped pool:
+  - fixed unreachable contested mines on River Crossing
+  - cleared blocked spawn macro space on Open Steppe and Timber Lanes
+  - pulled Stone Fords watch posts closer to the actual contest line
+  - gave center / farther mines larger reserves than safe home-side mines
 
 Current state:
 - build green
@@ -95,13 +100,20 @@ For pure UI or local-render-only changes, targeted review is optional.
 ## Near-term design focus
 
 The next meaningful gains should come from:
+- map balance and start-position fairness
 - branching early-game decisions
 - richer tactical action options
 - stronger army role clarity
 - map pressure and expansion gameplay
 - playtest-driven follow-up on whether eco / tempo / pressure now diverge enough in real matches
 
-AI should be improved only after those systems create interesting matches on their own.
+Immediate next `/new` target:
+- validate the updated pool in live playtests
+- check whether the fixed contested/center mines create better early expansion pressure
+- do follow-up point edits only if a specific map still shows clear spawn-side advantage
+
+AI support pass is now good enough to stop being the blocker.
+The next likely source of unfair matches is map imbalance, not bot behavior.
 
 ## How to play the opening branches
 
@@ -261,12 +273,12 @@ Determinism note:
 
 ## Roadmap
 
-With the balance foundation now in place, the next major work should bias toward gameplay changes, playtests, and faction feel, not more infrastructure unless a concrete balancing workflow gap appears.
+With the balance foundation now in place, the next major work should bias toward gameplay changes, playtests, faction feel, and now map fairness, not more infrastructure unless a concrete balancing workflow gap appears.
 
-Current near-term visual priority:
-- improve movement feel and render readability without changing sim/network rules
-- keep the existing pixel/retro style, but make motion feel less jumpy and more readable
-- first implementation target is render-only interpolation, then walk bob/facing, then tiny step FX
+Current near-term project priority:
+- fix the map pool, because current maps are now considered materially imbalanced
+- after that, continue gameplay/map-pressure tuning on top of the corrected maps
+- keep movement-feel follow-ups and perf follow-ups secondary unless a concrete blocker appears
 
 See [ROADMAP.md](./ROADMAP.md) for:
 - recent completed work

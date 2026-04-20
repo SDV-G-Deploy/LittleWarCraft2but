@@ -20,8 +20,8 @@ export function buildMap03(): MapData {
 
   // Light corner forests, center stays very open for early pressure rotations.
   fill(map, 6, 6, 8, 7, T);
-  fill(map, 50, 6, 8, 7, T);
-  fill(map, 6, 50, 8, 7, T);
+  fill(map, 53, 6, 5, 7, T);
+  fill(map, 6, 53, 8, 4, T);
   fill(map, 50, 50, 8, 7, T);
   fill(map, 23, 10, 4, 4, T);
   fill(map, 37, 50, 4, 4, T);
@@ -51,6 +51,7 @@ export function buildMap03(): MapData {
       { x: 44, y: 18 },
       { x: 31, y: 31 },
     ],
+    goldMineReserves: [1500, 1500, 1500, 1500, 2300],
     name: 'Open Steppe',
     description: 'Wide open lanes force early scouting and pressure.\nWatch posts and center mine reward active map control.',
   };

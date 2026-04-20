@@ -59,6 +59,7 @@ export function buildMap06(): MapData {
       { x: 31, y: 31 },
       { x: 28, y: 31 },
     ],
+    goldMineReserves: [1500, 1500, 1500, 1500, 2400, 2400],
     name: 'Crown Pit',
     description: 'Rich center ring creates a hard contest point.\nWatch posts and rocks shape pit entries and control.',
   };
