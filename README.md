@@ -223,11 +223,17 @@ Determinism note:
 
 With the balance foundation now in place, the next major work should bias toward gameplay changes, playtests, and faction feel, not more infrastructure unless a concrete balancing workflow gap appears.
 
+Current near-term visual priority:
+- improve movement feel and render readability without changing sim/network rules
+- keep the existing pixel/retro style, but make motion feel less jumpy and more readable
+- first implementation target is render-only interpolation, then walk bob/facing, then tiny step FX
+
 See [ROADMAP.md](./ROADMAP.md) for:
 - recent completed work
 - current strategic priorities
 - next planned phases
 - review rules for determinism-sensitive changes
+- the movement-feel/render-readability plan for future `/new` sessions
 - suggested commit themes
 
 Archived balance-system planning drafts are kept in `docs/planning/archive/`.

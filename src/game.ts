@@ -635,12 +635,14 @@ export function startGame(
 
     handleInput();
 
+    let renderAlpha = 1;
     if (gameResult === 'playing') {
       simAccum += dt;
       while (simAccum >= SIM_TICK_MS) { simTick(); simAccum -= SIM_TICK_MS; }
+      renderAlpha = simAccum / SIM_TICK_MS;
     }
 
-    render(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, selectedIds, myOwner);
+    render(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, selectedIds, myOwner, renderAlpha);
     drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, myOwner);
     if (placementMode) {
       const { tx, ty } = screenToTile(mouse.x, mouse.y, cam);

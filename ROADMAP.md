@@ -228,6 +228,54 @@ Definition of done:
 Suggested commit theme:
 - `ui: surface failed actions and clearer production feedback`
 
+## Phase G2. Movement feel and render readability
+Goal: make unit motion feel legible and alive without changing sim rules or abandoning the current pixel/retro style.
+
+Why this matters:
+- current tile-to-tile motion reads as jumps, not travel
+- the main visual debt is temporal readability, not art direction
+- strongest gains should come from render-only work, not sim/network rewrites
+
+Guiding rule:
+- keep all motion-feel work render-only unless a concrete gameplay reason proves otherwise
+- do not move prev/render positions into synced sim state
+- do not couple visual smoothing to wall-clock-dependent gameplay logic
+
+Short plan:
+1. render interpolation foundation
+   - compute `alpha` from `simAccum / SIM_TICK_MS` in `src/game.ts`
+   - pass `alpha` into `src/render/renderer.ts`
+   - keep a client-only render cache for `prevPos/currPos/facing/bobPhase`
+   - draw entities at interpolated positions instead of raw tile snaps
+2. motion readability pass
+   - add tiny walk bob for moving units
+   - add facing/directional readability from move direction
+   - keep offsets small and pixel-clean, no jelly motion
+3. step FX / local polish
+   - add tiny step dust / landing puff as local visual effects only
+   - cap particle count and avoid visual noise
+
+Files to start with:
+- `src/game.ts`
+- `src/render/renderer.ts`
+- optional later split: `src/render/interpolation.ts`, `src/render/fx.ts`
+
+What not to do first:
+- no 8-direction sprite-sheet project
+- no heavy particles, blur, glow, or modern smooth FX
+- no sim/net changes just to improve motion feel
+
+Expected delivery order:
+- PR1: interpolation foundation, lowest risk, biggest immediate gain
+- PR2: walk bob + facing, low-to-medium risk, strong readability gain
+- PR3: step dust + polish, medium risk, easy to overtune
+
+Definition of done:
+- movement no longer reads as raw tile teleporting
+- players can parse direction and motion intent faster
+- the game feels more alive while keeping the same retro/pixel identity
+- no new determinism surface is introduced
+
 ## Phase H. AI support pass
 Goal: let AI participate in the improved game without pretending AI is the main source of variety.
 

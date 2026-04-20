@@ -12,9 +12,21 @@ function getSprites(): SpriteCache {
   return sprites;
 }
 
+interface UnitRenderState {
+  prevX: number;
+  prevY: number;
+  currX: number;
+  currY: number;
+  facingX: -1 | 0 | 1;
+  bobPhase: number;
+}
+
+const unitRenderCache = new Map<number, UnitRenderState>();
+
 /** Call when starting a new game so the minimap terrain cache regenerates. */
 export function resetRenderCache(): void {
   minimapTerrain = null;
+  unitRenderCache.clear();
   // sprites are race-independent (all races baked in) so no reset needed
 }
 
@@ -74,6 +86,7 @@ export function render(
   viewH: number,
   selectedIds: Set<number>,
   myOwner: 0 | 1 = 0,
+  alpha = 1,
 ): void {
   const sp = getSprites();
 
@@ -83,7 +96,7 @@ export function render(
 
   drawTiles(ctx, sp, state, cam, viewW, viewH);
   drawCorpses(ctx, sp, state, cam);
-  drawEntities(ctx, sp, state, cam, selectedIds, myOwner);
+  drawEntities(ctx, sp, state, cam, selectedIds, myOwner, alpha);
   drawCombatVisuals(ctx, state, cam, myOwner);
   drawRallyPoints(ctx, state, cam, selectedIds, myOwner);
   drawFog(ctx, state, cam, viewW, viewH);
@@ -282,7 +295,40 @@ function drawEntities(
   cam: Camera,
   selectedIds: Set<number>,
   myOwner: 0 | 1 = 0,
+  alpha = 1,
 ): void {
+  const clampedAlpha = Math.max(0, Math.min(1, alpha));
+  const visibleUnitIds = new Set<number>();
+
+  for (const e of state.entities) {
+    if (!isUnitKind(e.kind)) continue;
+    let renderState = unitRenderCache.get(e.id);
+    if (!renderState) {
+      renderState = {
+        prevX: e.pos.x,
+        prevY: e.pos.y,
+        currX: e.pos.x,
+        currY: e.pos.y,
+        facingX: 0,
+        bobPhase: 0,
+      };
+      unitRenderCache.set(e.id, renderState);
+    } else if (renderState.currX !== e.pos.x || renderState.currY !== e.pos.y) {
+      const dx = e.pos.x - renderState.currX;
+      renderState.prevX = renderState.currX;
+      renderState.prevY = renderState.currY;
+      renderState.currX = e.pos.x;
+      renderState.currY = e.pos.y;
+      if (dx !== 0) renderState.facingX = dx > 0 ? 1 : -1;
+      renderState.bobPhase = (renderState.bobPhase + 1) % 8;
+    }
+    visibleUnitIds.add(e.id);
+  }
+
+  for (const id of unitRenderCache.keys()) {
+    if (!visibleUnitIds.has(id)) unitRenderCache.delete(id);
+  }
+
   // Draw buildings first, units on top
   for (const pass of [false, true] as const) {
     for (const e of state.entities) {
@@ -290,15 +336,25 @@ function drawEntities(
       const isUnit = isUnitKind(e.kind);
       if (isUnit !== pass) continue;
 
-      const wx = e.pos.x * TILE_SIZE;
-      const wy = e.pos.y * TILE_SIZE;
+      let renderX = e.pos.x;
+      let renderY = e.pos.y;
+      if (isUnit) {
+        const renderState = unitRenderCache.get(e.id);
+        if (renderState) {
+          renderX = renderState.prevX + (renderState.currX - renderState.prevX) * clampedAlpha;
+          renderY = renderState.prevY + (renderState.currY - renderState.prevY) * clampedAlpha;
+        }
+      }
+
+      const wx = renderX * TILE_SIZE;
+      const wy = renderY * TILE_SIZE;
       const { sx, sy } = worldToScreen(wx, wy, cam);
       const selected = selectedIds.has(e.id);
       const pw = e.tileW * TILE_SIZE;
       const ph = e.tileH * TILE_SIZE;
 
       if (isUnit) {
-        drawUnit(ctx, sp, e, sx, sy, selected);
+        drawUnit(ctx, sp, e, sx, sy, selected, unitRenderCache.get(e.id));
       } else {
         drawBuilding(ctx, sp, e, sx, sy, pw, ph, selected, state);
       }
@@ -399,9 +455,15 @@ function drawUnit(
   e: Entity,
   sx: number, sy: number,
   selected: boolean,
+  renderState?: UnitRenderState,
 ): void {
-  const cx = sx + TILE_SIZE / 2;
-  const cy = sy + TILE_SIZE / 2;
+  const moving = !!(e.cmd && (e.cmd.type === 'move' || e.cmd.type === 'build'));
+  const bobOffset = moving ? (renderState?.bobPhase === 1 || renderState?.bobPhase === 5 ? -1 : 0) : 0;
+  const facingX = renderState?.facingX ?? 0;
+  const bodySx = Math.round(sx);
+  const bodySy = Math.round(sy + bobOffset);
+  const cx = bodySx + TILE_SIZE / 2;
+  const cy = bodySy + TILE_SIZE / 2;
 
   // Selection ring
   if (selected) {
@@ -423,16 +485,36 @@ function drawUnit(
     e.kind === 'troll'        ? sp.troll        :
                                sp.ogreFighter;
   const sprite = spriteSheet[e.owner as 0 | 1];
-  ctx.drawImage(sprite, sx, sy, TILE_SIZE, TILE_SIZE);
+  ctx.save();
+  if (facingX < 0) {
+    ctx.translate(bodySx + TILE_SIZE, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(sprite, 0, bodySy, TILE_SIZE, TILE_SIZE);
+  } else {
+    ctx.drawImage(sprite, bodySx, bodySy, TILE_SIZE, TILE_SIZE);
+  }
+  ctx.restore();
+
+  if (moving && facingX !== 0) {
+    const dirColor = e.owner === 0 ? 'rgba(128, 184, 255, 0.35)' : 'rgba(255, 176, 176, 0.35)';
+    ctx.fillStyle = dirColor;
+    const tipX = facingX > 0 ? bodySx + TILE_SIZE - 2 : bodySx + 2;
+    ctx.beginPath();
+    ctx.moveTo(tipX, bodySy + TILE_SIZE / 2);
+    ctx.lineTo(tipX - facingX * 4, bodySy + TILE_SIZE / 2 - 3);
+    ctx.lineTo(tipX - facingX * 4, bodySy + TILE_SIZE / 2 + 3);
+    ctx.closePath();
+    ctx.fill();
+  }
 
   // HP bar
-  drawHpBar(ctx, sx, sy, TILE_SIZE, 3, e.hp / e.hpMax);
+  drawHpBar(ctx, bodySx, bodySy, TILE_SIZE, 3, e.hp / e.hpMax);
 
   // Small carrying-gold indicator
   if (e.carryGold) {
     ctx.fillStyle = '#ffe840';
     ctx.beginPath();
-    ctx.arc(sx + TILE_SIZE - 4, sy + 4, 3, 0, Math.PI * 2);
+    ctx.arc(bodySx + TILE_SIZE - 4, bodySy + 4, 3, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -441,13 +523,13 @@ function drawUnit(
     ctx.strokeStyle = 'rgba(255, 232, 64, 0.75)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(sx + TILE_SIZE / 2, sy + TILE_SIZE / 2, TILE_SIZE * 0.22, 0, Math.PI * 2);
+    ctx.arc(bodySx + TILE_SIZE / 2, bodySy + TILE_SIZE / 2, TILE_SIZE * 0.22, 0, Math.PI * 2);
     ctx.stroke();
   }
   if (e.kind === 'knight' || e.kind === 'ogreFighter') {
     ctx.strokeStyle = 'rgba(255,255,255,0.35)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(sx + 6.5, sy + 6.5, TILE_SIZE - 13, TILE_SIZE - 13);
+    ctx.strokeRect(bodySx + 6.5, bodySy + 6.5, TILE_SIZE - 13, TILE_SIZE - 13);
   }
 }
 
