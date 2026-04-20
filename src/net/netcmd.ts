@@ -175,6 +175,13 @@ export function applyNetCmds(
       case 'demolish': {
         const b = getEntity(state, cmd.buildingId);
         if (!b || b.owner !== owner || isUnitKind(b.kind) || b.kind === 'goldmine') break;
+        if (b.kind === 'construction') {
+          for (const e of state.entities) {
+            if (e.owner !== owner || e.cmd?.type !== 'build' || e.cmd.siteId !== b.id) continue;
+            e.cmd = null;
+            (e as typeof e & { _buildPath?: unknown })._buildPath = undefined;
+          }
+        }
         // Construction sites refund 100% (no work was wasted); finished buildings 80%
         const srcKind  = b.kind === 'construction' ? (b.constructionOf ?? b.kind) : b.kind;
         const refundPct = b.kind === 'construction' ? 1.0 : 0.8;
