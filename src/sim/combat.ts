@@ -15,6 +15,7 @@ export function issueAttackCommand(entity: Entity, targetId: number, currentTick
     cooldownTick: 0,
     chasePath: [],
     chasePathTick: currentTick, // align movement cadence to now, not epoch
+    chaseStepTick: currentTick,
   };
 }
 
@@ -162,7 +163,7 @@ export function processAttack(state: GameState, entity: Entity): void {
     }
     // ── Out of range or no LOS: chase toward nearest footprint tile ─────────
     const tps = ticksPerStep(entity.kind, state.races[entity.owner]);
-    if ((state.tick - cmd.chasePathTick) % tps !== 0) return;
+    if (state.tick - cmd.chaseStepTick < tps) return;
 
     if (cmd.chasePath.length === 0 || state.tick - cmd.chasePathTick >= SIM_HZ) {
       // Path toward nearest edge of target footprint (not just top-left corner)
@@ -177,6 +178,7 @@ export function processAttack(state: GameState, entity: Entity): void {
       const next = cmd.chasePath.shift()!;
       entity.pos.x = next.x;
       entity.pos.y = next.y;
+      cmd.chaseStepTick = state.tick;
     }
   }
 }

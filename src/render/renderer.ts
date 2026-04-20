@@ -17,7 +17,68 @@ interface UnitRenderState {
   facingX: -1 | 0 | 1;
 }
 
+interface UnitMotionSample {
+  nextX: number;
+  nextY: number;
+  progress: number;
+}
+
 const unitRenderCache = new Map<number, UnitRenderState>();
+
+function getUnitMotionSample(
+  e: Entity,
+  state: GameState,
+  alpha: number,
+): UnitMotionSample | null {
+  if (!e.cmd) return null;
+
+  let next: { x: number; y: number } | null = null;
+  let tps = ticksPerStep(e.kind, state.races[e.owner]);
+  let stepTick = state.tick;
+
+  if (e.cmd.type === 'move') {
+    if (e.cmd.path.length === 0) return null;
+    next = e.cmd.path[0]!;
+    const baseTps = ticksPerStep(e.kind, state.races[e.owner]);
+    const speedBoostActive =
+      typeof e.cmd.speedMult === 'number' &&
+      e.cmd.speedMult > 1 &&
+      typeof e.cmd.speedMultUntilTick === 'number' &&
+      state.tick <= e.cmd.speedMultUntilTick;
+    const speedMult = e.cmd.speedMult ?? 1;
+    tps = speedBoostActive
+      ? Math.max(1, Math.floor(baseTps / speedMult))
+      : baseTps;
+    stepTick = e.cmd.stepTick;
+  } else if (e.cmd.type === 'attack') {
+    if (e.cmd.chasePath.length === 0) return null;
+    next = e.cmd.chasePath[0]!;
+    stepTick = e.cmd.chaseStepTick;
+  } else if (e.cmd.type === 'gather') {
+    if (e.cmd.phase !== 'tomine' && e.cmd.phase !== 'returning') return null;
+    const gatherPath = (e as Entity & { _gatherPath?: { x: number; y: number }[] })._gatherPath;
+    if (!Array.isArray(gatherPath) || gatherPath.length === 0) return null;
+    next = gatherPath[0]!;
+    stepTick = e.cmd.waitTicks;
+  } else if (e.cmd.type === 'build') {
+    if (e.cmd.phase !== 'moving') return null;
+    const buildPath = (e as Entity & { _buildPath?: { x: number; y: number }[] })._buildPath;
+    if (!Array.isArray(buildPath) || buildPath.length === 0) return null;
+    next = buildPath[0]!;
+    tps = ticksPerStep(e.kind);
+    stepTick = e.cmd.stepTick;
+  }
+
+  if (!next) return null;
+
+  const elapsedTicks = Math.max(0, state.tick - stepTick) + alpha;
+  const progress = Math.max(0, Math.min(1, elapsedTicks / Math.max(1, tps)));
+  return {
+    nextX: next.x,
+    nextY: next.y,
+    progress,
+  };
+}
 
 /** Call when starting a new game so the minimap terrain cache regenerates. */
 export function resetRenderCache(): void {
@@ -315,6 +376,7 @@ function drawEntities(
       let renderX = e.pos.x;
       let renderY = e.pos.y;
       let stepProgress = 0;
+      let moving = false;
       let renderState: UnitRenderState | undefined;
       if (isUnit) {
         renderState = unitRenderCache.get(e.id);
@@ -323,27 +385,15 @@ function drawEntities(
           unitRenderCache.set(e.id, renderState);
         }
 
-        if (e.cmd?.type === 'move' && e.cmd.path.length > 0) {
-          const next = e.cmd.path[0]!;
-          const dx = next.x - e.pos.x;
+        const motion = getUnitMotionSample(e, state, clampedAlpha);
+        if (motion) {
+          const dx = motion.nextX - e.pos.x;
           if (dx !== 0) renderState.facingX = dx > 0 ? 1 : -1;
 
-          const baseTps = ticksPerStep(e.kind, state.races[e.owner]);
-          const speedBoostActive =
-            typeof e.cmd.speedMult === 'number' &&
-            e.cmd.speedMult > 1 &&
-            typeof e.cmd.speedMultUntilTick === 'number' &&
-            state.tick <= e.cmd.speedMultUntilTick;
-          const speedMult = e.cmd.speedMult ?? 1;
-          const tps = speedBoostActive
-            ? Math.max(1, Math.floor(baseTps / speedMult))
-            : baseTps;
-          const elapsedTicks = Math.max(0, state.tick - e.cmd.stepTick) + clampedAlpha;
-          const progress = Math.max(0, Math.min(1, elapsedTicks / Math.max(1, tps)));
-
-          renderX = e.pos.x + (next.x - e.pos.x) * progress;
-          renderY = e.pos.y + (next.y - e.pos.y) * progress;
-          stepProgress = progress;
+          renderX = e.pos.x + (motion.nextX - e.pos.x) * motion.progress;
+          renderY = e.pos.y + (motion.nextY - e.pos.y) * motion.progress;
+          stepProgress = motion.progress;
+          moving = true;
         }
       }
 
@@ -355,7 +405,7 @@ function drawEntities(
       const ph = e.tileH * TILE_SIZE;
 
       if (isUnit) {
-        drawUnit(ctx, sp, e, sx, sy, selected, renderState, stepProgress);
+        drawUnit(ctx, sp, e, sx, sy, selected, renderState, stepProgress, moving);
       } else {
         drawBuilding(ctx, sp, e, sx, sy, pw, ph, selected, state);
       }
@@ -458,8 +508,8 @@ function drawUnit(
   selected: boolean,
   renderState?: UnitRenderState,
   stepProgress = 0,
+  moving = false,
 ): void {
-  const moving = !!(e.cmd && (e.cmd.type === 'move' || e.cmd.type === 'build'));
   const facingX = renderState?.facingX ?? 0;
   const bobOffset = moving ? Math.round(Math.sin(Math.min(1, stepProgress) * Math.PI) * -1) : 0;
   const bodySx = Math.round(sx);
