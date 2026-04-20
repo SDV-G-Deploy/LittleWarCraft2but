@@ -289,6 +289,7 @@ export async function createSession(
   let queuedRemoteCmdCount = 0;
   let queuedLocalCmdCount = 0;
   let remoteAnnouncedUpToTick = -1;
+  let remoteContiguousUpToTick = EXECUTION_DELAY_TICKS - 1;
   let waitingStallTicks = 0;
   let inboundWindowStartedAt = Date.now();
   let inboundPacketsInWindow = 0;
@@ -345,6 +346,11 @@ export async function createSession(
   function enqueueRemotePacket(pkt: TickPacket): void {
     remoteAnnouncedUpToTick = Math.max(remoteAnnouncedUpToTick, pkt.tick);
     remoteReceivedTicks.add(pkt.tick);
+
+    while (remoteReceivedTicks.has(remoteContiguousUpToTick + 1)) {
+      remoteReceivedTicks.delete(remoteContiguousUpToTick + 1);
+      remoteContiguousUpToTick++;
+    }
 
     if (pkt.cmds.length === 0) return;
 
@@ -410,10 +416,10 @@ export async function createSession(
       dropStaleRemoteTicks(tick);
       dropStaleLocalTicks(tick);
 
-      if (remoteAnnouncedUpToTick < tick || !remoteReceivedTicks.has(tick)) {
+      if (tick > remoteContiguousUpToTick) {
         waitingStallTicks++;
         if (waitingStallTicks > MAX_WAITING_STALL_TICKS) {
-          failConnection('Connection closed: lockstep timeout waiting for peer');
+          failConnection(`Connection closed: lockstep timeout waiting for peer tick=${tick} contiguous=${remoteContiguousUpToTick} announced=${remoteAnnouncedUpToTick}`);
         }
         return { ready: false, local: [], remote: [] };
       }
