@@ -317,6 +317,7 @@ function drawEntities(
 
       let renderX = e.pos.x;
       let renderY = e.pos.y;
+      let stepProgress = 0;
       let renderState: UnitRenderState | undefined;
       if (isUnit) {
         renderState = unitRenderCache.get(e.id);
@@ -342,10 +343,8 @@ function drawEntities(
 
         renderX = renderState.prevX + (renderState.currX - renderState.prevX) * clampedAlpha;
         renderY = renderState.prevY + (renderState.currY - renderState.prevY) * clampedAlpha;
-        if (clampedAlpha >= 0.999) {
-          renderState.prevX = renderState.currX;
-          renderState.prevY = renderState.currY;
-        }
+        const hasStepDelta = renderState.currX !== renderState.prevX || renderState.currY !== renderState.prevY;
+        stepProgress = hasStepDelta ? clampedAlpha : 0;
       }
 
       const wx = renderX * TILE_SIZE;
@@ -356,7 +355,11 @@ function drawEntities(
       const ph = e.tileH * TILE_SIZE;
 
       if (isUnit) {
-        drawUnit(ctx, sp, e, sx, sy, selected, renderState);
+        drawUnit(ctx, sp, e, sx, sy, selected, renderState, stepProgress);
+        if (renderState && clampedAlpha >= 0.999) {
+          renderState.prevX = renderState.currX;
+          renderState.prevY = renderState.currY;
+        }
       } else {
         drawBuilding(ctx, sp, e, sx, sy, pw, ph, selected, state);
       }
@@ -458,12 +461,10 @@ function drawUnit(
   sx: number, sy: number,
   selected: boolean,
   renderState?: UnitRenderState,
+  stepProgress = 0,
 ): void {
   const moving = !!(e.cmd && (e.cmd.type === 'move' || e.cmd.type === 'build'));
   const facingX = renderState?.facingX ?? 0;
-  const progressX = renderState ? Math.abs(sx / TILE_SIZE - renderState.prevX) : 0;
-  const progressY = renderState ? Math.abs(sy / TILE_SIZE - renderState.prevY) : 0;
-  const stepProgress = Math.max(progressX, progressY);
   const bobOffset = moving ? Math.round(Math.sin(Math.min(1, stepProgress) * Math.PI) * -1) : 0;
   const bodySx = Math.round(sx);
   const bodySy = Math.round(sy + bobOffset);
