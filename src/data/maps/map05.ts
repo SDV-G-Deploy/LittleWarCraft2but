@@ -41,6 +41,11 @@ export function buildMap05(): MapData {
   fill(map, 20, 30, 6, 3, G);
   fill(map, 38, 31, 6, 3, G);
 
+  // Add one midline gate on each forest wall so the center mine is a real objective,
+  // not a sealed visual element behind continuous lane walls.
+  fill(map, 20, 31, 6, 3, G);
+  fill(map, 38, 31, 6, 3, G);
+
   // Side brush around starts.
   fill(map, 7, 14, 6, 5, T);
   fill(map, 51, 45, 6, 5, T);

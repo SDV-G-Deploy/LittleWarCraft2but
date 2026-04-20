@@ -41,7 +41,7 @@ export function buildMap06(): MapData {
   map[29][29] = P();
 
   fill(map, 12, 12, 2, 2, M);
-  fill(map, 50, 50, 2, 2, M);
+  fill(map, 46, 46, 2, 2, M);
   fill(map, 12, 50, 2, 2, M);
   fill(map, 50, 12, 2, 2, M);
   fill(map, 31, 31, 2, 2, M);
@@ -53,7 +53,7 @@ export function buildMap06(): MapData {
     aiStart: { x: 50, y: 50 },
     goldMines: [
       { x: 12, y: 12 },
-      { x: 50, y: 50 },
+      { x: 46, y: 46 },
       { x: 12, y: 50 },
       { x: 50, y: 12 },
       { x: 31, y: 31 },

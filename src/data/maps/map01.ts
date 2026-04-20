@@ -56,7 +56,7 @@ export function buildMap01(): MapData {
 
   // ── Gold mines (2×2 each) ─────────────────────────────────────────────────
   fill(map,  8, 52, 2, 2, M);
-  fill(map, 13, 55, 2, 2, M);
+  fill(map, 11, 54, 2, 2, M);
   fill(map, 31, 32, 2, 2, M);
   fill(map, 52,  6, 2, 2, M);
   fill(map, 48, 10, 2, 2, M);
@@ -67,7 +67,7 @@ export function buildMap01(): MapData {
     aiStart:     { x: 55, y: 5  },
     goldMines: [
       { x: 8,  y: 52 },
-      { x: 13, y: 55 },
+      { x: 11, y: 54 },
       { x: 31, y: 32 },
       { x: 52, y: 6  },
       { x: 48, y: 10 },
