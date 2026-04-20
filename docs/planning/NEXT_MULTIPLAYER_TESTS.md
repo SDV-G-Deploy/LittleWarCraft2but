@@ -17,6 +17,23 @@ It is now fixed, but follow-up testing should stay deliberate so future issues a
 
 ## Priority next tests
 
+### 0. Wood-economy and UI pass validation
+Goal:
+- verify that the new wood economy feels smoother and that the HUD is readable in real play, not just in screenshots
+
+Suggested focus:
+- first farm timing for Human and Orc
+- first lumber mill timing after the cost reduction to `60 wood`
+- start-economy feel with `40` starting wood
+- worker behavior when a chopped tree depletes
+- whether the new top HUD is readable during combat / macro multitasking
+- whether Human lumber mill and Orc war mill are instantly distinguishable from other buildings
+
+Watch for:
+- wood becoming too trivial instead of merely less harsh
+- workers still stalling too often after local tree depletion
+- UI chips feeling too wide or too screen-dependent on smaller view widths
+
 ### 1. Longer same-path soak
 Goal:
 - confirm the fix holds in longer live matches, not only one successful run
