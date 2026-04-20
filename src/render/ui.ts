@@ -2,7 +2,7 @@ import type { Entity, EntityKind, GameState, OpeningPlan } from '../types';
 import type { SessionStats, SessionStatus } from '../net/session';
 import { SIM_HZ, TILE_SIZE, MAP_H, MAP_W, isUnitKind, isWorkerKind, isNeutralOwner, usesRaceProfile } from '../types';
 import { STATS } from '../data/units';
-import { RACES, ownerRace } from '../data/races';
+import { ownerRace, ownerRaceProfile } from '../data/races';
 import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedSupplyProvided, getResolvedTileSize } from '../balance/resolver';
 import { getOpeningPlanLockTicks, getOpeningPlanPresentation } from '../balance/openings';
 import type { Camera } from './camera';
@@ -762,7 +762,7 @@ function collectButtons(
 ): void {
   if (e.owner !== myOwner) return; // no buttons for enemy entities
 
-  const rc        = RACES[state.races[myOwner]]; // player race config
+  const rc        = ownerRace(state.races, myOwner); // player race config
   const btnStartX = viewW - (BTN_W + BTN_PAD) * MAX_BTN_COLS;
   let col = 0;
 
@@ -844,12 +844,13 @@ function collectButtons(
 
   if (e.kind === 'lumbermill') {
     const upgrades = state.upgrades[myOwner];
-    const meleeCost = { gold: 120, wood: 80 };
-    const armorCost = { gold: 120, wood: 80 };
-    const buildingHpCost = { gold: 90, wood: 120 };
-    addButton(`Melee +1\n[${meleeCost.gold}g ${meleeCost.wood}w]`, 'upgrade:meleeAttack1', upgrades.meleeAttack1 || state.gold[myOwner] < meleeCost.gold || state.wood[myOwner] < meleeCost.wood);
-    addButton(`Armor +1\n[${armorCost.gold}g ${armorCost.wood}w]`, 'upgrade:armor1', upgrades.armor1 || state.gold[myOwner] < armorCost.gold || state.wood[myOwner] < armorCost.wood);
-    addButton(`Bld HP +15%\n[${buildingHpCost.gold}g ${buildingHpCost.wood}w]`, 'upgrade:buildingHp1', upgrades.buildingHp1 || state.gold[myOwner] < buildingHpCost.gold || state.wood[myOwner] < buildingHpCost.wood);
+    const profile = ownerRaceProfile(state.races, myOwner);
+    const melee = profile.upgrades.meleeAttack;
+    const armor = profile.upgrades.armor;
+    const buildingHp = profile.upgrades.buildingHp;
+    addButton(`${melee.label} +${melee.perLevel} (${upgrades.meleeAttackLevel}/${melee.maxLevel})\n[${melee.cost.gold}g ${melee.cost.wood}w]`, 'upgrade:meleeAttack', upgrades.meleeAttackLevel >= melee.maxLevel || state.gold[myOwner] < melee.cost.gold || state.wood[myOwner] < melee.cost.wood);
+    addButton(`${armor.label} +${armor.perLevel} (${upgrades.armorLevel}/${armor.maxLevel})\n[${armor.cost.gold}g ${armor.cost.wood}w]`, 'upgrade:armor', upgrades.armorLevel >= armor.maxLevel || state.gold[myOwner] < armor.cost.gold || state.wood[myOwner] < armor.cost.wood);
+    addButton(`${buildingHp.label} +${buildingHp.perLevel}% (${upgrades.buildingHpLevel}/${buildingHp.maxLevel})\n[${buildingHp.cost.gold}g ${buildingHp.cost.wood}w]`, 'upgrade:buildingHp', upgrades.buildingHpLevel >= buildingHp.maxLevel || state.gold[myOwner] < buildingHp.cost.gold || state.wood[myOwner] < buildingHp.cost.wood);
   }
 
   // ── Stop (any player unit/building with an active command) ──────────────────

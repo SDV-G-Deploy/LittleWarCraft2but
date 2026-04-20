@@ -5,7 +5,7 @@
 
 import type { Race } from '../types';
 import { RACE_BALANCE_PROFILES } from '../balance/races';
-import type { RaceDisplayProfile } from '../balance/schema';
+import type { RaceBalanceProfile, RaceDisplayProfile } from '../balance/schema';
 
 export type RaceConfig = RaceDisplayProfile;
 
@@ -16,4 +16,8 @@ export const RACES: Record<Race, RaceConfig> = {
 
 export function ownerRace(races: [Race, Race], owner: 0 | 1): RaceConfig {
   return RACES[races[owner]];
+}
+
+export function ownerRaceProfile(races: [Race, Race], owner: 0 | 1): RaceBalanceProfile {
+  return RACE_BALANCE_PROFILES[races[owner]];
 }

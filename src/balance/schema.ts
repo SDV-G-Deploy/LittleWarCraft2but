@@ -53,12 +53,26 @@ export interface RaceDisplayProfile extends RaceIdentityUnitMap {
   tagline: string;
   description: string;
   accentColor: string;
+  lumberMillLabel: string;
+}
+
+export interface UpgradeDefinition {
+  id: 'meleeAttack' | 'armor' | 'buildingHp';
+  label: string;
+  perLevel: number;
+  maxLevel: number;
+  cost: CostProfile;
 }
 
 export interface RaceBalanceProfile {
   race: Race;
   display: RaceDisplayProfile;
   entityOverrides: Partial<Record<EntityKind, EntityStatOverride>>;
+  upgrades: {
+    meleeAttack: UpgradeDefinition;
+    armor: UpgradeDefinition;
+    buildingHp: UpgradeDefinition;
+  };
   identityNotes?: string[];
 }
 

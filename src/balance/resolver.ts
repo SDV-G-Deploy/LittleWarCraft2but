@@ -89,9 +89,17 @@ export function applyResolvedStatsToEntity(entity: Entity, stats: ResolvedEntity
   entity.tileH = stats.tileH;
   entity.sightRadius = stats.sight;
   const ownerUpgrades = state && usesRaceProfile(entity.owner) ? state.upgrades[entity.owner] : null;
-  const buildingHpBonus = ownerUpgrades?.buildingHp1 && stats.speed === 0 && entity.kind !== 'goldmine' && entity.kind !== 'barrier' ? 1.15 : 1;
+  const race = state && usesRaceProfile(entity.owner) ? state.races[entity.owner] : null;
+  const buildingHpPct = race === 'human'
+    ? (ownerUpgrades?.buildingHpLevel ?? 0) * 20
+    : race === 'orc'
+      ? (ownerUpgrades?.buildingHpLevel ?? 0) * 10
+      : 0;
+  const armorPerLevel = race === 'human' ? 2 : race === 'orc' ? 1 : 0;
+  const isMilitary = entity.kind === 'footman' || entity.kind === 'archer' || entity.kind === 'knight' || entity.kind === 'grunt' || entity.kind === 'troll' || entity.kind === 'ogreFighter';
+  const buildingHpBonus = stats.speed === 0 && entity.kind !== 'goldmine' && entity.kind !== 'barrier' ? 1 + (buildingHpPct / 100) : 1;
   entity.statHpMax = Math.round(stats.hp * buildingHpBonus);
-  entity.statArmor = stats.armor + ((ownerUpgrades?.armor1 && (entity.kind === 'footman' || entity.kind === 'archer' || entity.kind === 'knight' || entity.kind === 'grunt' || entity.kind === 'troll' || entity.kind === 'ogreFighter')) ? 1 : 0);
+  entity.statArmor = stats.armor + (isMilitary ? (ownerUpgrades?.armorLevel ?? 0) * armorPerLevel : 0);
 }
 
 export function getResolvedHpMax(entity: Entity): number {

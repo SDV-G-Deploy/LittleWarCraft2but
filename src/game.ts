@@ -529,7 +529,7 @@ export function startGame(
       placementMode = { building: action.slice(6) as EntityKind };
 
     } else if (action.startsWith('upgrade:')) {
-      const upgrade = action.slice(8) as 'meleeAttack1' | 'armor1' | 'buildingHp1';
+      const upgrade = action.slice(8) as 'meleeAttack' | 'armor' | 'buildingHp';
       for (const id of selectedIds) {
         const building = state.entities.find(e => e.id === id && e.kind === 'lumbermill' && e.owner === myOwner);
         if (building) { emit({ k: 'upgrade', buildingId: building.id, upgrade }); break; }

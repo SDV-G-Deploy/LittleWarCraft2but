@@ -62,10 +62,11 @@ export function issueGatherCommand(state: GameState, entity: Entity, targetId: n
   (entity as EntityWithCache)._gatherPath = undefined;
 }
 
-function nearestTownHall(state: GameState, owner: 0 | 1, px: number, py: number): Entity | null {
+function nearestDropoff(state: GameState, owner: 0 | 1, px: number, py: number, resourceType: 'gold' | 'wood'): Entity | null {
   let best: Entity | null = null; let bestD = Infinity;
   for (const e of state.entities) {
-    if (e.kind !== 'townhall' || e.owner !== owner) continue;
+    const valid = e.owner === owner && (e.kind === 'townhall' || (resourceType === 'wood' && e.kind === 'lumbermill'));
+    if (!valid) continue;
     const d = Math.hypot(e.pos.x - px, e.pos.y - py);
     if (d < bestD) { bestD = d; best = e; }
   }
@@ -269,15 +270,15 @@ export function processGather(state: GameState, entity: Entity): void {
       break;
     }
     case 'returning': {
-      const th = nearestTownHall(state, entity.owner as 0 | 1, entity.pos.x, entity.pos.y);
-      if (!th) {
+      const dropoff = nearestDropoff(state, entity.owner as 0 | 1, entity.pos.x, entity.pos.y, cmd.resourceType);
+      if (!dropoff) {
         clearGatherState();
         entity.cmd = null;
         return;
       }
       if (ec._gatherPath === undefined) {
-        const dropX = th.pos.x + Math.floor(th.tileW / 2);
-        const dropY = th.pos.y + th.tileH;
+        const dropX = dropoff.pos.x + Math.floor(dropoff.tileW / 2);
+        const dropY = dropoff.pos.y + dropoff.tileH;
         const raw = findPath(state, entity.pos.x, entity.pos.y, dropX, dropY);
         ec._gatherPath = raw ?? [];
       }

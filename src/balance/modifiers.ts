@@ -93,9 +93,13 @@ export const ATTACK_MODIFIER_RULES: AttackModifierRule[] = [
     id: 'lumbermill_melee_attack_1',
     description: 'Lumbermill upgrade grants +1 damage to melee military units.',
     apply: ({ state, attacker }) => (
-      isMeleeMilitary(attacker) &&
-      state.upgrades[attacker.owner as 0 | 1]?.meleeAttack1
-        ? 1
+      isMeleeMilitary(attacker)
+        ? (() => {
+            const owner = attacker.owner as 0 | 1;
+            const race = state.races[owner];
+            const perLevel = race === 'human' ? 1 : race === 'orc' ? 2 : 0;
+            return (state.upgrades[owner]?.meleeAttackLevel ?? 0) * perLevel;
+          })()
         : 0
     ),
   },

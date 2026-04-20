@@ -4,9 +4,10 @@
  * Each one maps 1-to-1 with a game action; peer applies them as owner=peerOwner.
  */
 
-import type { EntityKind, GameState, OpeningPlan } from '../types';
+import type { EntityKind, GameState, OpeningPlan, Race } from '../types';
 import { SIM_HZ, isUnitKind, isWorkerKind, areHostile } from '../types';
 import { getResolvedCost } from '../balance/resolver';
+import { RACE_BALANCE_PROFILES } from '../balance/races';
 import { issueAttackCommand } from '../sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, issueResumeBuildCommand, refundCancelledTrainCommand } from '../sim/economy';
 import { issueMoveCommand } from '../sim/commands';
@@ -25,7 +26,11 @@ export type NetCmd =
   | { k: 'rally';   buildingId: number; tx: number; ty: number; plan?: OpeningPlan }
   | { k: 'demolish';buildingId: number }
   | { k: 'resume';  workerId: number; siteId: number }
-  | { k: 'upgrade'; buildingId: number; upgrade: 'meleeAttack1' | 'armor1' | 'buildingHp1' };
+  | { k: 'upgrade'; buildingId: number; upgrade: 'meleeAttack' | 'armor' | 'buildingHp' };
+
+function getBuildingHpMultiplier(race: Race, level: number): number {
+  return race === 'human' ? 1 + (level * 20) / 100 : 1 + (level * 10) / 100;
+}
 
 export interface TickPacket {
   tick: number;
@@ -206,31 +211,44 @@ export function applyNetCmds(
         const b = getEntity(state, cmd.buildingId);
         if (!b || b.owner !== owner || b.kind !== 'lumbermill') break;
         const upgrades = state.upgrades[owner];
-        if (upgrades[cmd.upgrade]) break;
-        const costs = {
-          meleeAttack1: { gold: 120, wood: 80 },
-          armor1: { gold: 120, wood: 80 },
-          buildingHp1: { gold: 90, wood: 120 },
-        } as const;
-        const cost = costs[cmd.upgrade];
+        const race = state.races[owner];
+        const defs = RACE_BALANCE_PROFILES[race].upgrades;
+        const config = cmd.upgrade === 'meleeAttack' ? defs.meleeAttack : cmd.upgrade === 'armor' ? defs.armor : defs.buildingHp;
+        const levelKey = cmd.upgrade === 'meleeAttack' ? 'meleeAttackLevel' : cmd.upgrade === 'armor' ? 'armorLevel' : 'buildingHpLevel';
+        const currentLevel = upgrades[levelKey];
+        if (currentLevel >= config.maxLevel) break;
+        const cost = config.cost;
         if (state.gold[owner] < cost.gold || state.wood[owner] < cost.wood) break;
         state.gold[owner] -= cost.gold;
         state.wood[owner] -= cost.wood;
-        upgrades[cmd.upgrade] = true;
-        if (cmd.upgrade === 'buildingHp1') {
+        upgrades[levelKey] = currentLevel + 1;
+        if (cmd.upgrade === 'buildingHp') {
+          const prevMult = getBuildingHpMultiplier(race, currentLevel);
+          const nextMult = getBuildingHpMultiplier(race, currentLevel + 1);
           for (const e of state.entities) {
             if (e.owner !== owner || e.kind === 'goldmine' || isUnitKind(e.kind)) continue;
-            const nextMax = Math.round(e.hpMax * 1.15);
+            const baseMax = Math.round(e.hpMax / prevMult);
+            const nextMax = Math.round(baseMax * nextMult);
             const hpRatio = e.hpMax > 0 ? e.hp / e.hpMax : 1;
             e.hpMax = nextMax;
             e.hp = Math.round(nextMax * hpRatio);
             e.statHpMax = nextMax;
           }
         }
-        if (cmd.upgrade === 'armor1') {
+        if (cmd.upgrade === 'armor') {
           for (const e of state.entities) {
             if (e.owner !== owner || !isUnitKind(e.kind)) continue;
-            e.statArmor = (e.statArmor ?? 0) + 1;
+            const isMilitary = e.kind === 'footman' || e.kind === 'archer' || e.kind === 'knight' || e.kind === 'grunt' || e.kind === 'troll' || e.kind === 'ogreFighter';
+            if (!isMilitary) continue;
+            const baseArmor = e.kind === 'footman' ? 4
+              : e.kind === 'archer' ? 0
+              : e.kind === 'knight' ? 6
+              : e.kind === 'grunt' ? 4
+              : e.kind === 'troll' ? 0
+              : e.kind === 'ogreFighter' ? 4
+              : 0;
+            const perLevel = race === 'human' ? 2 : 1;
+            e.statArmor = baseArmor + upgrades.armorLevel * perLevel;
           }
         }
         break;

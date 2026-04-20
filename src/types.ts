@@ -9,7 +9,7 @@ export const CORPSE_LIFE_TICKS  = SIM_HZ * 3;   // 3 seconds
 export const MINE_GOLD_INITIAL  = 1500;
 export const TREE_WOOD_INITIAL  = 100;
 export const GATHER_AMOUNT      = 10;            // gold/wood per trip
-export const GATHER_TICKS       = Math.round(SIM_HZ * 1.8); // 1.8s at resource
+export const GATHER_TICKS       = Math.round(SIM_HZ * 1.5); // 1.5s at resource
 
 // ─── Map ──────────────────────────────────────────────────────────────────────
 
@@ -209,7 +209,7 @@ export interface ProjectileVisualEvent {
 }
 
 export interface PlayerUpgradeState {
-  meleeAttack1: boolean;
-  armor1: boolean;
-  buildingHp1: boolean;
+  meleeAttackLevel: number;
+  armorLevel: number;
+  buildingHpLevel: number;
 }

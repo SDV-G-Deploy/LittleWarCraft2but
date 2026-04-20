@@ -26,8 +26,8 @@ export function createWorld(mapData: MapData, races: [Race, Race]): GameState {
     popCap:   [4, 4],
     races,
     upgrades: [
-      { meleeAttack1: false, armor1: false, buildingHp1: false },
-      { meleeAttack1: false, armor1: false, buildingHp1: false },
+      { meleeAttackLevel: 0, armorLevel: 0, buildingHpLevel: 0 },
+      { meleeAttackLevel: 0, armorLevel: 0, buildingHpLevel: 0 },
     ],
     mapName: mapData.name,
     mapDescription: mapData.description,
