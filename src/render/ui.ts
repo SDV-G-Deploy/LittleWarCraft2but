@@ -21,6 +21,46 @@ const MAX_BTN_COLS = 6;
 const OPENING_PLAN_LOCK_TICKS = getOpeningPlanLockTicks();
 const PRODUCTION_SLOTS = 5;
 
+function drawHudChip(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, title: string, value: string, accent: string, icon: 'gold' | 'wood' | 'supply'): void {
+  ctx.fillStyle = 'rgba(14,18,22,0.90)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+
+  const ix = x + 11;
+  const iy = y + 11;
+  if (icon === 'gold') {
+    ctx.fillStyle = '#7a6208';
+    ctx.beginPath();
+    ctx.arc(ix + 8, iy + 8, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffd85a';
+    ctx.beginPath();
+    ctx.arc(ix + 6, iy + 6, 5, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (icon === 'wood') {
+    ctx.fillStyle = '#6a3c14';
+    ctx.fillRect(ix + 2, iy + 1, 10, 14);
+    ctx.fillStyle = '#9a5a28';
+    ctx.fillRect(ix, iy + 3, 10, 14);
+    ctx.fillStyle = '#c58a52';
+    ctx.fillRect(ix + 3, iy + 5, 2, 10);
+    ctx.fillRect(ix + 7, iy + 5, 2, 10);
+  } else {
+    ctx.fillStyle = '#335533';
+    ctx.fillRect(ix, iy + 5, 16, 10);
+    ctx.fillStyle = '#88cc66';
+    ctx.fillRect(ix + 2, iy + 7, 12, 6);
+  }
+
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = 'bold 10px monospace';
+  ctx.fillText(title, x + 34, y + 12);
+  ctx.fillStyle = accent;
+  ctx.font = 'bold 19px monospace';
+  ctx.fillText(value, x + 34, y + 31);
+}
+
 function drawTopHud(ctx: CanvasRenderingContext2D, state: GameState, viewW: number, myOwner: 0 | 1): void {
   const gold = state.gold[myOwner];
   const wood = state.wood[myOwner];
@@ -29,37 +69,18 @@ function drawTopHud(ctx: CanvasRenderingContext2D, state: GameState, viewW: numb
   const popFull = pop >= popCap;
   const popNearFull = !popFull && popCap > 0 && popCap - pop <= 1;
 
-  const boxY = 8;
-  const boxH = 44;
-  const leftW = 268;
-  const rightW = 126;
-
-  ctx.fillStyle = 'rgba(14,18,22,0.86)';
-  ctx.fillRect(8, boxY, leftW, boxH);
-  ctx.fillRect(284, boxY, rightW, boxH);
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-  ctx.strokeRect(8.5, boxY + 0.5, leftW - 1, boxH - 1);
-  ctx.strokeRect(284.5, boxY + 0.5, rightW - 1, boxH - 1);
-
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.font = 'bold 11px monospace';
-  ctx.fillText('RESOURCES', 18, boxY + 13);
-  ctx.fillText('SUPPLY', 296, boxY + 13);
-
-  ctx.fillStyle = '#ffe97a';
-  ctx.font = 'bold 21px monospace';
-  ctx.fillText(`${gold}G`, 18, boxY + 34);
-  ctx.fillStyle = '#8fdc6d';
-  ctx.fillText(`${wood}W`, 142, boxY + 34);
-
-  ctx.fillStyle = popFull ? '#ff6666' : popNearFull ? '#ffbb66' : '#88ff88';
-  ctx.font = 'bold 20px monospace';
-  ctx.fillText(`${pop}/${popCap}`, 296, boxY + 34);
+  drawHudChip(ctx, 8, 8, 118, 40, 'GOLD', `${gold}`, '#ffe97a', 'gold');
+  drawHudChip(ctx, 132, 8, 118, 40, 'WOOD', `${wood}`, '#8fdc6d', 'wood');
+  drawHudChip(ctx, 256, 8, 154, 40, 'SUPPLY', `${pop}/${popCap}`, popFull ? '#ff6666' : popNearFull ? '#ffbb66' : '#88ff88', 'supply');
 
   if (popFull || popNearFull) {
-    ctx.fillStyle = popFull ? '#ff8a8a' : '#ffd18a';
-    ctx.font = 'bold 10px monospace';
-    ctx.fillText(popFull ? t('food_full') : t('food_almost_full'), 346, boxY + 34);
+    ctx.fillStyle = popFull ? 'rgba(120,26,26,0.92)' : 'rgba(110,72,20,0.92)';
+    ctx.fillRect(416, 8, 116, 40);
+    ctx.strokeStyle = popFull ? 'rgba(255,120,120,0.5)' : 'rgba(255,210,120,0.4)';
+    ctx.strokeRect(416.5, 8.5, 115, 39);
+    ctx.fillStyle = popFull ? '#ff9c9c' : '#ffd18a';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText(popFull ? t('food_full') : t('food_almost_full'), 428, 32);
   }
 }
 
@@ -358,13 +379,23 @@ function drawPortrait(
   const px = 8; const py = panelY + 8;
   const pw = PORTRAIT_W - 16; const ph = PANEL_H - 16;
   const color = isNeutralOwner(e.owner) ? '#4c4c4c' : ['#3a6aaa', '#aa3a3a'][e.owner];
+  ctx.fillStyle = 'rgba(10,10,10,0.55)';
+  ctx.fillRect(px - 2, py - 2, pw + 4, ph + 4);
   ctx.fillStyle = color;
   ctx.fillRect(px, py, pw, ph);
+  ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+  ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(px + 6, py + 6, pw - 12, 18);
 
   ctx.fillStyle = isNeutralOwner(e.owner) ? '#bcbcbc' : ['#6ab0f5', '#f5786a'][e.owner];
-  ctx.font = 'bold 22px monospace';
+  ctx.font = 'bold 26px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(e.kind[0].toUpperCase(), px + pw / 2, py + ph / 2 + 8);
+  ctx.fillText(e.kind[0].toUpperCase(), px + pw / 2, py + ph / 2 + 10);
+  ctx.font = 'bold 10px monospace';
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.fillText(isNeutralOwner(e.owner) ? 'NEUTRAL' : e.owner === 0 ? 'PLAYER' : 'ENEMY', px + pw / 2, py + 19);
   ctx.textAlign = 'left';
 }
 
@@ -429,6 +460,28 @@ function formatQueueLabel(kind: EntityKind, owner: 0 | 1, state: GameState): str
     : kind;
 }
 
+function drawSectionCard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, title: string, tint = 'rgba(255,255,255,0.10)'): void {
+  ctx.fillStyle = tint;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = 'bold 10px monospace';
+  ctx.fillText(title, x + 8, y + 11);
+}
+
+function drawBadge(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, bg: string, fg = '#ffffff'): number {
+  const w = Math.max(54, text.length * 7 + 12);
+  ctx.fillStyle = bg;
+  ctx.fillRect(x, y, w, 16);
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 15);
+  ctx.fillStyle = fg;
+  ctx.font = 'bold 10px monospace';
+  ctx.fillText(text, x + 6, y + 11);
+  return w;
+}
+
 function drawProductionPanel(
   ctx: CanvasRenderingContext2D,
   e: Entity,
@@ -445,14 +498,10 @@ function drawProductionPanel(
   const queueStartX = blockX + 195;
   const slotY = blockY + 17;
 
-  ctx.fillStyle = 'rgba(110,160,255,0.12)';
-  ctx.fillRect(blockX, blockY, blockW, blockH);
-  ctx.strokeStyle = 'rgba(120,180,255,0.42)';
-  ctx.strokeRect(blockX + 0.5, blockY + 0.5, blockW - 1, blockH - 1);
+  drawSectionCard(ctx, blockX, blockY, blockW, blockH, t('production'), 'rgba(110,160,255,0.12)');
 
   ctx.fillStyle = '#9fd0ff';
   ctx.font = 'bold 11px monospace';
-  ctx.fillText(t('production'), innerX, blockY + 10);
 
   if (e.cmd?.type === 'train') {
     const trainBuildTicks = getResolvedBuildTicks(e.cmd.unit, usesRaceProfile(e.owner) ? state.races[e.owner] : null);
@@ -542,10 +591,18 @@ function drawEntityInfo(
   const LINE = 15;
   let y = panelY + 18;
 
+  drawSectionCard(ctx, x - 4, panelY + 10, 312, PANEL_H - 20, 'SELECTED', 'rgba(255,255,255,0.06)');
+
   // ── Name ───────────────────────────────────────────────────────────────────
   ctx.fillStyle = '#eee';
   ctx.font = 'bold 15px monospace';
   ctx.fillText(displayName.toUpperCase(), x, y); y += LINE + 1;
+
+  let badgeX = x + 170;
+  if (!e.cmd && stats && stats.speed > 0) badgeX += drawBadge(ctx, badgeX, panelY + 16, 'IDLE', 'rgba(70,70,70,0.95)', '#ededed') + 6;
+  if (typeof e.underAttackTick === 'number' && state.tick - e.underAttackTick <= SIM_HZ * 2) badgeX += drawBadge(ctx, badgeX, panelY + 16, 'UNDER ATTACK', 'rgba(120,28,28,0.95)', '#ffcccc') + 6;
+  if (e.cmd?.type === 'gather' && e.cmd.phase === 'returning' && e.cmd.resourceType === 'wood') badgeX += drawBadge(ctx, badgeX, panelY + 16, 'RETURNING WOOD', 'rgba(46,86,34,0.95)', '#d6ffd0') + 6;
+  if (e.cmd?.type === 'gather' && e.cmd.phase === 'gathering' && e.cmd.resourceType === 'wood') badgeX += drawBadge(ctx, badgeX, panelY + 16, 'CHOPPING', 'rgba(66,52,20,0.95)', '#ffe0a8') + 6;
 
   if (isProductionBuilding) {
     y = drawProductionPanel(ctx, e, state, x, y);
@@ -999,13 +1056,17 @@ function drawButton(
   pulse = 0,
 ): void {
   if (danger) {
-    ctx.fillStyle = enabled ? '#4a1a1a' : '#2a2a2a';
+    ctx.fillStyle = enabled ? '#552020' : '#2a2a2a';
     ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = enabled ? '#cc3333' : '#555';
+    ctx.fillStyle = enabled ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)';
+    ctx.fillRect(x + 2, y + 2, w - 4, 10);
+    ctx.strokeStyle = enabled ? '#d44a4a' : '#555';
   } else {
-    ctx.fillStyle = enabled ? '#2a4a2a' : '#2a2a2a';
+    ctx.fillStyle = enabled ? '#244628' : '#2a2a2a';
     ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = enabled ? '#44aa44' : '#555';
+    ctx.fillStyle = enabled ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)';
+    ctx.fillRect(x + 2, y + 2, w - 4, 10);
+    ctx.strokeStyle = enabled ? '#56bb60' : '#555';
   }
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
@@ -1016,9 +1077,9 @@ function drawButton(
   }
 
   ctx.fillStyle = enabled
-    ? (danger ? '#ffaaaa' : '#ccffcc')
+    ? (danger ? '#ffd0d0' : '#d8ffd8')
     : '#666';
-  ctx.font = '11px monospace';
+  ctx.font = 'bold 11px monospace';
   ctx.textAlign = 'center';
   const lines = label.split('\n');
   const lineH = 13;
