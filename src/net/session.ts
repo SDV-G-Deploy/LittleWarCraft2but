@@ -192,7 +192,15 @@ const VALID_RACES = new Set<Race>(['human', 'orc']);
 const VALID_MAP_IDS = new Set<MapId>([1, 2, 3, 4, 5, 6]);
 const VALID_BUILDINGS = new Set<EntityKind>(['townhall', 'barracks', 'lumbermill', 'farm', 'wall', 'tower']);
 const VALID_TRAIN_UNITS = new Set<EntityKind>(['worker', 'footman', 'archer', 'knight', 'peon', 'grunt', 'troll', 'ogreFighter']);
-const VALID_OPENING_PLANS = new Set(['eco', 'tempo', 'pressure']);
+const VALID_OPENING_PLANS = new Set(['eco', 'tempo', 'pressure'] as const);
+const VALID_UPGRADES = new Set<Extract<NetCmd, { k: 'upgrade' }>['upgrade']>([
+  'meleeAttack',
+  'armor',
+  'buildingHp',
+  'doctrineFieldTempo',
+  'doctrineLineHold',
+  'doctrineLongReach',
+]);
 
 const MAX_PACKET_BYTES = 16 * 1024;
 const MAX_CMDS_PER_PACKET = 128;
@@ -222,42 +230,29 @@ function isIdArray(v: unknown): v is number[] {
   return Array.isArray(v) && v.length <= 128 && v.every(isInt);
 }
 
+type NetCmdByKind<K extends NetCmd['k']> = Extract<NetCmd, { k: K }>;
+
+const NET_CMD_VALIDATORS: { [K in NetCmd['k']]: (cmd: NetCmdByKind<K>) => boolean } = {
+  move: (cmd) => isIdArray(cmd.ids) && isInt(cmd.tx) && isInt(cmd.ty) && typeof cmd.atk === 'boolean',
+  attack: (cmd) => isIdArray(cmd.ids) && isInt(cmd.targetId),
+  gather: (cmd) => isIdArray(cmd.ids) && isInt(cmd.mineId),
+  train: (cmd) => isInt(cmd.buildingId) && VALID_TRAIN_UNITS.has(cmd.unit),
+  build: (cmd) => isInt(cmd.workerId) && VALID_BUILDINGS.has(cmd.building) && isInt(cmd.tx) && isInt(cmd.ty),
+  stop: (cmd) => isIdArray(cmd.ids),
+  set_plan: (cmd) => isInt(cmd.buildingId) && VALID_OPENING_PLANS.has(cmd.plan),
+  rally: (cmd) => isInt(cmd.buildingId) && isInt(cmd.tx) && isInt(cmd.ty) && (cmd.plan === undefined || VALID_OPENING_PLANS.has(cmd.plan)),
+  demolish: (cmd) => isInt(cmd.buildingId),
+  resume: (cmd) => isInt(cmd.workerId) && isInt(cmd.siteId),
+  upgrade: (cmd) => isInt(cmd.buildingId) && VALID_UPGRADES.has(cmd.upgrade),
+};
+
 function isNetCmd(v: unknown): v is NetCmd {
   if (!v || typeof v !== 'object') return false;
-  const cmd = v as Partial<NetCmd> & { k?: unknown };
-  switch (cmd.k) {
-    case 'move':
-      return isIdArray(cmd.ids) && isInt(cmd.tx) && isInt(cmd.ty) && typeof cmd.atk === 'boolean';
-    case 'attack':
-      return isIdArray(cmd.ids) && isInt(cmd.targetId);
-    case 'gather':
-      return isIdArray(cmd.ids) && isInt(cmd.mineId);
-    case 'train':
-      return isInt(cmd.buildingId) && typeof cmd.unit === 'string' && VALID_TRAIN_UNITS.has(cmd.unit as EntityKind);
-    case 'build':
-      return isInt(cmd.workerId) && typeof cmd.building === 'string' && VALID_BUILDINGS.has(cmd.building as EntityKind) && isInt(cmd.tx) && isInt(cmd.ty);
-    case 'stop':
-      return isIdArray(cmd.ids);
-    case 'set_plan':
-      return isInt(cmd.buildingId) && typeof cmd.plan === 'string' && (cmd.plan === 'eco' || cmd.plan === 'tempo' || cmd.plan === 'pressure');
-    case 'rally':
-      return isInt(cmd.buildingId) && isInt(cmd.tx) && isInt(cmd.ty) && (cmd.plan === undefined || (typeof cmd.plan === 'string' && VALID_OPENING_PLANS.has(cmd.plan)));
-    case 'demolish':
-      return isInt(cmd.buildingId);
-    case 'resume':
-      return isInt(cmd.workerId) && isInt(cmd.siteId);
-    case 'upgrade':
-      return isInt(cmd.buildingId) && typeof cmd.upgrade === 'string' && (
-        cmd.upgrade === 'meleeAttack' ||
-        cmd.upgrade === 'armor' ||
-        cmd.upgrade === 'buildingHp' ||
-        cmd.upgrade === 'doctrineFieldTempo' ||
-        cmd.upgrade === 'doctrineLineHold' ||
-        cmd.upgrade === 'doctrineLongReach'
-      );
-    default:
-      return false;
-  }
+  const cmd = v as { k?: unknown };
+  if (typeof cmd.k !== 'string') return false;
+  if (!(cmd.k in NET_CMD_VALIDATORS)) return false;
+  const validator = NET_CMD_VALIDATORS[cmd.k as NetCmd['k']] as (cmd: NetCmd) => boolean;
+  return validator(v as NetCmd);
 }
 
 function parseTickPacket(v: unknown): TickPacket | null {
