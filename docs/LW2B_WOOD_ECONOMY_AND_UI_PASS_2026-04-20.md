@@ -145,3 +145,40 @@ This pass should be treated as:
 - not the final word on UI polish
 
 The most important outcome to validate now is whether the wood resource feels like a meaningful strategic layer instead of an early-game tax.
+
+---
+
+## Follow-up status on 2026-04-21
+
+A later direct review confirmed that this pass improved the wood layer, but did **not** finish the whole wood-related cleanup line.
+
+### Confirmed still-open follow-up items
+1. **worker depletion/reroute edge case still needs a narrow fix pass**
+   - symptom reported: after a tree tile is exhausted, workers can sometimes enter a bad fallback/reroute state
+   - target area for next fix: `src/sim/economy.ts`
+
+2. **AI wood harvesting policy still lags behind the newer wood-cost model**
+   - the economy model now expects wood-sensitive decisions
+   - AI still needs an explicit narrow wood-allocation policy update instead of relying on gold-first behavior
+   - target area for next fix: `src/sim/ai.ts`
+
+3. **UI text compaction still needs one narrow cleanup pass**
+   - the larger top HUD and friendlier selection panel landed well
+   - but some lower command-panel labels remain too dense in a few states
+
+### Confirmed completed related cleanup
+A separate narrow cleanup pass already landed and was pushed:
+- `882346e` — `Fix minimap draw order, UI slot collisions, and orc barracks identity`
+
+That pass fixed:
+- minimap draw duplication/conflict behavior
+- worker `Wall` vs `Stop` slot collision
+- orc barracks vs orc lumbermill visual/naming confusion
+
+### Recommended next step from here
+Proceed through a small `/new` pass that handles only:
+- worker wood reroute edge case
+- AI wood harvesting update
+- small UI text compaction
+
+Do not widen that pass into broader UI architecture or balance redesign.

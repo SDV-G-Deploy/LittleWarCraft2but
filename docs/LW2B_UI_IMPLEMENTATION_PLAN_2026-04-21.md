@@ -475,3 +475,48 @@ Pass 1 should be considered done when:
 - `game.ts` and render code share a single truth for dock/minimap geometry
 
 At that point, the project will have moved from prototype overlay behavior to real UI architecture.
+
+---
+
+## 10. Status update after narrow cleanup passes on 2026-04-21
+
+This document originally described the structural UI direction.
+A later narrow bug-fix pass already landed part of that intent without widening into a full UI rewrite.
+
+### Landed in cleanup Pass A
+Commit:
+- `882346e` — `Fix minimap draw order, UI slot collisions, and orc barracks identity`
+
+What this pass fixed:
+- minimap draw ownership was cleaned up so the minimap now sits cleanly in the intended bottom-right UI-pane geometry instead of presenting duplicate/conflicting layering
+- the worker command grid no longer lets `Stop` displace `Wall` in the moving-worker case
+- orc barracks no longer shares the same visual identity / naming confusion as the orc lumbermill
+
+### What Pass A intentionally did not do
+- no broad UI architecture rewrite
+- no panel-height redesign
+- no typography-system overhaul
+- no large command-grid refactor beyond the direct slot-collision fix
+- no sim/AI wood-behavior work
+
+### Updated recommended UI sequence from here
+For the next `/new` iterations, the UI side should proceed in this order:
+
+1. **small text-compaction cleanup only**
+   - reduce overcrowding in the most text-heavy command-button states
+   - keep this narrow and local to `src/render/ui.ts`
+
+2. **validation pass**
+   - verify worker, barracks, lumbermill, construction/demolish, and doctrine-button states in live play
+   - especially confirm Russian labels remain readable after compacting
+
+3. **only then decide whether a larger architecture pass is still needed**
+   - if the UI feels good after narrow fixes, do not force a wider rewrite just because it was once planned
+   - if pain remains, return to the larger dock/ownership/container goals described above
+
+### Practical interpretation
+This plan remains valid as the long-form UI direction.
+But immediate LW2B work should stay iterative:
+- ship narrow fixes first
+- validate them
+- widen scope only if real UX pain remains after those fixes
