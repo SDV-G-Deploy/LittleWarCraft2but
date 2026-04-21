@@ -4,6 +4,7 @@ import { SIM_HZ, TILE_SIZE, MAP_H, MAP_W, getOpposingPlayer, isOwnedByOpposingPl
 import { STATS } from '../data/units';
 import { ownerRace, ownerRaceProfile } from '../data/races';
 import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedSupplyProvided, getResolvedTileSize, hasUpgradeGroup } from '../balance/resolver';
+import type { UpgradeGroup } from '../balance/schema';
 import { resolveAttackBonus } from '../balance/modifiers';
 import { getOpeningPlanLockTicks, getOpeningPlanPresentation } from '../balance/openings';
 import { DOCTRINE_COST } from '../balance/doctrines';
@@ -199,16 +200,52 @@ function getLumberMillUpgradeSummary(state: GameState, owner: 0 | 1): string[] {
   ];
 }
 
-function getUpgradeTargetHint(id: 'meleeAttack' | 'armor' | 'buildingHp', race: 'human' | 'orc'): string {
-  if (id === 'meleeAttack') return race === 'human' ? t('upgrade_targets_melee_human') : t('upgrade_targets_melee_orc');
-  if (id === 'armor') return race === 'human' ? t('upgrade_targets_armor_human') : t('upgrade_targets_armor_orc');
-  return t('upgrade_targets_buildings');
+function getUpgradeableKindsForGroups(state: GameState, owner: 0 | 1, groups: readonly UpgradeGroup[]): EntityKind[] {
+  const race = state.races[owner];
+  return (Object.keys(STATS) as EntityKind[]).filter(kind => groups.every(group => hasUpgradeGroup(kind, race, group)));
 }
 
-function compactUpgradeTargetHint(id: 'meleeAttack' | 'armor' | 'buildingHp', race: 'human' | 'orc'): string {
-  if (id === 'meleeAttack') return race === 'human' ? 'Футм, Рыц' : 'Грунт, Огр';
-  if (id === 'armor') return race === 'human' ? 'Футм, Лучн, Рыц' : 'Грунт, Трол, Огр';
-  return t('upgrade_targets_buildings');
+function getEntityKindLabel(kind: EntityKind, race: 'human' | 'orc'): string {
+  const display = ownerRaceProfile([race, race], 0).display;
+  switch (kind) {
+    case 'footman': return display.soldierLabel;
+    case 'archer': return display.rangedLabel;
+    case 'knight': return display.heavyLabel;
+    case 'grunt': return display.soldierLabel;
+    case 'troll': return display.rangedLabel;
+    case 'ogreFighter': return display.heavyLabel;
+    case 'townhall': return display.hallLabel;
+    case 'barracks': return display.barrLabel;
+    case 'lumbermill': return display.lumberMillLabel;
+    case 'farm': return display.farmLabel;
+    case 'tower': return display.towerLabel;
+    case 'wall': return t('wall');
+    default: return kind;
+  }
+}
+
+function compactLabel(label: string): string {
+  const lang = getLanguage();
+  if (lang !== 'ru') return label;
+  return label
+    .replace('Футмен', 'Футм')
+    .replace('Лучник', 'Лучн')
+    .replace('Рыцарь', 'Рыц')
+    .replace('Тролль', 'Трол');
+}
+
+function getUpgradeTargetHint(state: GameState, owner: 0 | 1, groups: readonly UpgradeGroup[]): string {
+  const race = state.races[owner];
+  const kinds = getUpgradeableKindsForGroups(state, owner, groups);
+  if (groups.includes('building')) return t('upgrade_targets_buildings');
+  return kinds.map(kind => getEntityKindLabel(kind, race)).join(', ');
+}
+
+function compactUpgradeTargetHint(state: GameState, owner: 0 | 1, groups: readonly UpgradeGroup[]): string {
+  const race = state.races[owner];
+  const kinds = getUpgradeableKindsForGroups(state, owner, groups);
+  if (groups.includes('building')) return t('upgrade_targets_buildings');
+  return kinds.map(kind => compactLabel(getEntityKindLabel(kind, race))).join(', ');
 }
 
 export interface UiButton {
@@ -1150,9 +1187,9 @@ function collectButtons(
     const melee = profile.upgrades.meleeAttack;
     const armor = profile.upgrades.armor;
     const buildingHp = profile.upgrades.buildingHp;
-    addButton(`${t('upgrade_attack')} +${melee.perLevel} ${t('upgrade_level')} ${upgrades.meleeAttackLevel}/${melee.maxLevel}\n${compactUpgradeTargetHint('meleeAttack', race)} ${melee.cost.wood}w`, 'upgrade:meleeAttack', upgrades.meleeAttackLevel >= melee.maxLevel || state.gold[myOwner] < melee.cost.gold || state.wood[myOwner] < melee.cost.wood, false, 0);
-    addButton(`${t('upgrade_defense')} +${armor.perLevel} ${t('upgrade_level')} ${upgrades.armorLevel}/${armor.maxLevel}\n${compactUpgradeTargetHint('armor', race)} ${armor.cost.wood}w`, 'upgrade:armor', upgrades.armorLevel >= armor.maxLevel || state.gold[myOwner] < armor.cost.gold || state.wood[myOwner] < armor.cost.wood, false, 1);
-    addButton(`${t('upgrade_building_hp')} +${buildingHp.perLevel}% ${t('upgrade_level')} ${upgrades.buildingHpLevel}/${buildingHp.maxLevel}\n${compactUpgradeTargetHint('buildingHp', race)} ${buildingHp.cost.wood}w`, 'upgrade:buildingHp', upgrades.buildingHpLevel >= buildingHp.maxLevel || state.gold[myOwner] < buildingHp.cost.gold || state.wood[myOwner] < buildingHp.cost.wood, false, 2);
+    addButton(`${t('upgrade_attack')} +${melee.perLevel} ${t('upgrade_level')} ${upgrades.meleeAttackLevel}/${melee.maxLevel}\n${compactUpgradeTargetHint(state, myOwner, melee.appliesTo)} ${melee.cost.wood}w`, 'upgrade:meleeAttack', upgrades.meleeAttackLevel >= melee.maxLevel || state.gold[myOwner] < melee.cost.gold || state.wood[myOwner] < melee.cost.wood, false, 0);
+    addButton(`${t('upgrade_defense')} +${armor.perLevel} ${t('upgrade_level')} ${upgrades.armorLevel}/${armor.maxLevel}\n${compactUpgradeTargetHint(state, myOwner, armor.appliesTo)} ${armor.cost.wood}w`, 'upgrade:armor', upgrades.armorLevel >= armor.maxLevel || state.gold[myOwner] < armor.cost.gold || state.wood[myOwner] < armor.cost.wood, false, 1);
+    addButton(`${t('upgrade_building_hp')} +${buildingHp.perLevel}% ${t('upgrade_level')} ${upgrades.buildingHpLevel}/${buildingHp.maxLevel}\n${compactUpgradeTargetHint(state, myOwner, buildingHp.appliesTo)} ${buildingHp.cost.wood}w`, 'upgrade:buildingHp', upgrades.buildingHpLevel >= buildingHp.maxLevel || state.gold[myOwner] < buildingHp.cost.gold || state.wood[myOwner] < buildingHp.cost.wood, false, 2);
     const doctrineLocked = upgrades.doctrine !== null;
     const doctrineUnaffordable = state.gold[myOwner] < DOCTRINE_COST.gold || state.wood[myOwner] < DOCTRINE_COST.wood;
     const doctrineCost = `${DOCTRINE_COST.gold}g ${DOCTRINE_COST.wood}w`;
