@@ -4,7 +4,8 @@ import { ticksPerStep } from '../data/units';
 import type { Camera } from './camera';
 import { worldToScreen } from './camera';
 import { buildSpriteCache, type SpriteCache } from './sprites';
-import { t } from '../i18n';
+import type { Rect } from './ui-layout';
+import { MINI_SCALE, MINI_W, MINI_H, MINI_PAD } from './ui-layout';
 
 // ─── Sprite cache (built once on first render) ────────────────────────────────
 
@@ -95,13 +96,6 @@ const FOG_UNSEEN      = 'rgba(0,0,0,1.00)';
 const FOG_EXPLORED    = 'rgba(0,0,0,0.58)';
 const GRID_COLOR      = 'rgba(0,0,0,0.07)';
 
-// ─── Minimap constants (exported so game.ts can share them) ──────────────────
-
-export const MINI_SCALE = 2;                    // px per map tile
-export const MINI_W     = MAP_W * MINI_SCALE;   // 128
-export const MINI_H     = MAP_H * MINI_SCALE;   // 128
-export const MINI_PAD   = 8;                    // gap from canvas edges
-
 /** Terrain colours for the minimap — one fill per tile kind */
 const MINI_TILE_COLORS: Record<TileKind, string> = {
   grass:    '#3a6a2a',
@@ -172,7 +166,6 @@ export function render(
   drawCombatVisuals(ctx, state, cam, myOwner);
   drawRallyPoints(ctx, state, cam, selectedIds, myOwner);
   drawFog(ctx, state, cam, viewW, viewH);
-  drawHUD(ctx, state, myOwner);
 }
 
 // ─── Minimap ──────────────────────────────────────────────────────────────────
@@ -188,6 +181,7 @@ export function drawMinimap(
   viewW: number,
   viewH_game: number,
   myOwner: 0 | 1 = 0,
+  minimapRect?: Rect,
 ): void {
   const nextSignature = buildMinimapTerrainSignature(state);
   if (!minimapTerrain || minimapTerrainSignature !== nextSignature) {
@@ -195,17 +189,8 @@ export function drawMinimap(
     minimapTerrainSignature = nextSignature;
   }
 
-  const MX = viewW      - MINI_W - MINI_PAD;
-  const MY = viewH_game - MINI_H - MINI_PAD;
-
-  // ── Border frame ─────────────────────────────────────────────────────────
-  ctx.fillStyle   = '#111';
-  ctx.fillRect(MX - 3, MY - 3, MINI_W + 6, MINI_H + 6);
-  ctx.strokeStyle = '#666';
-  ctx.lineWidth   = 1;
-  ctx.strokeRect(MX - 2.5, MY - 2.5, MINI_W + 5, MINI_H + 5);
-  ctx.strokeStyle = '#333';
-  ctx.strokeRect(MX - 1.5, MY - 1.5, MINI_W + 3, MINI_H + 3);
+  const MX = minimapRect?.x ?? (viewW - MINI_W - MINI_PAD);
+  const MY = minimapRect?.y ?? (viewH_game - MINI_H - MINI_PAD);
 
   // ── Terrain layer ─────────────────────────────────────────────────────────
   ctx.imageSmoothingEnabled = false;
@@ -783,61 +768,4 @@ function drawFog(
       ctx.fillRect(sx, sy, TILE_SIZE, TILE_SIZE);
     }
   }
-}
-
-// ─── HUD ──────────────────────────────────────────────────────────────────────
-
-function drawHUD(ctx: CanvasRenderingContext2D, state: GameState, myOwner: 0 | 1 = 0): void {
-  const popFull = state.pop[myOwner] >= state.popCap[myOwner];
-  const openingWindowTicks = Math.max(0, state.contestedMineBonusUntilTick - state.tick);
-  // Backdrop
-  ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillRect(4, 4, 420, 36);
-  // Gold icon (small yellow diamond)
-  ctx.fillStyle = '#e8c828';
-  ctx.beginPath();
-  ctx.moveTo(14, 10); ctx.lineTo(19, 15); ctx.lineTo(14, 20); ctx.lineTo(9, 15);
-  ctx.closePath();
-  ctx.fill();
-  // Text
-  ctx.fillStyle = '#ffe97a';
-  ctx.font = 'bold 13px monospace';
-  ctx.fillText(`${state.gold[myOwner]}g`, 24, 20);
-  ctx.fillStyle = '#8fdc6d';
-  ctx.fillText(`${state.wood[myOwner]}w`, 24, 36);
-  // Pop icon (small person silhouette)
-  ctx.fillStyle = popFull ? '#ff5555' : '#55dd55';
-  ctx.beginPath();
-  ctx.arc(94, 11, 4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillRect(90, 15, 8, 8);
-  ctx.fillStyle = popFull ? '#ff8888' : '#88ff88';
-  ctx.fillText(`${state.pop[myOwner]} / ${state.popCap[myOwner]}`, 106, 20);
-  // Tick (small clock icon)
-  ctx.fillStyle = '#888880';
-  ctx.font = '11px monospace';
-  ctx.fillText(`⏱ ${state.tick}`, 200, 20);
-
-  // Map pressure hint
-  const myTownHall = state.entities.find(e => e.owner === myOwner && e.kind === 'townhall');
-  const enemyTownHall = state.entities.find(e => e.owner !== myOwner && e.kind === 'townhall');
-  const contestedMines = state.entities.filter(e => {
-    if (e.kind !== 'goldmine') return false;
-    if (!myTownHall || !enemyTownHall) return e.pos.x > 16 && e.pos.x < 48;
-    const myDist = Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y);
-    const enemyDist = Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y);
-    return e.pos.x > 16 && e.pos.x < 48 || Math.abs(myDist - enemyDist) <= 8;
-  }).length;
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.font = '10px monospace';
-  const mapLabel = state.mapName ?? t('map_label_fallback');
-  const pressureHint = contestedMines >= 2
-    ? t('pressure_hint_many')
-    : contestedMines > 0
-      ? t('pressure_hint_some')
-      : t('pressure_hint_none');
-  const openingHook = openingWindowTicks > 0
-    ? `  |  ${t('opening_hook', { seconds: Math.ceil(openingWindowTicks / 20) })}`
-    : '';
-  ctx.fillText(`${mapLabel}  |  ${pressureHint}${openingHook}`, 4, 34);
 }

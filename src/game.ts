@@ -8,8 +8,9 @@ import { issueGatherCommand, issueTrainCommand, issueBuildCommand, computePopCap
 import { updateFog } from './sim/fogofwar';
 import { createAI, tickAI, AIController } from './sim/ai';
 import { profiler } from './sim/profiler';
-import { render, drawMinimap, resetRenderCache, MINI_SCALE, MINI_W, MINI_H, MINI_PAD } from './render/renderer';
+import { render, drawMinimap, resetRenderCache } from './render/renderer';
 import { drawUi, drawGhostBuilding, UiButton } from './render/ui';
+import { UI_PANEL_HEIGHT, MINI_SCALE, getDockLayout } from './render/ui-layout';
 import { drawCommandMarkers, type CommandMarker } from './render/markers';
 import { createCamera, clampCamera, screenToTile, screenToWorld } from './render/camera';
 import { createKeyState } from './input/keyboard';
@@ -24,7 +25,7 @@ import { t } from './i18n';
 const CAM_SPEED   = 400;
 const EDGE_ZONE   = 20;
 const SELECT_DIST = TILE_SIZE * 0.6;
-const UI_HEIGHT   = 96; // must match render/ui.ts PANEL_H
+const UI_HEIGHT   = UI_PANEL_HEIGHT;
 const OPENING_PLAN_LOCK_TICKS = SIM_HZ * 10;
 const NET_DESYNC_CHECKSUM_INTERVAL_TICKS = SIM_HZ * 2;
 
@@ -330,17 +331,15 @@ export function startGame(
 
     // Minimap position
     const viewH_game = canvas.height - UI_HEIGHT;
-    const miniX = canvas.width - MINI_W - MINI_PAD;
-    const miniY = viewH_game   - MINI_H - MINI_PAD;
+    const minimapRect = getDockLayout(canvas.width, canvas.height).minimapRect;
 
     // Click events
     for (const click of mouse.clicks) {
       // ── Minimap click: scroll camera ───────────────────────────────────────
-      if (click.x >= miniX && click.x < miniX + MINI_W &&
-          click.y >= miniY && click.y < miniY + MINI_H &&
-          click.y < viewH_game) {
-        const tileX = (click.x - miniX) / MINI_SCALE;
-        const tileY = (click.y - miniY) / MINI_SCALE;
+      if (click.x >= minimapRect.x && click.x < minimapRect.x + minimapRect.w &&
+          click.y >= minimapRect.y && click.y < minimapRect.y + minimapRect.h) {
+        const tileX = (click.x - minimapRect.x) / MINI_SCALE;
+        const tileY = (click.y - minimapRect.y) / MINI_SCALE;
         cam.x = tileX * TILE_SIZE - canvas.width  / 2;
         cam.y = tileY * TILE_SIZE - viewH_game     / 2;
         clampCamera(cam, canvas.width, viewH_game);
@@ -727,7 +726,7 @@ export function startGame(
     }
 
     render(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, selectedIds, myOwner, renderAlpha);
-    drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, myOwner);
+    drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, myOwner, getDockLayout(canvas.width, viewH).minimapRect);
     if (placementMode) {
       const { tx, ty } = screenToTile(mouse.x, mouse.y, cam);
       drawGhostBuilding(ctx, state, cam, placementMode.building, tx, ty);

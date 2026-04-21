@@ -9,22 +9,79 @@ import { getOpeningPlanLockTicks, getOpeningPlanPresentation } from '../balance/
 import type { Camera } from './camera';
 import { isValidPlacement } from '../sim/economy';
 import { t, getLanguage } from '../i18n';
+import { UI_PANEL_HEIGHT, getDockLayout, type Rect } from './ui-layout';
 
 // ─── Layout constants ──────────────────────────────────────────────────────────
 
-const PANEL_H    = 132;
-const BTN_W      = 112;
-const BTN_H      = 40;
-const BTN_PAD    = 8;
+const PANEL_H    = UI_PANEL_HEIGHT;
 const PORTRAIT_W = 80;
-const MAX_BTN_COLS = 6;
+const CMD_GRID_COLS = 3;
+const CMD_GRID_ROWS = 2;
 const OPENING_PLAN_LOCK_TICKS = getOpeningPlanLockTicks();
 const PRODUCTION_SLOTS = 5;
 
+interface CommandButtonSpec {
+  slot: number;
+  label: string;
+  action: string;
+  disabled?: boolean;
+  danger?: boolean;
+}
+
+const UI_THEME = {
+  dock: {
+    bg: 'rgba(28,22,17,0.90)',
+    topLine: 'rgba(208,170,118,0.34)',
+    grain: 'rgba(255,240,220,0.04)',
+  },
+  pane: {
+    bg: 'rgba(46,35,26,0.82)',
+    stroke: 'rgba(190,153,108,0.44)',
+    title: 'rgba(245,225,191,0.72)',
+    titleShadow: 'rgba(0,0,0,0.4)',
+  },
+  card: {
+    bg: 'rgba(66,50,37,0.62)',
+    stroke: 'rgba(196,162,116,0.34)',
+    title: 'rgba(235,214,184,0.72)',
+  },
+  text: {
+    primary: '#f0e2c8',
+    secondary: 'rgba(230,220,200,0.72)',
+    tertiary: 'rgba(222,210,188,0.5)',
+  },
+  accent: {
+    gold: '#f2d382',
+    wood: '#9ecf82',
+    good: '#9ddf9f',
+    warn: '#f2be7d',
+    danger: '#e89b9b',
+    info: '#a8c7ea',
+  },
+  button: {
+    enabled: 'rgba(60,90,54,0.95)',
+    enabledStroke: 'rgba(130,188,116,0.9)',
+    enabledText: '#e2f5d8',
+    disabled: 'rgba(52,44,36,0.92)',
+    disabledStroke: 'rgba(152,130,106,0.45)',
+    disabledText: 'rgba(175,156,136,0.8)',
+    danger: 'rgba(104,56,52,0.95)',
+    dangerStroke: 'rgba(220,116,108,0.85)',
+    dangerText: '#ffd3cc',
+    sheen: 'rgba(255,248,232,0.07)',
+  },
+  minimap: {
+    frameOuter: 'rgba(12,10,8,0.7)',
+    frameInner: 'rgba(84,66,49,0.9)',
+    frameStroke: 'rgba(201,169,120,0.46)',
+    frameInset: 'rgba(26,19,14,0.8)',
+  },
+} as const;
+
 function drawHudChip(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, title: string, value: string, accent: string, icon: 'gold' | 'wood' | 'supply'): void {
-  ctx.fillStyle = 'rgba(14,18,22,0.90)';
+  ctx.fillStyle = 'rgba(50,38,28,0.92)';
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+  ctx.strokeStyle = UI_THEME.pane.stroke;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 
   const ix = x + 11;
@@ -53,7 +110,7 @@ function drawHudChip(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
     ctx.fillRect(ix + 2, iy + 7, 12, 6);
   }
 
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillStyle = UI_THEME.text.secondary;
   ctx.font = 'bold 10px monospace';
   ctx.fillText(title, x + 34, y + 12);
   ctx.fillStyle = accent;
@@ -82,11 +139,11 @@ function drawTopHud(ctx: CanvasRenderingContext2D, state: GameState, viewW: numb
   const startX = Math.max(topX, Math.floor((viewW - totalW) / 2));
 
   let x = startX;
-  drawHudChip(ctx, x, topY, baseChipW, chipH, 'GOLD', `${gold}`, '#ffe97a', 'gold');
+  drawHudChip(ctx, x, topY, baseChipW, chipH, 'GOLD', `${gold}`, UI_THEME.accent.gold, 'gold');
   x += baseChipW + gap;
-  drawHudChip(ctx, x, topY, baseChipW, chipH, 'WOOD', `${wood}`, '#8fdc6d', 'wood');
+  drawHudChip(ctx, x, topY, baseChipW, chipH, 'WOOD', `${wood}`, UI_THEME.accent.wood, 'wood');
   x += baseChipW + gap;
-  drawHudChip(ctx, x, topY, supplyChipW, chipH, 'SUPPLY', `${pop}/${popCap}`, popFull ? '#ff6666' : popNearFull ? '#ffbb66' : '#88ff88', 'supply');
+  drawHudChip(ctx, x, topY, supplyChipW, chipH, 'SUPPLY', `${pop}/${popCap}`, popFull ? UI_THEME.accent.danger : popNearFull ? UI_THEME.accent.warn : UI_THEME.accent.good, 'supply');
   x += supplyChipW + gap;
 
   if (showWarning) {
@@ -163,13 +220,16 @@ export function drawUi(
   onlineStatus?: { status: SessionStatus; statusMsg: string; stats: SessionStats } | null,
   openingPlanFeedback?: { plan: OpeningPlan; untilTick: number } | null,
 ): UiButton[] {
-  const panelY = viewH - PANEL_H;
+  const layout = getDockLayout(viewW, viewH);
+  const panelY = layout.dock.y;
   const buttons: UiButton[] = [];
 
   // Panel background
-  ctx.fillStyle = 'rgba(20,20,20,0.85)';
+  ctx.fillStyle = UI_THEME.dock.bg;
   ctx.fillRect(0, panelY, viewW, PANEL_H);
-  ctx.strokeStyle = '#555';
+  ctx.fillStyle = UI_THEME.dock.grain;
+  ctx.fillRect(0, panelY + 5, viewW, 2);
+  ctx.strokeStyle = UI_THEME.dock.topLine;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, panelY);
@@ -177,9 +237,14 @@ export function drawUi(
   ctx.stroke();
 
   drawTopHud(ctx, state, viewW, myOwner);
-  if (onlineStatus) drawOnlineStrip(ctx, viewW, panelY, onlineStatus);
+  if (onlineStatus) drawOnlineStrip(ctx, layout.centerPane, onlineStatus);
   drawOpeningChoiceOverlay(ctx, state, viewW, panelY, myOwner, buttons);
   drawOpeningChoiceConfirmation(ctx, state, viewW, myOwner, openingPlanFeedback);
+
+  drawPane(ctx, layout.leftPane, 'SELECTION');
+  drawPane(ctx, layout.centerPane, 'COMMAND');
+  drawPane(ctx, layout.rightPane, 'MINIMAP');
+  drawMinimapPaneFrame(ctx, layout.rightPane, layout.minimapRect);
 
   const sel = [...selectedIds]
     .map(id => state.entities.find(e => e.id === id))
@@ -192,9 +257,9 @@ export function drawUi(
 
   if (sel.length === 1) {
     const e = sel[0];
-    drawPortrait(ctx, e, panelY);
-    drawEntityInfo(ctx, e, state, panelY, PORTRAIT_W + BTN_PAD, myOwner);
-    collectButtons(ctx, e, state, panelY, viewW, buttons, myOwner);
+    drawPortrait(ctx, e, layout.leftPane);
+    drawEntityInfo(ctx, e, state, layout.leftPane, myOwner);
+    drawCommandPane(ctx, e, state, layout.centerPane, buttons, myOwner);
   } else {
     // Multiple — show small icons for each
     sel.slice(0, 10).forEach((e, i) => {
@@ -223,8 +288,7 @@ export function drawUi(
 
 function drawOnlineStrip(
   ctx: CanvasRenderingContext2D,
-  viewW: number,
-  panelY: number,
+  pane: Rect,
   onlineStatus: { status: SessionStatus; statusMsg: string; stats: SessionStats },
 ): void {
   const { status, stats } = onlineStatus;
@@ -241,24 +305,59 @@ function drawOnlineStrip(
     stats.waitingStallTicks > 0 ? '#ffe97a' :
     '#88ffcc';
 
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fillRect(viewW - 248, panelY + 6, 240, 32);
-  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-  ctx.strokeRect(viewW - 247.5, panelY + 6.5, 239, 31);
+  const x = pane.x + Math.max(8, pane.w - 248);
+  const y = pane.y + 6;
+
+  ctx.fillStyle = 'rgba(30,23,17,0.7)';
+  ctx.fillRect(x, y, 240, 32);
+  ctx.strokeStyle = UI_THEME.card.stroke;
+  ctx.strokeRect(x + 0.5, y + 0.5, 239, 31);
   ctx.fillStyle = color;
   ctx.font = '11px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText(label, viewW - 240, panelY + 16);
+  ctx.fillText(label, x + 8, y + 10);
 
-  ctx.fillStyle = 'rgba(255,255,255,0.62)';
+  ctx.fillStyle = UI_THEME.text.secondary;
   ctx.font = '10px monospace';
-  ctx.fillText(detail.slice(0, 30), viewW - 240, panelY + 27);
+  ctx.fillText(detail.slice(0, 30), x + 8, y + 21);
 
   const ageText = stats.lastPacketAgeMs === null ? t('no_packets_yet') : t('ms_ago', { ms: Math.round(stats.lastPacketAgeMs) });
-  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.fillStyle = UI_THEME.text.tertiary;
   ctx.font = '10px monospace';
   ctx.textAlign = 'right';
-  ctx.fillText(ageText, viewW - 16, panelY + 21);
+  ctx.fillText(ageText, x + 232, y + 15);
+  ctx.textAlign = 'left';
+}
+
+function drawPane(ctx: CanvasRenderingContext2D, rect: Rect, title: string): void {
+  ctx.fillStyle = UI_THEME.pane.bg;
+  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+  ctx.strokeStyle = UI_THEME.pane.stroke;
+  ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
+  ctx.fillStyle = UI_THEME.pane.titleShadow;
+  ctx.font = 'bold 10px monospace';
+  ctx.fillText(title, rect.x + 9, rect.y + 13);
+  ctx.fillStyle = UI_THEME.pane.title;
+  ctx.font = 'bold 10px monospace';
+  ctx.fillText(title, rect.x + 8, rect.y + 12);
+}
+
+function drawMinimapPaneFrame(ctx: CanvasRenderingContext2D, pane: Rect, minimapRect: Rect): void {
+  ctx.fillStyle = UI_THEME.minimap.frameOuter;
+  ctx.fillRect(pane.x + 8, pane.y + 18, pane.w - 16, pane.h - 26);
+  ctx.fillStyle = UI_THEME.minimap.frameInner;
+  ctx.fillRect(minimapRect.x - 4, minimapRect.y - 4, minimapRect.w + 8, minimapRect.h + 8);
+  ctx.strokeStyle = UI_THEME.minimap.frameStroke;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(minimapRect.x - 3.5, minimapRect.y - 3.5, minimapRect.w + 7, minimapRect.h + 7);
+  ctx.strokeStyle = UI_THEME.minimap.frameInset;
+  ctx.strokeRect(minimapRect.x - 1.5, minimapRect.y - 1.5, minimapRect.w + 3, minimapRect.h + 3);
+
+  const labelY = Math.min(pane.y + pane.h - 6, minimapRect.y + minimapRect.h + 12);
+  ctx.fillStyle = UI_THEME.text.secondary;
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('MAP', minimapRect.x + minimapRect.w / 2, labelY);
   ctx.textAlign = 'left';
 }
 
@@ -391,19 +490,19 @@ function drawEmptyPanel(
 function drawPortrait(
   ctx: CanvasRenderingContext2D,
   e: Entity,
-  panelY: number,
+  pane: Rect,
 ): void {
-  const px = 8; const py = panelY + 8;
+  const px = pane.x + 8; const py = pane.y + 8;
   const pw = PORTRAIT_W - 16; const ph = PANEL_H - 16;
-  const color = isNeutralOwner(e.owner) ? '#4c4c4c' : ['#3a6aaa', '#aa3a3a'][e.owner];
-  ctx.fillStyle = 'rgba(10,10,10,0.55)';
+  const color = isNeutralOwner(e.owner) ? '#5a5248' : ['#4f6e96', '#965b52'][e.owner];
+  ctx.fillStyle = 'rgba(20,16,12,0.7)';
   ctx.fillRect(px - 2, py - 2, pw + 4, ph + 4);
   ctx.fillStyle = color;
   ctx.fillRect(px, py, pw, ph);
-  ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+  ctx.strokeStyle = UI_THEME.card.stroke;
   ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
 
-  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillStyle = 'rgba(255,236,208,0.09)';
   ctx.fillRect(px + 6, py + 6, pw - 12, 18);
 
   ctx.fillStyle = isNeutralOwner(e.owner) ? '#bcbcbc' : ['#6ab0f5', '#f5786a'][e.owner];
@@ -477,12 +576,12 @@ function formatQueueLabel(kind: EntityKind, owner: 0 | 1, state: GameState): str
     : kind;
 }
 
-function drawSectionCard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, title: string, tint = 'rgba(255,255,255,0.10)'): void {
+function drawSectionCard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, title: string, tint: string = UI_THEME.card.bg): void {
   ctx.fillStyle = tint;
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.strokeStyle = UI_THEME.card.stroke;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillStyle = UI_THEME.card.title;
   ctx.font = 'bold 10px monospace';
   ctx.fillText(title, x + 8, y + 11);
 }
@@ -503,21 +602,20 @@ function drawProductionPanel(
   ctx: CanvasRenderingContext2D,
   e: Entity,
   state: GameState,
-  x: number,
-  y: number,
-): number {
-  if (!usesRaceProfile(e.owner)) return y;
-  const blockX = x;
-  const blockY = y - 2;
-  const blockW = 300;
-  const blockH = 44;
+  rect: Rect,
+): void {
+  if (!usesRaceProfile(e.owner)) return;
+  const blockX = rect.x;
+  const blockY = rect.y;
+  const blockW = rect.w;
+  const blockH = rect.h;
   const innerX = blockX + 8;
-  const queueStartX = blockX + 195;
+  const queueStartX = Math.max(blockX + Math.floor(blockW * 0.58), innerX + 120);
   const slotY = blockY + 17;
 
-  drawSectionCard(ctx, blockX, blockY, blockW, blockH, t('production'), 'rgba(110,160,255,0.12)');
+  drawSectionCard(ctx, blockX, blockY, blockW, blockH, t('production'), 'rgba(74,61,48,0.68)');
 
-  ctx.fillStyle = '#9fd0ff';
+  ctx.fillStyle = UI_THEME.accent.info;
   ctx.font = 'bold 11px monospace';
 
   if (e.cmd?.type === 'train') {
@@ -525,26 +623,26 @@ function drawProductionPanel(
     const pct = Math.max(0, Math.min(100, Math.round(100 * (1 - e.cmd.ticksLeft / trainBuildTicks))));
     const currentLabel = formatQueueLabel(e.cmd.unit, e.owner, state);
 
-    ctx.fillStyle = '#f3fbff';
+    ctx.fillStyle = UI_THEME.text.primary;
     ctx.font = 'bold 13px monospace';
     ctx.fillText(currentLabel.toUpperCase(), innerX, blockY + 24);
-    ctx.fillStyle = '#cfe7ff';
+    ctx.fillStyle = UI_THEME.text.secondary;
     ctx.font = 'bold 12px monospace';
     ctx.fillText(`${pct}%`, blockX + 160, blockY + 24);
 
-    drawProgressBar(ctx, innerX, blockY + 30, 170, '#52a7ff', pct);
+    drawProgressBar(ctx, innerX, blockY + 30, 170, UI_THEME.accent.info, pct);
 
     const visibleQueue = e.cmd.queue.slice(0, PRODUCTION_SLOTS);
     for (let i = 0; i < PRODUCTION_SLOTS; i++) {
       const sx = queueStartX + i * 19;
       const queued = visibleQueue[i];
-      ctx.fillStyle = queued ? 'rgba(112,164,255,0.30)' : 'rgba(255,255,255,0.08)';
+      ctx.fillStyle = queued ? 'rgba(124,146,93,0.35)' : 'rgba(255,255,255,0.08)';
       ctx.fillRect(sx, slotY, 15, 15);
-      ctx.strokeStyle = queued ? 'rgba(170,210,255,0.65)' : 'rgba(255,255,255,0.15)';
+      ctx.strokeStyle = queued ? 'rgba(214,192,149,0.68)' : 'rgba(255,255,255,0.15)';
       ctx.strokeRect(sx + 0.5, slotY + 0.5, 14, 14);
       if (queued) {
         const label = formatQueueLabel(queued, e.owner, state);
-        ctx.fillStyle = '#f7fbff';
+        ctx.fillStyle = UI_THEME.text.primary;
         ctx.font = 'bold 9px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(label[0]?.toUpperCase() ?? '?', sx + 8, slotY + 11);
@@ -575,20 +673,48 @@ function drawProductionPanel(
     }
   }
 
-  return y + blockH + 2;
+  return;
+}
+
+function drawCommandPane(
+  ctx: CanvasRenderingContext2D,
+  e: Entity,
+  state: GameState,
+  pane: Rect,
+  buttons: UiButton[],
+  myOwner: 0 | 1,
+): void {
+  const productionH = 44;
+  const productionRect: Rect = { x: pane.x + 8, y: pane.y + 20, w: pane.w - 16, h: productionH };
+  const gridRect: Rect = { x: pane.x + 8, y: productionRect.y + productionH + 6, w: pane.w - 16, h: pane.h - productionH - 30 };
+
+  if ((e.kind === 'townhall' || e.kind === 'barracks') && e.owner === myOwner) {
+    drawProductionPanel(ctx, e, state, productionRect);
+  } else {
+    drawSectionCard(ctx, productionRect.x, productionRect.y, productionRect.w, productionRect.h, t('production'));
+    ctx.fillStyle = UI_THEME.text.secondary;
+    ctx.font = '11px monospace';
+    ctx.fillText(t('no_unit_in_production'), productionRect.x + 8, productionRect.y + 24);
+  }
+
+  collectButtons(ctx, e, state, gridRect, buttons, myOwner);
 }
 
 function drawEntityInfo(
   ctx: CanvasRenderingContext2D,
   e: Entity,
   state: GameState,
-  panelY: number,
-  x: number,
+  pane: Rect,
   myOwner: 0 | 1 = 0,
 ): void {
   const stats = resolveEntityStatsForEntity(state, e);
   const rc    = usesRaceProfile(e.owner) ? ownerRace(state.races, e.owner) : null;
-  const isProductionBuilding = (e.kind === 'townhall' || e.kind === 'barracks') && e.owner === myOwner;
+  const x = pane.x + PORTRAIT_W + 12;
+  const baseY = pane.y + 8;
+  const infoW = pane.w - PORTRAIT_W - 20;
+  const idRect: Rect = { x: x - 4, y: baseY, w: infoW, h: 32 };
+  const coreRect: Rect = { x: x - 4, y: idRect.y + idRect.h + 4, w: infoW, h: 34 };
+  const detailRect: Rect = { x: x - 4, y: coreRect.y + coreRect.h + 4, w: infoW, h: pane.h - (coreRect.y + coreRect.h + 4 - pane.y) - 8 };
 
   // ── Race-aware display name ─────────────────────────────────────────────────
   const displayName =
@@ -604,31 +730,33 @@ function drawEntityInfo(
     e.kind === 'barrier' ? 'DESTRUCTIBLE BARRIER' :
     isNeutralOwner(e.owner) ? 'NEUTRAL' : e.kind.toUpperCase();
 
-  // Running Y cursor — everything flows downward from here
-  const LINE = 15;
-  let y = panelY + 18;
+  const LINE = 13;
+  let y = detailRect.y + 20;
 
-  drawSectionCard(ctx, x - 4, panelY + 10, 312, PANEL_H - 20, 'SELECTED', 'rgba(255,255,255,0.06)');
+  drawSectionCard(ctx, idRect.x, idRect.y, idRect.w, idRect.h, 'IDENTITY');
+  drawSectionCard(ctx, coreRect.x, coreRect.y, coreRect.w, coreRect.h, 'CORE STATE');
+  drawSectionCard(ctx, detailRect.x, detailRect.y, detailRect.w, detailRect.h, 'DETAILS', 'rgba(62,48,35,0.54)');
 
-  // ── Name ───────────────────────────────────────────────────────────────────
-  ctx.fillStyle = '#eee';
+  ctx.fillStyle = UI_THEME.text.primary;
   ctx.font = 'bold 15px monospace';
-  ctx.fillText(displayName.toUpperCase(), x, y); y += LINE + 1;
+  ctx.fillText(displayName.toUpperCase(), x, idRect.y + 19);
 
-  let badgeX = x + 170;
-  if (!e.cmd && stats && stats.speed > 0) badgeX += drawBadge(ctx, badgeX, panelY + 16, 'IDLE', 'rgba(70,70,70,0.95)', '#ededed') + 6;
-  if (typeof e.underAttackTick === 'number' && state.tick - e.underAttackTick <= SIM_HZ * 2) badgeX += drawBadge(ctx, badgeX, panelY + 16, 'UNDER ATTACK', 'rgba(120,28,28,0.95)', '#ffcccc') + 6;
-  if (e.cmd?.type === 'gather' && e.cmd.phase === 'returning' && e.cmd.resourceType === 'wood') badgeX += drawBadge(ctx, badgeX, panelY + 16, 'RETURNING WOOD', 'rgba(46,86,34,0.95)', '#d6ffd0') + 6;
-  if (e.cmd?.type === 'gather' && e.cmd.phase === 'gathering' && e.cmd.resourceType === 'wood') badgeX += drawBadge(ctx, badgeX, panelY + 16, 'CHOPPING', 'rgba(66,52,20,0.95)', '#ffe0a8') + 6;
+  type BadgeInfo = { priority: number; text: string; bg: string; fg?: string };
+  const badgeCandidates: BadgeInfo[] = [];
+  if (typeof e.underAttackTick === 'number' && state.tick - e.underAttackTick <= SIM_HZ * 2) badgeCandidates.push({ priority: 1, text: 'UNDER ATTACK', bg: 'rgba(120,28,28,0.95)', fg: '#ffcccc' });
+  if (e.cmd?.type === 'train' || e.cmd?.type === 'build') badgeCandidates.push({ priority: 2, text: 'PRODUCING', bg: 'rgba(42,73,118,0.95)', fg: '#d8ebff' });
+  if (e.cmd?.type === 'gather' && e.cmd.phase === 'returning' && e.cmd.resourceType === 'wood') badgeCandidates.push({ priority: 3, text: 'RETURNING WOOD', bg: 'rgba(46,86,34,0.95)', fg: '#d6ffd0' });
+  if (e.cmd?.type === 'gather' && e.cmd.phase === 'gathering' && e.cmd.resourceType === 'wood') badgeCandidates.push({ priority: 4, text: 'CHOPPING', bg: 'rgba(66,52,20,0.95)', fg: '#ffe0a8' });
+  if (!e.cmd && stats && stats.speed > 0) badgeCandidates.push({ priority: 5, text: 'IDLE', bg: 'rgba(70,70,70,0.95)', fg: '#ededed' });
+  badgeCandidates.sort((a, b) => a.priority - b.priority);
+  let badgeX = x + Math.min(150, infoW - 114);
+  badgeCandidates.slice(0, 2).forEach((badge) => {
+    badgeX += drawBadge(ctx, badgeX, idRect.y + 8, badge.text, badge.bg, badge.fg) + 6;
+  });
 
-  if (isProductionBuilding) {
-    y = drawProductionPanel(ctx, e, state, x, y);
-  }
-
-  // ── HP ─────────────────────────────────────────────────────────────────────
-  ctx.fillStyle = '#b8c0c8';
+  ctx.fillStyle = UI_THEME.text.secondary;
   ctx.font = 'bold 12px monospace';
-  ctx.fillText(`HP: ${e.hp} / ${getResolvedHpMax(e)}`, x, y); y += LINE;
+  ctx.fillText(`HP: ${e.hp} / ${getResolvedHpMax(e)}`, x, coreRect.y + 18);
 
   // ── Combat stats (mobile units only) ───────────────────────────────────────
   if (stats && stats.speed > 0) {
@@ -641,12 +769,12 @@ function drawEntityInfo(
     const shownDef = hasUpgradeGroup(e.kind, race, 'military')
       ? (e.statArmor ?? stats.armor)
       : stats.armor;
-    ctx.fillStyle = '#ffcc88';
+    ctx.fillStyle = UI_THEME.accent.gold;
     ctx.font = '11px monospace';
     ctx.fillText(
       `ATK:${shownAtk}  DEF:${shownDef}  RNG:${rngStr}  SPD:${atkSpd}`,
-      x, y,
-    ); y += LINE;
+      x, coreRect.y + 30,
+    );
 
     const roleLabel = rc
       ? (
@@ -658,29 +786,30 @@ function drawEntityInfo(
       )
       : (isNeutralOwner(e.owner) ? 'world object' : null);
     if (roleLabel) {
-      ctx.fillStyle = 'rgba(255,255,255,0.62)';
+      ctx.fillStyle = UI_THEME.text.secondary;
       ctx.font = '11px monospace';
-      ctx.fillText(roleLabel, x, y); y += LINE - 1;
+      ctx.fillText(roleLabel, x, y); y += LINE;
     }
   }
   if (stats && stats.speed === 0 && stats.range > 1) {
     const atkSpd = stats.attackTicks > 0
       ? (stats.attackTicks / 20).toFixed(1) + 's'
       : '—';
-    ctx.fillStyle = '#ffcc88';
+    ctx.fillStyle = UI_THEME.accent.gold;
     ctx.font = '11px monospace';
     ctx.fillText(
       `ATK:${stats.damage}  DEF:${stats.armor}  RNG:${stats.range}  SPD:${atkSpd}`,
       x, y,
-    ); y += LINE;
-    ctx.fillStyle = 'rgba(255,255,255,0.62)';
+    );
+    y += LINE;
+    ctx.fillStyle = UI_THEME.text.secondary;
     ctx.font = '11px monospace';
     ctx.fillText(t('role_static_defense'), x, y); y += LINE - 1;
   }
 
   // ── Gold mine reserve ───────────────────────────────────────────────────────
   if (e.kind === 'goldmine') {
-    ctx.fillStyle = '#ffe97a';
+    ctx.fillStyle = UI_THEME.accent.gold;
     ctx.font = '11px monospace';
     ctx.fillText(t('gold_remaining', { amount: e.goldReserve ?? 0 }), x, y); y += LINE;
 
@@ -694,7 +823,7 @@ function drawEntityInfo(
     const mineLabel = isContested ? t('mine_contested') : myDist < enemyDist
       ? t('mine_safer')
       : t('mine_outer');
-    ctx.fillStyle = 'rgba(255,255,255,0.62)';
+    ctx.fillStyle = UI_THEME.text.secondary;
     ctx.font = '11px monospace';
     ctx.fillText(mineLabel, x, y); y += LINE - 1;
 
@@ -703,18 +832,18 @@ function drawEntityInfo(
       : myDist < enemyDist
         ? t('mine_hint_safer')
         : t('mine_hint_outer');
-    ctx.fillStyle = 'rgba(255,255,255,0.46)';
+    ctx.fillStyle = UI_THEME.text.tertiary;
     ctx.fillText(actionHint, x, y); y += LINE - 1;
 
     if (isContested && state.tick <= state.contestedMineBonusUntilTick) {
       const secondsLeft = Math.ceil((state.contestedMineBonusUntilTick - state.tick) / SIM_HZ);
-      ctx.fillStyle = 'rgba(255,200,120,0.60)';
+      ctx.fillStyle = UI_THEME.accent.warn;
       ctx.fillText(t('clash_window', { seconds: secondsLeft }), x, y); y += LINE - 1;
     }
   }
 
   if (e.carryWood) {
-    ctx.fillStyle = '#8fdc6d';
+    ctx.fillStyle = UI_THEME.accent.wood;
     ctx.font = 'bold 12px monospace';
     ctx.fillText(t('carrying_wood', { amount: e.carryWood }), x, y); y += LINE;
   }
@@ -723,23 +852,23 @@ function drawEntityInfo(
   const centerY = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
   const centerTile = state.tiles[centerY]?.[centerX];
   if (centerTile?.watchPost && e.owner === myOwner && isUnitKind(e.kind)) {
-    ctx.fillStyle = '#f4d35e';
+    ctx.fillStyle = UI_THEME.accent.gold;
     ctx.font = '10px monospace';
     ctx.fillText(t('watch_post_1'), x, y); y += LINE - 1;
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillStyle = UI_THEME.text.tertiary;
     ctx.fillText(t('watch_post_2'), x, y); y += LINE - 1;
   }
 
   // ── Food slots (farms / town halls) ────────────────────────────────────────
   if (e.kind === 'farm' || e.kind === 'townhall') {
     const supplyProvided = getResolvedSupplyProvided(e.kind, usesRaceProfile(e.owner) ? state.races[e.owner] : null);
-    ctx.fillStyle = '#ffcc88';
+    ctx.fillStyle = UI_THEME.accent.gold;
     ctx.font = 'bold 12px monospace';
     ctx.fillText(t('food_slots', { amount: supplyProvided }), x, y); y += LINE;
   }
 
   if (e.kind === 'lumbermill' && e.owner === myOwner) {
-    ctx.fillStyle = '#8fdc6d';
+    ctx.fillStyle = UI_THEME.accent.wood;
     ctx.font = '11px monospace';
     for (const line of getLumberMillUpgradeSummary(state, myOwner)) {
       ctx.fillText(line, x, y); y += LINE - 1;
@@ -750,7 +879,7 @@ function drawEntityInfo(
 
   // ── Carry gold (workers) ────────────────────────────────────────────────────
   if (e.carryGold) {
-    ctx.fillStyle = '#ffe97a';
+    ctx.fillStyle = UI_THEME.accent.gold;
     ctx.font = '11px monospace';
     ctx.fillText(t('carrying', { amount: e.carryGold }), x, y); y += LINE;
   }
@@ -758,7 +887,7 @@ function drawEntityInfo(
   // ── Under attack clarity ───────────────────────────────────────────────────
   const isUnderAttackNow = typeof e.underAttackTick === 'number' && state.tick - e.underAttackTick <= SIM_HZ * 2;
   if (isUnderAttackNow) {
-    ctx.fillStyle = '#ff7777';
+    ctx.fillStyle = UI_THEME.accent.danger;
     ctx.font = 'bold 10px monospace';
     if (isWorkerKind(e.kind)) {
       ctx.fillText(t('harassed'), x, y); y += LINE - 1;
@@ -773,10 +902,10 @@ function drawEntityInfo(
     const openingSpent = state.openingCommitmentClaimed[myOwner];
     const canStillChoose = state.tick <= OPENING_PLAN_LOCK_TICKS;
     const openingCopy = selectedPlan ? openingPlanText(selectedPlan) : null;
-    ctx.fillStyle = 'rgba(136,216,255,0.58)';
+    ctx.fillStyle = UI_THEME.accent.info;
     ctx.font = '10px monospace';
     ctx.fillText(t('opening_status', { title: openingCopy ? openingCopy.title : t('opening_not_selected') }), x, y); y += LINE - 1;
-    ctx.fillStyle = 'rgba(255,255,255,0.34)';
+    ctx.fillStyle = UI_THEME.text.tertiary;
     ctx.fillText(
       selectedPlan
         ? (openingSpent ? t('opening_bonus_spent') : t('opening_bonus_ready'))
@@ -788,7 +917,7 @@ function drawEntityInfo(
       ctx.fillText(openingCopy.body, x, y); y += LINE - 1;
     }
     if (selectedPlan === 'pressure' && !openingSpent) {
-      ctx.fillStyle = 'rgba(255,200,120,0.52)';
+      ctx.fillStyle = UI_THEME.accent.warn;
       ctx.fillText(t('pressure_damage_window'), x, y); y += LINE - 1;
     }
   }
@@ -797,13 +926,13 @@ function drawEntityInfo(
   if ((e.kind === 'townhall' || e.kind === 'barracks') && e.owner === myOwner) {
     ctx.font = '10px monospace';
     if (e.rallyPoint) {
-      ctx.fillStyle = '#ffe840';
+      ctx.fillStyle = UI_THEME.accent.gold;
       ctx.fillText(t('rally_to', { x: e.rallyPoint.x, y: e.rallyPoint.y }), x, y); y += LINE - 1;
       const myTownHall = state.entities.find(en => en.owner === myOwner && en.kind === 'townhall');
       const enemyTownHall = state.entities.find(en => en.owner !== myOwner && en.kind === 'townhall');
       const myDist = myTownHall ? Math.hypot(e.rallyPoint.x - myTownHall.pos.x, e.rallyPoint.y - myTownHall.pos.y) : Infinity;
       const enemyDist = enemyTownHall ? Math.hypot(e.rallyPoint.x - enemyTownHall.pos.x, e.rallyPoint.y - enemyTownHall.pos.y) : Infinity;
-      ctx.fillStyle = 'rgba(255,255,255,0.42)';
+      ctx.fillStyle = UI_THEME.text.secondary;
       const openingPlan = getSelectedOpeningPlan(state, myOwner) ?? 'tempo';
       const rallyText = Math.abs(myDist - enemyDist) <= 8
         ? (openingPlan === 'eco'
@@ -821,24 +950,24 @@ function drawEntityInfo(
               ? t('rally_deep_pressure')
               : t('rally_deep_other'));
       ctx.fillText(rallyText, x, y); y += LINE - 1;
-      ctx.fillStyle = 'rgba(255,255,255,0.28)';
+      ctx.fillStyle = UI_THEME.text.tertiary;
       ctx.fillText(t('rally_move'), x, y); y += LINE - 1;
     } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.28)';
+      ctx.fillStyle = UI_THEME.text.tertiary;
       ctx.fillText(t('rally_set'), x, y); y += LINE - 1;
       const selectedPlan = getSelectedOpeningPlan(state, myOwner);
       if (selectedPlan === 'eco') {
-        ctx.fillStyle = 'rgba(160,230,180,0.42)';
+        ctx.fillStyle = UI_THEME.accent.wood;
         ctx.fillText(t('eco_fallback'), x, y); y += LINE - 1;
       }
       if (selectedPlan === 'tempo' && !state.openingCommitmentClaimed[myOwner]) {
-        ctx.fillStyle = 'rgba(180,220,255,0.48)';
+        ctx.fillStyle = UI_THEME.accent.info;
         ctx.fillText(t('tempo_fallback'), x, y); y += LINE - 1;
       }
       if (selectedPlan === 'pressure' && !state.openingCommitmentClaimed[myOwner]) {
-        ctx.fillStyle = 'rgba(255,200,120,0.42)';
+        ctx.fillStyle = UI_THEME.accent.warn;
         ctx.fillText(t('pressure_fallback'), x, y); y += LINE - 1;
-        ctx.fillStyle = 'rgba(255,170,120,0.34)';
+        ctx.fillStyle = UI_THEME.text.tertiary;
         ctx.fillText(t('pressure_fallback_2'), x, y); y += LINE - 1;
       }
     }
@@ -849,10 +978,10 @@ function drawEntityInfo(
   if (e.cmd?.type === 'build') {
     ctx.font = '11px monospace';
     if (e.cmd.phase === 'moving') {
-      ctx.fillStyle = '#88ccff';
+      ctx.fillStyle = UI_THEME.accent.info;
       ctx.fillText(t('going_to_build', { building: e.cmd.building }), x, y); y += LINE;
     } else {
-      ctx.fillStyle = '#88ffcc';
+      ctx.fillStyle = UI_THEME.accent.good;
       ctx.fillText(t('building_click_site', { building: e.cmd.building }), x, y); y += LINE;
     }
   }
@@ -860,18 +989,18 @@ function drawEntityInfo(
   // ── Construction site progress (shown on the scaffold entity) ──────────────
   if (e.kind === 'construction' && e.constructionOf) {
     const pct = Math.round(100 * e.hp / Math.max(1, e.hpMax));
-    ctx.fillStyle = '#88ffcc';
+    ctx.fillStyle = UI_THEME.accent.good;
     ctx.font = '11px monospace';
     ctx.fillText(t('built_pct', { building: e.constructionOf, pct }), x, y); y += LINE - 2;
     drawProgressBar(ctx, x, y, 150, '#44cc88', pct); y += 10;
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillStyle = UI_THEME.text.tertiary;
     ctx.font = '10px monospace';
     ctx.fillText(t('continue_build'), x, y); y += LINE - 1;
   }
 
   // ── Gather status ───────────────────────────────────────────────────────────
   if (e.cmd?.type === 'gather') {
-    ctx.fillStyle = '#ffe97a';
+    ctx.fillStyle = UI_THEME.accent.gold;
     ctx.font = '11px monospace';
     const label =
       e.cmd.phase === 'gathering'  ? (e.cmd.resourceType === 'wood' ? t('chopping_wood') : t('mining')) :
@@ -882,23 +1011,23 @@ function drawEntityInfo(
 
   // ── Attack status ───────────────────────────────────────────────────────────
   if (e.cmd?.type === 'attack') {
-    ctx.fillStyle = '#ff8888';
+    ctx.fillStyle = UI_THEME.accent.danger;
     ctx.font = '11px monospace';
     ctx.fillText(e.cmd.chasePath.length > 0 ? t('chasing') : t('attacking'), x, y);
   }
 
   // ── Move status ─────────────────────────────────────────────────────────────
   if (e.cmd?.type === 'move') {
-    ctx.fillStyle = '#aaddff';
+    ctx.fillStyle = UI_THEME.accent.info;
     ctx.font = '11px monospace';
     ctx.fillText(t('moving'), x, y);
   }
 
   // ── Idle hint (player units only) ───────────────────────────────────────────
   if (e.owner === myOwner && !e.cmd && stats && stats.speed > 0) {
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillStyle = UI_THEME.text.tertiary;
     ctx.font = '10px monospace';
-    ctx.fillText(t('rmb_hint'), x, panelY + PANEL_H - 8);
+    ctx.fillText(t('rmb_hint'), x, pane.y + pane.h - 8);
   }
 }
 
@@ -906,23 +1035,20 @@ function collectButtons(
   ctx: CanvasRenderingContext2D,
   e: Entity,
   state: GameState,
-  panelY: number,
-  viewW: number,
+  gridRect: Rect,
   buttons: UiButton[],
   myOwner: 0 | 1 = 0,
 ): void {
   if (e.owner !== myOwner) return; // no buttons for enemy entities
 
   const rc        = ownerRace(state.races, myOwner); // player race config
-  const btnStartX = viewW - (BTN_W + BTN_PAD) * MAX_BTN_COLS;
-  let col = 0;
+  const specs: CommandButtonSpec[] = [];
+  let nextSlot = 0;
 
-  function addButton(label: string, action: string, disabled = false, danger = false): void {
-    const bx = btnStartX + col * (BTN_W + BTN_PAD);
-    const by = panelY + (PANEL_H - BTN_H) / 2;
-    drawButton(ctx, bx, by, BTN_W, BTN_H, label, !disabled, danger);
-    if (!disabled) buttons.push({ x: bx, y: by, w: BTN_W, h: BTN_H, label, action });
-    col++;
+  function addButton(label: string, action: string, disabled = false, danger = false, slot?: number): void {
+    const targetSlot = typeof slot === 'number' ? slot : nextSlot;
+    nextSlot = Math.max(nextSlot, targetSlot + 1);
+    specs.push({ slot: targetSlot, label, action, disabled, danger });
   }
 
   // ── Production buildings ────────────────────────────────────────────────────
@@ -932,9 +1058,9 @@ function collectButtons(
     const workerBusy = e.cmd?.type === 'train';
     const selectedPlan = getSelectedOpeningPlan(state, myOwner);
     addButton(`${translateDisplayLabel(rc.workerLabel)} [V]\n[${workerCost.gold}g${workerCost.wood ? ` ${workerCost.wood}w` : ''}]`, `train:${rc.worker}`,
-      state.gold[myOwner] < workerCost.gold || state.wood[myOwner] < workerCost.wood);
+      state.gold[myOwner] < workerCost.gold || state.wood[myOwner] < workerCost.wood, false, 0);
     if (!workerBusy && state.gold[myOwner] >= workerCost.gold && state.wood[myOwner] >= workerCost.wood) {
-      addButton(t('worker_spike'), `train:${rc.worker}`);
+      addButton(t('worker_spike'), `train:${rc.worker}`, false, false, 3);
     }
   }
   if (e.kind === 'barracks') {
@@ -956,19 +1082,19 @@ function collectButtons(
     const wantsHeavy = anchorCount < 2 && frontlineMass >= 2;
 
     addButton(`${translateDisplayLabel(rc.soldierLabel)} [T]\n[${soldierCost.gold}g${soldierCost.wood ? ` ${soldierCost.wood}w` : ''}]`, `train:${rc.soldier}`,
-      state.gold[myOwner] < soldierCost.gold || state.wood[myOwner] < soldierCost.wood);
+      state.gold[myOwner] < soldierCost.gold || state.wood[myOwner] < soldierCost.wood, false, 0);
     addButton(`${translateDisplayLabel(rc.rangedLabel)} [A]\n[${rangedCost.gold}g${rangedCost.wood ? ` ${rangedCost.wood}w` : ''}]`, 'train_ranged',
-      state.gold[myOwner] < rangedCost.gold || state.wood[myOwner] < rangedCost.wood);
+      state.gold[myOwner] < rangedCost.gold || state.wood[myOwner] < rangedCost.wood, false, 1);
     addButton(`${translateDisplayLabel(rc.heavyLabel)} [H]\n[${heavyCost.gold}g${heavyCost.wood ? ` ${heavyCost.wood}w` : ''}]`, `train:${rc.heavy}`,
-      state.gold[myOwner] < heavyCost.gold || state.wood[myOwner] < heavyCost.wood);
+      state.gold[myOwner] < heavyCost.gold || state.wood[myOwner] < heavyCost.wood, false, 2);
     if (state.gold[myOwner] >= soldierCost.gold && state.wood[myOwner] >= soldierCost.wood && wantsFrontline) {
-      addButton(t('frontline_add'), `train:${rc.soldier}`);
+      addButton(t('frontline_add'), `train:${rc.soldier}`, false, false, 3);
     }
     if (state.gold[myOwner] >= rangedCost.gold && state.wood[myOwner] >= rangedCost.wood && wantsRanged) {
-      addButton(t('backline_add'), `train:${rc.ranged}`);
+      addButton(t('backline_add'), `train:${rc.ranged}`, false, false, 4);
     }
     if (state.gold[myOwner] >= heavyCost.gold && state.wood[myOwner] >= heavyCost.wood && wantsHeavy) {
-      addButton(t('anchor_add'), `train:${rc.heavy}`);
+      addButton(t('anchor_add'), `train:${rc.heavy}`, false, false, 5);
     }
   }
 
@@ -983,13 +1109,13 @@ function collectButtons(
     const hasLumbermill = state.entities.some(en => en.owner === myOwner && en.kind === 'lumbermill');
     const barrLabel = translateDisplayLabel(rc.barrLabel);
     const farmLabel = translateDisplayLabel(rc.farmLabel);
-    addButton(`${barrLabel} [B]\n[${barrCost.gold}g${barrCost.wood ? ` ${barrCost.wood}w` : ''}]`, 'build:barracks', state.gold[myOwner] < barrCost.gold || state.wood[myOwner] < barrCost.wood);
-    addButton(`${t('lumber_mill')} [L]\n[${lumberCost.gold}g${lumberCost.wood ? ` ${lumberCost.wood}w` : ''}]`, 'build:lumbermill', state.gold[myOwner] < lumberCost.gold || state.wood[myOwner] < lumberCost.wood || hasLumbermill);
-    addButton(`${farmLabel} [F]\n[${farmCost.gold}g${farmCost.wood ? ` ${farmCost.wood}w` : ''}]`, 'build:farm',     state.gold[myOwner] < farmCost.gold || state.wood[myOwner] < farmCost.wood);
-    addButton(`${translateDisplayLabel(rc.towerLabel)} [G]\n[${towerCost.gold}g${towerCost.wood ? ` ${towerCost.wood}w` : ''}]`, 'build:tower', state.gold[myOwner] < towerCost.gold || state.wood[myOwner] < towerCost.wood || !hasBarracks || !hasLumbermill);
-    addButton(`${t('wall')} [W]\n[${wallCost.gold}g${wallCost.wood ? ` ${wallCost.wood}w` : ''}]`,  'build:wall',     state.gold[myOwner] < wallCost.gold || state.wood[myOwner] < wallCost.wood);
+    addButton(`${barrLabel} [B]\n[${barrCost.gold}g${barrCost.wood ? ` ${barrCost.wood}w` : ''}]`, 'build:barracks', state.gold[myOwner] < barrCost.gold || state.wood[myOwner] < barrCost.wood, false, 0);
+    addButton(`${t('lumber_mill')} [L]\n[${lumberCost.gold}g${lumberCost.wood ? ` ${lumberCost.wood}w` : ''}]`, 'build:lumbermill', state.gold[myOwner] < lumberCost.gold || state.wood[myOwner] < lumberCost.wood || hasLumbermill, false, 1);
+    addButton(`${farmLabel} [F]\n[${farmCost.gold}g${farmCost.wood ? ` ${farmCost.wood}w` : ''}]`, 'build:farm',     state.gold[myOwner] < farmCost.gold || state.wood[myOwner] < farmCost.wood, false, 2);
+    addButton(`${translateDisplayLabel(rc.towerLabel)} [G]\n[${towerCost.gold}g${towerCost.wood ? ` ${towerCost.wood}w` : ''}]`, 'build:tower', state.gold[myOwner] < towerCost.gold || state.wood[myOwner] < towerCost.wood || !hasBarracks || !hasLumbermill, false, 3);
+    addButton(`${t('wall')} [W]\n[${wallCost.gold}g${wallCost.wood ? ` ${wallCost.wood}w` : ''}]`,  'build:wall',     state.gold[myOwner] < wallCost.gold || state.wood[myOwner] < wallCost.wood, false, 4);
     if (state.gold[myOwner] >= wallCost.gold && state.wood[myOwner] >= wallCost.wood) {
-      addButton(t('hold_line'), 'build:wall');
+      addButton(t('hold_line'), 'build:wall', false, false, 5);
     }
   }
 
@@ -1000,14 +1126,14 @@ function collectButtons(
     const melee = profile.upgrades.meleeAttack;
     const armor = profile.upgrades.armor;
     const buildingHp = profile.upgrades.buildingHp;
-    addButton(`${t('upgrade_attack')} +${melee.perLevel} ${t('upgrade_level')} ${upgrades.meleeAttackLevel}/${melee.maxLevel}\n${compactUpgradeTargetHint('meleeAttack', race)} [${melee.cost.wood}w]`, 'upgrade:meleeAttack', upgrades.meleeAttackLevel >= melee.maxLevel || state.gold[myOwner] < melee.cost.gold || state.wood[myOwner] < melee.cost.wood);
-    addButton(`${t('upgrade_defense')} +${armor.perLevel} ${t('upgrade_level')} ${upgrades.armorLevel}/${armor.maxLevel}\n${compactUpgradeTargetHint('armor', race)} [${armor.cost.wood}w]`, 'upgrade:armor', upgrades.armorLevel >= armor.maxLevel || state.gold[myOwner] < armor.cost.gold || state.wood[myOwner] < armor.cost.wood);
-    addButton(`${t('upgrade_building_hp')} +${buildingHp.perLevel}% ${t('upgrade_level')} ${upgrades.buildingHpLevel}/${buildingHp.maxLevel}\n${compactUpgradeTargetHint('buildingHp', race)} [${buildingHp.cost.wood}w]`, 'upgrade:buildingHp', upgrades.buildingHpLevel >= buildingHp.maxLevel || state.gold[myOwner] < buildingHp.cost.gold || state.wood[myOwner] < buildingHp.cost.wood);
+    addButton(`${t('upgrade_attack')} +${melee.perLevel} ${t('upgrade_level')} ${upgrades.meleeAttackLevel}/${melee.maxLevel}\n${compactUpgradeTargetHint('meleeAttack', race)} [${melee.cost.wood}w]`, 'upgrade:meleeAttack', upgrades.meleeAttackLevel >= melee.maxLevel || state.gold[myOwner] < melee.cost.gold || state.wood[myOwner] < melee.cost.wood, false, 0);
+    addButton(`${t('upgrade_defense')} +${armor.perLevel} ${t('upgrade_level')} ${upgrades.armorLevel}/${armor.maxLevel}\n${compactUpgradeTargetHint('armor', race)} [${armor.cost.wood}w]`, 'upgrade:armor', upgrades.armorLevel >= armor.maxLevel || state.gold[myOwner] < armor.cost.gold || state.wood[myOwner] < armor.cost.wood, false, 1);
+    addButton(`${t('upgrade_building_hp')} +${buildingHp.perLevel}% ${t('upgrade_level')} ${upgrades.buildingHpLevel}/${buildingHp.maxLevel}\n${compactUpgradeTargetHint('buildingHp', race)} [${buildingHp.cost.wood}w]`, 'upgrade:buildingHp', upgrades.buildingHpLevel >= buildingHp.maxLevel || state.gold[myOwner] < buildingHp.cost.gold || state.wood[myOwner] < buildingHp.cost.wood, false, 2);
   }
 
   // ── Stop (any player unit/building with an active command) ──────────────────
   if (e.cmd !== null) {
-    addButton(t('stop'), 'stop');
+    addButton(t('stop'), 'stop', false, false, 4);
   }
 
   // ── Demolish / Cancel construction ─────────────────────────────────────────
@@ -1019,7 +1145,27 @@ function collectButtons(
     const refundWood = Math.floor(refundCost.wood * (isConst ? 1.0 : 0.8));
     const refund = `${refundGold}g${refundWood ? ` ${refundWood}w` : ''}`;
     const btnLabel = isConst ? t('cancel', { amount: refund }) : t('demolish', { amount: refund });
-    addButton(btnLabel, 'demolish', false, true);
+    addButton(btnLabel, 'demolish', false, true, 5);
+  }
+
+  const gridCapacity = CMD_GRID_COLS * CMD_GRID_ROWS;
+  const sorted = specs
+    .filter(spec => spec.slot >= 0 && spec.slot < gridCapacity)
+    .sort((a, b) => a.slot - b.slot);
+
+  const gapX = 6;
+  const gapY = 6;
+  const cellW = Math.max(86, Math.floor((gridRect.w - gapX * (CMD_GRID_COLS - 1)) / CMD_GRID_COLS));
+  const cellH = Math.max(24, Math.floor((gridRect.h - gapY * (CMD_GRID_ROWS - 1)) / CMD_GRID_ROWS));
+
+  for (const spec of sorted) {
+    const col = spec.slot % CMD_GRID_COLS;
+    const row = Math.floor(spec.slot / CMD_GRID_COLS);
+    const bx = gridRect.x + col * (cellW + gapX);
+    const by = gridRect.y + row * (cellH + gapY);
+    const enabled = !spec.disabled;
+    drawButton(ctx, bx, by, cellW, cellH, spec.label, enabled, !!spec.danger);
+    if (enabled) buttons.push({ x: bx, y: by, w: cellW, h: cellH, label: spec.label, action: spec.action });
   }
 }
 
@@ -1073,17 +1219,17 @@ function drawButton(
   pulse = 0,
 ): void {
   if (danger) {
-    ctx.fillStyle = enabled ? '#552020' : '#2a2a2a';
+    ctx.fillStyle = enabled ? UI_THEME.button.danger : UI_THEME.button.disabled;
     ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = enabled ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)';
+    ctx.fillStyle = enabled ? UI_THEME.button.sheen : 'rgba(255,255,255,0.02)';
     ctx.fillRect(x + 2, y + 2, w - 4, 10);
-    ctx.strokeStyle = enabled ? '#d44a4a' : '#555';
+    ctx.strokeStyle = enabled ? UI_THEME.button.dangerStroke : UI_THEME.button.disabledStroke;
   } else {
-    ctx.fillStyle = enabled ? '#244628' : '#2a2a2a';
+    ctx.fillStyle = enabled ? UI_THEME.button.enabled : UI_THEME.button.disabled;
     ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = enabled ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)';
+    ctx.fillStyle = enabled ? UI_THEME.button.sheen : 'rgba(255,255,255,0.02)';
     ctx.fillRect(x + 2, y + 2, w - 4, 10);
-    ctx.strokeStyle = enabled ? '#56bb60' : '#555';
+    ctx.strokeStyle = enabled ? UI_THEME.button.enabledStroke : UI_THEME.button.disabledStroke;
   }
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
@@ -1094,8 +1240,8 @@ function drawButton(
   }
 
   ctx.fillStyle = enabled
-    ? (danger ? '#ffd0d0' : '#d8ffd8')
-    : '#666';
+    ? (danger ? UI_THEME.button.dangerText : UI_THEME.button.enabledText)
+    : UI_THEME.button.disabledText;
   ctx.font = 'bold 11px monospace';
   ctx.textAlign = 'center';
   const lines = label.split('\n');
