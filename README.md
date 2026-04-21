@@ -47,6 +47,7 @@ Current state:
     - `Melee +1`
     - `Armor +1`
     - `Building HP +15%`
+  - upgrades are researched over `15s` each (no instant apply)
 - main multiplayer determinism blocker from review was fixed
 - follow-up lockstep packet/disconnect issues were fixed too
 - recent determinism-sensitive changes were verified with targeted review passes
@@ -54,6 +55,10 @@ Current state:
 - self-hosted online infra is live on `w2.kislota.today`
 - PeerJS/TURN production wiring is aligned for `SERVER` mode manual tests
 - live re-test after the desync fix stayed synchronized even with tower builds
+- focused anti-desync pass completed:
+  - per-tick entity command processing is mutation-safe and order-stable
+  - deterministic tie-breaks were tightened in key nearest/selection logic
+  - targeted determinism regression tests were added
 - DIRECT fallback remains available for comparison/fallback checks
 - network safety is no longer the main design bottleneck
 - balance-system foundation is now in place and now includes a simple manual tuning layer for fast gameplay iteration
@@ -127,6 +132,8 @@ Immediate next `/new` target:
 - confirm workers can harvest forest, carry wood home, and credit it correctly
 - confirm depleted forest turns into passable grass and pathing updates correctly
 - confirm Lumber Mill can be built, towers are gated by it, and all three upgrades apply correctly
+- confirm each Lumber Mill upgrade now has a visible `15s` research phase and deterministic completion timing
+- run determinism regression checks before and after any command-processing edits
 - after that, validate current map-pressure systems as a combined package, not as isolated features:
   - contested mines
   - watch-post leverage
@@ -202,6 +209,7 @@ Use this checklist in the next validation session:
 - confirm units can path through the cleared tile after depletion
 - build a `Lumber Mill`
 - confirm `Tower` is blocked before Lumber Mill and available after Lumber Mill
+- confirm each Lumber Mill upgrade takes `15s` research time before applying
 - buy `Melee +1`, then confirm melee units deal +1 damage
 - buy `Armor +1`, then confirm military units gain +1 armor
 - buy `Building HP +15%`, then confirm existing player buildings gain HP and new ones inherit the bonus
@@ -210,6 +218,10 @@ Use this checklist in the next validation session:
 
 Latest focused review note:
 - `docs/LW2B_REVIEW_NOTES_2026-04-21.md`
+
+Latest network/mechanics audit reports:
+- `NETWORK_AUDIT_2026-04-21.md`
+- `NETWORK_MECHANICS_AUDIT_2026-04-21.md`
 
 Current review-driven cautions:
 - neutral ownership semantics exist, and passes 1-2 are now done, but broader semantic cleanup is still incomplete outside the highest-risk AI/UI/economy/modifier paths

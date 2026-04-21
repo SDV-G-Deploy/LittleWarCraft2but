@@ -2,6 +2,10 @@
 
 This document captures the current multiplayer networking architecture for **LittleWarCraft2but (LW2B)**, the main dependency points around PeerJS / WebRTC / TURN, and the practical implications for connectivity, especially for players joining from Russia.
 
+Related deep-dive reports from the latest audit pass:
+- `NETWORK_AUDIT_2026-04-21.md`
+- `NETWORK_MECHANICS_AUDIT_2026-04-21.md`
+
 ## Summary
 
 LW2B currently uses a **client-hosted multiplayer model**:
@@ -259,6 +263,11 @@ Live re-test result after the fix sequence:
 - `SERVER` mode test succeeded
 - towers were built during the test
 - match stayed synchronized
+
+Follow-up anti-desync hardening completed after that incident:
+- per-tick entity command processing tightened to be mutation-safe and order-stable
+- deterministic tie-break rules tightened in key nearest/selection logic
+- targeted determinism regression tests added for this class of failure
 
 Interpretation:
 - the previous failure was a real lockstep/network bug, not random lag

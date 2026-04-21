@@ -20,6 +20,7 @@ Update it when a phase is completed, reframed, or split.
   - new `lumbermill` building added
   - `tower` now requires lumber mill tech
   - first-pass global upgrades added: `meleeAttack1`, `armor1`, `buildingHp1`
+  - upgrades now run as timed research (`15s` each), not instant apply
 - local command feedback markers
 - online status strip
 - `statusMsg` surfaced in online UI
@@ -87,6 +88,13 @@ Update it when a phase is completed, reframed, or split.
 - targeted review found and helped close the stale-path-after-sidestep issue
 - live `SERVER` mode test after the April 2026 desync fixes stayed synchronized through tower builds in a Serbia <-> Russia run
 - lightweight online desync diagnostics are now available for future live repros
+- focused anti-desync pass completed:
+  - mutation-safe, order-stable per-tick entity command processing
+  - deterministic tie-break tightening in key nearest/selection paths
+  - targeted determinism regression tests added
+- network audit reports are now checked into repo root:
+  - `NETWORK_AUDIT_2026-04-21.md`
+  - `NETWORK_MECHANICS_AUDIT_2026-04-21.md`
 
 ### Known remaining caution
 - blocked-step sidestep still depends on same-tick entity processing order
@@ -143,6 +151,7 @@ If a pass is only UI/local render, targeted review is not required every time.
 Immediate project note:
 - map-balance correction pass v1 is now done
 - wood / lumber-mill economy pass is now in and needs explicit gameplay verification
+- lumber-mill upgrades now have a fixed `15s` research window and should be validated as timed, deterministic state transitions
 - next useful step is live validation, not another blind architecture pass
 - neutral-ownership semantic cleanup pass 1 is now done:
   - semantic ownership helpers added
@@ -186,9 +195,14 @@ Checklist:
 - lumber mill can be built normally
 - tower is properly gated behind lumber mill
 - lumber mill upgrades spend resources correctly and cannot be bought twice
+- each lumber mill upgrade has a visible `15s` research phase before effects apply
 - `Melee +1` affects melee combat correctly
 - `Armor +1` affects military armor correctly
 - `Building HP +15%` affects existing and future player buildings correctly
+
+Determinism follow-up for future `/new`:
+- before changing command-processing order, run the determinism regression tests first as a baseline
+- after changes, rerun and compare; do not merge order/selection changes without deterministic pass confirmation
 
 If any issue appears, prefer narrow mechanical fixes over more feature expansion.
 
