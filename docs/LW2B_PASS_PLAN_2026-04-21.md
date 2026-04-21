@@ -137,20 +137,27 @@ Definition of done:
 ---
 
 ### Pass C — validation pass
-Status: **planned after Pass B**
+Status: **done**
 
 Scope:
-- quick focused live verification after the logic/UI fixes land
-- this is not a new feature pass
+- quick focused validation after the logic/UI fixes landed
+- this remained a validation pass, not a new feature pass
 
-Recommended checks:
+Checks performed:
 1. worker chopping a tree that depletes on the final chop tick
 2. worker carrying wood when source tree disappears
-3. AI early wood timing on at least one human and one orc match flow
-4. command panel readability in Russian labels and moving-worker states
+3. AI early wood timing audit for Human and Orc flow logic
+4. command panel readability audit for Russian labels and moving-worker states
 
-Goal:
-- confirm that Pass B fixed behavior rather than only looking correct in code
+Result:
+- Pass C completed clean
+- no new in-scope defects were confirmed strongly enough to justify a code change in this pass
+- no fixes were made
+- build stayed green
+
+Validation note:
+- this pass confirmed the narrow reroute / AI harvesting / UI compaction work through targeted validation audit and build verification
+- no broader pathfinding, balance, or UI architecture work was pulled into scope
 
 ---
 
@@ -171,20 +178,18 @@ That is the recommended workflow for the remaining LW2B cleanup.
 ---
 
 ## Recommended next `/new`
-Best next `/new` instruction:
-- do **Pass C only**
-- treat it as focused live verification of the Pass B fixes
-- verify worker reroute, carry-return behavior, AI wood timing, and lower-panel readability
-- only fix tiny validation-found defects if they are clearly in-scope and low-risk
-- build
-- self-review diff
-- commit/push only if clean
+Pass C is now closed.
 
-Avoid in that pass:
+Best next `/new` instruction:
+- start from the next concrete live-found defect or next approved narrow gameplay/UI issue
+- keep the same small-pass discipline: one clearly bounded defect cluster only
+- reproduce the issue, fix only that issue, build, self-review diff, then commit/push if clean
+
+Still avoid:
 - broad pathfinding changes
 - larger UI architecture rewrites
 - unrelated balance retunes
-- new feature work
+- mixed multi-problem cleanup passes
 
 ---
 
@@ -192,5 +197,6 @@ Avoid in that pass:
 Current state:
 - Pass A is done and pushed
 - Pass B is done and pushed
-- next highest-value work is Pass C focused validation
-- remaining work should continue through small `/new` iterations, not one large cleanup branch
+- Pass C validation is done and clean
+- repo remains clean after validation
+- next work should continue through small `/new` iterations, not one large cleanup branch

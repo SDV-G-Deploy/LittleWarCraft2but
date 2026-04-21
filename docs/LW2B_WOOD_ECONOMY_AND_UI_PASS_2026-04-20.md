@@ -184,12 +184,20 @@ That pass fixed:
 - AI demand-based wood harvesting behavior
 - small lower-panel text density cleanup
 
-### Current next step from here
-Proceed through a small `/new` validation pass that checks only:
-- worker chopping a tree that depletes on the final chop tick
-- worker carrying wood when source disappears before/around return
-- AI early wood timing in at least one Human and one Orc flow
-- lower command-panel readability in the reviewed states
+### Validation follow-up status on 2026-04-21 Pass C
+A narrow validation pass was completed after Pass B.
 
-If validation is clean, stop there.
-Do not widen the next pass into broader UI architecture or balance redesign.
+What was confirmed:
+- worker wood reroute flow does not show a clear path back toward a dead tree target after return
+- the targeted depletion/carry-return edge cases look covered by the current gather-state guards
+- AI wood allocation logic remains intentionally practical and narrow for early lumbermill / farm / doctrine / wood-cost timing
+- lower-panel text compaction stayed within acceptable scope for the reviewed worker / barracks / lumbermill / construction / doctrine states
+
+Pass C result:
+- validation clean
+- no new safe in-scope code fixes were required
+- build remained green
+
+Current next step from here:
+- move to the next narrow `/new` only when there is a concrete next defect cluster or approved focused follow-up
+- do not widen this wood/UI line into broad pathfinding, balance redesign, or large UI architecture work without a separate decision
