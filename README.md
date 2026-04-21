@@ -296,10 +296,11 @@ PeerJS deployment note:
 TURN note for Docker deployments:
 - keep `--external-ip` set to the public host IP advertised to browsers
 - keep `--relay-ip=0.0.0.0` inside the container unless the container actually owns the public IP
-- open UDP/TCP `3478` plus the full relay range `49160-49200`
+- open UDP/TCP `3478`, TURN/TLS TCP `5349` (or your `TURN_TLS_PORT`), plus relay range `49160-49200`
 - prefer coturn shared-secret auth with short-lived credentials, served by `/api/ice`
 - for split frontend/backend deployments, allow explicit origin list (see `ICE_ALLOWED_ORIGINS`)
-- for difficult networks (DPI/UDP interference), add TURN over TLS (`turns:...:443?transport=tcp`) as a prioritized fallback (recommended next infra step)
+- `/api/ice` can now return `turns:` and prefer TLS-first ordering for difficult networks
+- in this default compose shape, true `turns:...:443` needs host-side 443 plumbing (nginx already owns 443 for HTTPS)
 
 Current production expectations:
 - `https://w2.kislota.today/` is the player-facing entry point for starting the game

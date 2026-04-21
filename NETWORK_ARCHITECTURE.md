@@ -102,6 +102,12 @@ Current self-hosted stack includes:
 - `coturn` (relay)
 - `ice-api` (short-lived TURN credential endpoint)
 
+Current TURN transport shape in repo:
+- TURN UDP/TCP on `3478`
+- TURN/TLS on configurable `TURN_TLS_PORT` (default `5349`)
+- ICE API can emit `turns:` first for TLS-friendly fallback on difficult networks
+- true `turns:...:443` still needs host-side 443 plumbing because nginx already terminates HTTPS on 443 in the default single-IP compose layout
+
 ### `infra/nginx.conf`
 Nginx routes requests by path:
 - `/peerjs` and `/peerjs/*` -> PeerJS

@@ -1,31 +1,52 @@
 # TURN migration notes
 
-## What changed
+## Current state in repo
 
-- coturn switched from static long-term user credentials to shared-secret auth
-- nginx `/peerjs` is now rate-limited and restricted to `https://w2.kislota.today`
-- client networking now prefers runtime ICE config from `./api/ice`, then falls back to build-time `VITE_ICE_SERVERS`
+- coturn uses shared-secret auth (`TURN_STATIC_AUTH_SECRET`)
+- `ice-api` returns short-lived TURN HMAC credentials via `GET /api/ice`
+- nginx fronts `/api/ice` and `/peerjs` on the same public origin
+- TURN/TLS plumbing is added:
+  - coturn listens on `TURN_TLS_PORT` (default `5349`)
+  - coturn reads cert/key from `./certbot/conf/live/${TURN_REALM}`
+  - ICE API can emit `turns:` and prefer it first
 
-## What still needs to be wired
+## Important limitation
 
-The browser cannot generate TURN HMAC credentials safely. A server-side endpoint must return short-lived ICE config.
+`443` is already used by nginx HTTPS in this stack.
 
-Recommended endpoint:
-- `GET /api/ice`
-- response: `{ "iceServers": [...] }`
-- cache: `no-store`
-- credential lifetime: 5 to 15 minutes
+So `turns:...:443` is **not automatic** in the default single-IP compose shape. To run TURN/TLS on 443, host-side networking must provide one of:
+- a dedicated public IP for coturn:443
+- or a separate TURN edge/LB that terminates or passes TCP 443 to coturn safely
 
-## TURN credential format
+Until then, TURN/TLS works on `5349` (or custom `TURN_TLS_PORT`).
 
-For coturn shared-secret mode:
-- username: `<unix-expiry-timestamp>:<opaque-session-id>`
-- credential: `base64(hmac-sha1(username, TURN_STATIC_AUTH_SECRET))`
+## Env knobs
 
-## Suggested rollout
+In `infra/.env`:
 
-1. Set a real `TURN_STATIC_AUTH_SECRET` in `infra/.env`
-2. Add a tiny serverless/edge/backend handler for `/api/ice`
-3. Return `iceServers` based on `infra/ice-config.template.json`
-4. Redeploy nginx + coturn
-5. Verify multiplayer over restricted NAT/mobile network
+- `TURN_TLS_PORT` (default `5349`)
+- `TURN_ENABLE_TLS` (`true|false`)
+- `TURN_PREFER_TLS` (`true|false`)
+
+Behavior of `/api/ice`:
+- always returns STUN
+- always returns `turn:...:3478?transport=tcp` and `...udp`
+- includes `turns:...:${TURN_TLS_PORT}?transport=tcp` when `TURN_ENABLE_TLS=true`
+- places `turns:` first when `TURN_PREFER_TLS=true`
+
+## Minimal rollout checklist
+
+1. Put real certs under `infra/certbot/conf/live/${TURN_REALM}/fullchain.pem` and `privkey.pem`
+2. Set strong `TURN_STATIC_AUTH_SECRET`
+3. `docker compose --env-file .env -f infra/compose.yaml up -d`
+4. Verify:
+   - `curl -fsS https://<domain>/api/ice | jq .`
+   - response contains `turns:` URL (if enabled)
+5. Test multiplayer from a difficult network (mobile/enterprise NAT)
+
+## For true TURN/TLS on 443
+
+After host-side 443 plumbing is prepared, set:
+- `TURN_TLS_PORT=443`
+
+and redeploy coturn + ICE API.

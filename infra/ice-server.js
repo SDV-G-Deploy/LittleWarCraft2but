@@ -4,6 +4,9 @@ const crypto = require('crypto');
 const PORT = Number(process.env.ICE_API_PORT || 8081);
 const TURN_HOST = process.env.TURN_HOST || 'w2.kislota.today';
 const TURN_PORT = Number(process.env.TURN_PORT || 3478);
+const TURN_TLS_PORT = Number(process.env.TURN_TLS_PORT || 5349);
+const TURN_ENABLE_TLS = String(process.env.TURN_ENABLE_TLS || 'true').toLowerCase() === 'true';
+const TURN_PREFER_TLS = String(process.env.TURN_PREFER_TLS || 'true').toLowerCase() === 'true';
 const TURN_SECRET = process.env.TURN_STATIC_AUTH_SECRET;
 const TURN_TTL_SECONDS = Number(process.env.TURN_TTL_SECONDS || 600);
 const allowedOrigins = (process.env.ICE_ALLOWED_ORIGINS || process.env.ICE_ALLOWED_ORIGIN || 'https://w2.kislota.today')
@@ -24,16 +27,28 @@ function makeTurnCredentials(sessionId = 'session') {
 
 function buildIceConfig(sessionId) {
   const { username, credential } = makeTurnCredentials(sessionId);
+
+  const relayUrls = [
+    `turn:${TURN_HOST}:${TURN_PORT}?transport=tcp`,
+    `turn:${TURN_HOST}:${TURN_PORT}?transport=udp`,
+  ];
+
+  if (TURN_ENABLE_TLS) {
+    const turnsUrl = `turns:${TURN_HOST}:${TURN_TLS_PORT}?transport=tcp`;
+    if (TURN_PREFER_TLS) {
+      relayUrls.unshift(turnsUrl);
+    } else {
+      relayUrls.push(turnsUrl);
+    }
+  }
+
   return {
     iceServers: [
       {
         urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
       },
       {
-        urls: [
-          `turn:${TURN_HOST}:${TURN_PORT}?transport=udp`,
-          `turn:${TURN_HOST}:${TURN_PORT}?transport=tcp`,
-        ],
+        urls: relayUrls,
         username,
         credential,
       },

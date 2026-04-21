@@ -50,16 +50,22 @@ services:
       - --listening-ip=0.0.0.0
       - --relay-ip=0.0.0.0
       - --listening-port=3478
+      - --tls-listening-port=${TURN_TLS_PORT:-5349}
       - --min-port=49160
       - --max-port=49200
       - --no-cli
-      - --no-tls
       - --no-dtls
+      - --cert=/certs/fullchain.pem
+      - --pkey=/certs/privkey.pem
+      - --cipher-list=HIGH:!aNULL:!MD5
     ports:
       - "3478:3478/tcp"
       - "3478:3478/udp"
+      - "${TURN_TLS_PORT:-5349}:${TURN_TLS_PORT:-5349}/tcp"
       - "49160-49200:49160-49200/tcp"
       - "49160-49200:49160-49200/udp"
+    volumes:
+      - ./certbot/conf/live/${TURN_REALM}:/certs:ro
 
   ice-api:
     image: node:20-alpine
@@ -72,10 +78,12 @@ services:
       ICE_ALLOWED_ORIGINS: https://w2.kislota.today,https://sdv-g-deploy.github.io
       TURN_HOST: ${TURN_REALM}
       TURN_PORT: 3478
+      TURN_TLS_PORT: ${TURN_TLS_PORT:-5349}
+      TURN_ENABLE_TLS: ${TURN_ENABLE_TLS:-true}
+      TURN_PREFER_TLS: ${TURN_PREFER_TLS:-true}
       TURN_STATIC_AUTH_SECRET: ${TURN_STATIC_AUTH_SECRET}
       TURN_TTL_SECONDS: 600
     expose:
       - "8081"
     volumes:
       - ./ice-server.js:/app/ice-server.js:ro
-
