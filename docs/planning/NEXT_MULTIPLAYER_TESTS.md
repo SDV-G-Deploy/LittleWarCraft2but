@@ -148,3 +148,16 @@ Next validation steps for this topic:
 - continue using GitHub Pages as the safer frontend test surface for Russia-facing checks
 - treat `w2.kislota.today` frontend black-screen reports as a separate accessibility issue from multiplayer protocol correctness
 - when possible, collect exact PeerJS/browser console error text from Russia users to distinguish signaling failure from TURN/WebRTC establishment failure
+- explicitly verify CORS/origin behavior for the real frontend origin against both `/api/ice` and `/peerjs`
+- verify that the new Helsinki backend accepts the intended frontend origin and does not silently retain old same-origin assumptions from `w2.kislota.today`
+
+## Current pre-live checklist after Helsinki backend switch
+
+Before interpreting the next live results, confirm these points:
+1. `rts.kislota.today/api/ice` responds correctly for the real frontend origin
+2. `rts.kislota.today/peerjs/id` works and websocket upgrade path is still correct
+3. client build really uses:
+   - `VITE_PEER_HOST=rts.kislota.today`
+   - explicit `VITE_ICE_API_URL=https://rts.kislota.today/api/ice`
+4. runtime ICE config no longer depends on Google STUN for the self-host path
+5. if a new failure appears, capture the exact PeerJS / ICE wording before changing infra again

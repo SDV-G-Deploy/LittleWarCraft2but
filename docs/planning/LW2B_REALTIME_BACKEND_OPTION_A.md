@@ -136,6 +136,16 @@ Responsibilities:
 - allow only the approved frontend origins
 - keep credentials out of the static bundle
 
+### Important cross-origin note
+Once frontend and realtime backend are split, CORS/origin policy becomes part of the critical path.
+
+That means:
+- `/api/ice` must explicitly allow the real frontend origin
+- `/peerjs` websocket/http paths must also tolerate the real frontend origin
+- old same-origin assumptions from `w2.kislota.today` must not be silently carried into the new backend
+
+This is a likely hidden failure mode because single-player can still work while `SERVER` mode fails only during cross-origin online setup.
+
 ---
 
 ## 7. Why changing only the public domain is not enough
@@ -291,10 +301,14 @@ Best interpretation:
 2. Assign one dedicated realtime domain or subdomain
 3. Deploy nginx + peerjs + coturn + ice-api
 4. Point the LW2B client at explicit realtime backend URLs
-5. Test from:
+5. Verify cross-origin policy before live user tests:
+   - `GET /api/ice` from the real frontend origin
+   - `/peerjs` path and websocket upgrade from the real frontend origin
+   - TLS, DNS, and route correctness for the chosen realtime domain
+6. Test from:
    - Serbia
    - one or more Russia networks
-6. Compare:
+7. Compare:
    - frontend load success
    - `SERVER` mode success
    - `DIRECT` mode behavior
@@ -329,3 +343,15 @@ Recommended immediate path:
 - VDSina Netherlands is acceptable as a first budget trial
 - do not treat domain rename alone as the solution
 - do not jump into a full networking rewrite before this infrastructure test is run
+
+## 15. Current Helsinki follow-up note
+
+The current LW2B follow-up introduced:
+- a Helsinki realtime backend endpoint at `rts.kislota.today`
+- explicit `VITE_ICE_API_URL`
+- removal of runtime dependence on relative `./api/ice`
+- runtime ICE preference shifted away from public Google STUN toward project-controlled TURN endpoints
+
+Current caution:
+- TURN TLS hardening is still an active follow-up area
+- cross-origin CORS/origin policy must be explicitly verified against the real frontend origin before drawing conclusions from user-facing live tests
