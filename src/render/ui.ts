@@ -345,7 +345,10 @@ function drawOnlineStrip(
     status === 'disconnected' ? t('online_disconnected') :
     status === 'error' ? t('online_error') :
     t('online_connecting');
-  const detail = onlineStatus.stats.lastInboundSummary || onlineStatus.statusMsg || label;
+  const detail =
+    (status === 'error' || stats.waitingStallTicks > 0)
+      ? onlineStatus.statusMsg || stats.netDebugSummary || label
+      : onlineStatus.stats.lastInboundSummary || stats.netDebugSummary || onlineStatus.statusMsg || label;
   const color =
     status === 'error' ? '#ff8888' :
     status === 'disconnected' ? '#ffb366' :

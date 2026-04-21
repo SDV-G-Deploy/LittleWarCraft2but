@@ -268,6 +268,11 @@ Runtime ICE override:
 - if unavailable, it falls back to `VITE_ICE_SERVERS`
 - production self-host should prefer `/api/ice` with short-lived TURN credentials
 
+Runtime net diagnostics (for live testers):
+- online strip now exposes compact net-debug state (`ice`, `pc`, `gather`, last packet age)
+- PeerJS/WebRTC failures are classified into clearer user-facing categories
+- browser console includes `[net:*]` traces for ICE/connection state changes and failure context
+
 Online menu now supports two runtime test modes:
 - `SERVER` uses the self-hosted PeerJS/TURN config from the build env
 - `DIRECT` uses public PeerJS (`0.peerjs.com`) plus browser STUN fallback
@@ -293,6 +298,8 @@ TURN note for Docker deployments:
 - keep `--relay-ip=0.0.0.0` inside the container unless the container actually owns the public IP
 - open UDP/TCP `3478` plus the full relay range `49160-49200`
 - prefer coturn shared-secret auth with short-lived credentials, served by `/api/ice`
+- for split frontend/backend deployments, allow explicit origin list (see `ICE_ALLOWED_ORIGINS`)
+- for difficult networks (DPI/UDP interference), add TURN over TLS (`turns:...:443?transport=tcp`) as a prioritized fallback (recommended next infra step)
 
 Current production expectations:
 - `https://w2.kislota.today/` is the player-facing entry point for starting the game

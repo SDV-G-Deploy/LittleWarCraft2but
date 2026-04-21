@@ -160,6 +160,10 @@ export interface SessionStats {
   currentDelayTicks: number;
   lastPacketAgeMs: number | null;
   lastInboundSummary: string | null;
+  rtcIceConnectionState: RTCIceConnectionState | null;
+  rtcConnectionState: RTCPeerConnectionState | null;
+  rtcIceGatheringState: RTCIceGatheringState | null;
+  netDebugSummary: string;
 }
 
 export interface NetSession {
@@ -185,6 +189,11 @@ export interface TickExchange {
   ready: boolean;
   local: NetCmd[];
   remote: NetCmd[];
+}
+
+interface FriendlyError {
+  userMessage: string;
+  debugCode: string;
 }
 
 // ─── Internal message types ───────────────────────────────────────────────────
@@ -307,10 +316,59 @@ export async function createSession(
   let lastPacketReceivedAt: number | null = null;
   let lastInboundSummary: string | null = null;
   let lastAcceptedTickLogged = -1;
+  let rtcIceConnectionState: RTCIceConnectionState | null = null;
+  let rtcConnectionState: RTCPeerConnectionState | null = null;
+  let rtcIceGatheringState: RTCIceGatheringState | null = null;
+
+  function getNetDebugSummary(): string {
+    const ice = rtcIceConnectionState ?? '-';
+    const connState = rtcConnectionState ?? '-';
+    const gather = rtcIceGatheringState ?? '-';
+    const age = lastPacketReceivedAt === null ? 'pkt=none' : `pkt=${Math.max(0, Date.now() - lastPacketReceivedAt)}ms`;
+    return `ice=${ice} pc=${connState} gather=${gather} ${age}`;
+  }
+
+  function classifyError(message: string, source: 'peer' | 'conn' | 'lockstep'): FriendlyError {
+    const text = message.toLowerCase();
+    if (source === 'lockstep' || text.includes('lockstep timeout')) {
+      return {
+        userMessage: 'Connection timed out waiting for peer data (possible UDP/TURN path issue).',
+        debugCode: 'LOCKSTEP_TIMEOUT',
+      };
+    }
+    if (text.includes('network') || text.includes('failed to fetch') || text.includes('disconnected')) {
+      return {
+        userMessage: 'Signaling/network path failed (check backend reachability and origin policy).',
+        debugCode: 'SIGNALING_NETWORK',
+      };
+    }
+    if (text.includes('ice') || text.includes('webrtc') || text.includes('turn') || text.includes('stun')) {
+      return {
+        userMessage: 'WebRTC ICE negotiation failed (relay/TCP/TLS route may be blocked).',
+        debugCode: 'ICE_NEGOTIATION',
+      };
+    }
+    if (text.includes('peer-unavailable')) {
+      return {
+        userMessage: 'Room not found or host offline.',
+        debugCode: 'PEER_UNAVAILABLE',
+      };
+    }
+    return {
+      userMessage: source === 'peer'
+        ? 'Peer signaling failed.'
+        : source === 'conn'
+          ? 'Peer data channel failed.'
+          : 'Online connection failed.',
+      debugCode: 'UNKNOWN',
+    };
+  }
 
   function failConnection(reason: string): void {
+    const friendly = classifyError(reason, 'lockstep');
     session.status = 'error';
-    session.statusMsg = reason;
+    session.statusMsg = `${friendly.userMessage} [${friendly.debugCode}]`;
+    console.warn(`[net:fail] ${reason} | ${getNetDebugSummary()}`);
     session.onStatusChange?.();
     conn?.close();
   }
@@ -459,6 +517,10 @@ export async function createSession(
         currentDelayTicks: EXECUTION_DELAY_TICKS,
         lastPacketAgeMs: lastPacketReceivedAt === null ? null : Math.max(0, Date.now() - lastPacketReceivedAt),
         lastInboundSummary,
+        rtcIceConnectionState,
+        rtcConnectionState,
+        rtcIceGatheringState,
+        netDebugSummary: getNetDebugSummary(),
       };
     },
 
@@ -484,6 +546,29 @@ export async function createSession(
 
   function setupConn(c: DataConnection) {
     conn = c;
+
+    const pc = (c as DataConnection & { peerConnection?: RTCPeerConnection }).peerConnection;
+    if (pc) {
+      rtcIceConnectionState = pc.iceConnectionState;
+      rtcConnectionState = pc.connectionState;
+      rtcIceGatheringState = pc.iceGatheringState;
+      console.info(`[net:rtc] setup ${getNetDebugSummary()}`);
+      pc.addEventListener('iceconnectionstatechange', () => {
+        rtcIceConnectionState = pc.iceConnectionState;
+        console.info(`[net:rtc] iceConnectionState=${rtcIceConnectionState} ${getNetDebugSummary()}`);
+      });
+      pc.addEventListener('connectionstatechange', () => {
+        rtcConnectionState = pc.connectionState;
+        console.info(`[net:rtc] connectionState=${rtcConnectionState} ${getNetDebugSummary()}`);
+      });
+      pc.addEventListener('icegatheringstatechange', () => {
+        rtcIceGatheringState = pc.iceGatheringState;
+        console.info(`[net:rtc] iceGatheringState=${rtcIceGatheringState} ${getNetDebugSummary()}`);
+      });
+      pc.addEventListener('icecandidateerror', (ev) => {
+        console.warn(`[net:rtc] icecandidateerror url=${ev.url ?? '?'} code=${ev.errorCode} text=${ev.errorText ?? ''}`);
+      });
+    }
 
     c.on('open', () => {
       if (role === 'guest') {
@@ -582,8 +667,11 @@ export async function createSession(
     });
 
     c.on('error', (err) => {
+      const rawMessage = (err as Error).message;
+      const friendly = classifyError(rawMessage, 'conn');
       session.status    = 'error';
-      session.statusMsg = `Connection error: ${(err as Error).message}`;
+      session.statusMsg = `${friendly.userMessage} [${friendly.debugCode}]`;
+      console.warn(`[net:conn-error] ${rawMessage} | ${getNetDebugSummary()}`);
       session.onStatusChange?.();
     });
   }
@@ -608,8 +696,11 @@ export async function createSession(
   });
 
   peer.on('error', (err) => {
+    const rawMessage = (err as Error).message;
+    const friendly = classifyError(rawMessage, 'peer');
     session.status    = 'error';
-    session.statusMsg = `PeerJS error: ${(err as Error).message}`;
+    session.statusMsg = `${friendly.userMessage} [${friendly.debugCode}]`;
+    console.warn(`[net:peer-error] ${rawMessage} | ${getNetDebugSummary()}`);
     session.onStatusChange?.();
   });
 

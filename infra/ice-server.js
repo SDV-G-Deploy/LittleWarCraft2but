@@ -6,7 +6,10 @@ const TURN_HOST = process.env.TURN_HOST || 'w2.kislota.today';
 const TURN_PORT = Number(process.env.TURN_PORT || 3478);
 const TURN_SECRET = process.env.TURN_STATIC_AUTH_SECRET;
 const TURN_TTL_SECONDS = Number(process.env.TURN_TTL_SECONDS || 600);
-const ALLOWED_ORIGIN = process.env.ICE_ALLOWED_ORIGIN || 'https://w2.kislota.today';
+const allowedOrigins = (process.env.ICE_ALLOWED_ORIGINS || process.env.ICE_ALLOWED_ORIGIN || 'https://w2.kislota.today')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 if (!TURN_SECRET) {
   throw new Error('TURN_STATIC_AUTH_SECRET is required');
@@ -40,7 +43,7 @@ function buildIceConfig(sessionId) {
 }
 
 function setCors(res, origin) {
-  if (origin === ALLOWED_ORIGIN) {
+  if (origin && allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
   }
