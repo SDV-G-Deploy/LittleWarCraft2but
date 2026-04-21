@@ -206,7 +206,11 @@ export function processAttack(state: GameState, entity: Entity): void {
   const attackerStats = resolveEntityStats(entity.kind, attackerRace);
   const targetIsUnit = isUnitKind(target.kind);
   const targetIsWall = target.kind === 'wall';
-  const targetIsBuilding = !targetIsUnit && !targetIsWall && target.kind !== 'goldmine' && target.kind !== 'barrier' && target.kind !== 'construction';
+  const targetIsBuilding =
+    !targetIsUnit &&
+    !targetIsWall &&
+    target.kind !== 'goldmine' &&
+    target.kind !== 'barrier';
   if (
     (targetIsUnit && !attackerStats.targetPolicy?.canAttackUnits) ||
     (targetIsWall && !attackerStats.targetPolicy?.canAttackWalls) ||
