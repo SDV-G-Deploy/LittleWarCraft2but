@@ -83,6 +83,10 @@ Still intentionally left in code for now:
 - some upgrade target hint text in UI
 - special scenario modifiers that depend on map context or timing windows
 
+Review follow-up note:
+- the biggest remaining data-driven UI gap is still upgrade target hinting / display helper logic in `src/render/ui.ts`
+- future cleanup should keep UI consuming balance metadata instead of maintaining parallel race-specific rule summaries
+
 ## Recommended next checks
 
 ### Live gameplay checks
@@ -94,6 +98,7 @@ Still intentionally left in code for now:
 ### Next architecture steps
 - generate upgrade target hint text from data instead of race-specific text strings
 - optionally move some modifier magnitudes and timing windows into config
+- keep an eye on authored modifier growth so balance remains readable and does not turn into stacked special-case combat scripting
 
 ## Validation performed
 - `npm run build`

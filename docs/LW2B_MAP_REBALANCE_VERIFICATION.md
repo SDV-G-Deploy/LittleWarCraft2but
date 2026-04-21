@@ -27,6 +27,7 @@ For every map, check the following:
 - Are watch posts locally useful without becoming passive snowball tools?
 - Does either spawn gain a noticeably easier first-contact, safer expansion, or cleaner center access?
 - Does any map collapse into one obvious script after a few games?
+- Do multiple strong features stack too cleanly for the same side, for example center control plus safest expansion plus best route leverage?
 
 ## Global validation checklist
 Use this after each live session:
@@ -61,6 +62,12 @@ Use this after each live session:
 - No single mine order or route order should clearly dominate every game
 - No map should reduce to one obviously correct center timing
 - If a feature is strong, it should still be contestable and punishable
+- Avoid maps where watch posts, rich center, and route geometry combine into one repeated authored script
+
+### 7. Combined-system stacking risk
+- Rich center, watch-post leverage, route blockers, and mine safety should be judged together, not one at a time
+- A map is risky if winning one early objective also grants the cleanest follow-up on every other objective
+- Strong map identity is good; stacked positional inevitability is not
 
 ## Map-by-map verification
 
@@ -200,4 +207,4 @@ For fast iteration, capture notes in this compact form:
 
 ## Current interpretation rule
 Do not overreact to one match.
-A map change should be reconsidered when it repeatedly produces the same dominant route, the same dominant expansion, or the same leverage bias across multiple live games.
+A map change should be reconsidered when it repeatedly produces the same dominant route, the same dominant expansion, the same leverage bias, or the same objective-stacking snowball across multiple live games.
