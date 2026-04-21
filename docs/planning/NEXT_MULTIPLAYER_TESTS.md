@@ -93,6 +93,15 @@ Minimum useful capture:
 - do not mix big gameplay changes with net-debug sessions
 - do not remove diagnostics yet; they are cheap insurance
 
+## Latest netcode status
+
+Since the earlier validator drift fix, one additional narrow hardening pass also landed:
+- `ceca959` , typed multiplayer command validator map in `src/net/session.ts`
+
+Meaning:
+- the specific recent validator/schema drift class is now better contained
+- if a fresh live issue still appears, suspicion should shift earlier toward sim/determinism, command application edge cases, or mode-specific runtime behavior, not the exact same validator omission by default
+
 ## Current recommendation
 
 The current build looks healthy enough to move back toward:

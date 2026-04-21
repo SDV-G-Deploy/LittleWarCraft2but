@@ -199,6 +199,37 @@ Notes:
 - this was a narrow UI-truth-source cleanup, not a broader UI architecture change
 - no balance, AI, renderer, pathfinding, network, or semantic-cleanup scope was mixed into this pass
 
+## Multiplayer validator hardening follow-up
+Status: **done**
+
+Scope:
+- narrow netcode hardening only
+- reduce future drift risk between wire-command definitions and multiplayer validator coverage
+- no transport rewrite, no gameplay/sim rewrite, no broad audit
+
+Trigger:
+- live multiplayer regression analysis identified validator/schema drift as a real recent failure class
+- `59e843f` fixed the immediate drift for `lumbermill` / `rally.plan` / recent command surface sync
+- one more narrow hardening pass was approved to make this class of mistake less likely to recur
+
+What landed:
+- `src/net/session.ts` manual `switch`-based net-command validator was replaced by a typed validator map
+- validator coverage is now keyed by `NetCmd['k']`, making command-kind coverage much harder to forget when new wire commands are added
+- explicit validator coverage remains in place for:
+  - `build:lumbermill`
+  - `rally.plan`
+  - doctrine upgrades
+
+Code result:
+- build green
+- pushed to `main`
+- commit: `ceca959`
+
+Notes:
+- this was a narrow structural hardening pass, not a transport-layer change
+- it lowers drift risk, but does not replace future acceptance/regression tests
+- next multiplayer work should return to live smoke testing and symptom-driven follow-ups, not speculative net refactors
+
 ## Recommended next `/new`
 The immediate upgrade-summary follow-up is now closed.
 

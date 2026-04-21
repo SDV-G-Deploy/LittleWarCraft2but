@@ -277,3 +277,28 @@ If a future run 4 happens, it should start from one of these concrete triggers:
 
 Otherwise, leave it here.
 This cleanup line is now in a good stopping state, and the next highest-value step is validation/testing rather than more semantic edits.
+
+## Multiplayer validator hardening status update
+
+### Completed now: narrow multiplayer validator hardening follow-up
+What landed:
+- `src/net/session.ts` manual `isNetCmd` switch was replaced by a typed validator map keyed by `NetCmd['k']`
+- command-kind coverage is now compile-time-coupled more tightly to the wire command union
+- explicit coverage remains for recent high-risk command paths:
+  - `build:lumbermill`
+  - `rally.plan`
+  - doctrine upgrades
+
+Why this mattered:
+- recent live multiplayer investigation found validator/schema drift was not hypothetical, it was a real defect class
+- the immediate bug was fixed in `59e843f`, but this follow-up reduces recurrence risk for future wire-command additions
+
+Result:
+- narrow pass only
+- no transport or sim rewrite
+- build green
+- pushed to `main` in `ceca959`
+
+Remaining recommendation:
+- add lightweight multiplayer command-acceptance regression checks in a future narrow pass if live testing stays important
+- until then, keep netcode in watch mode and prefer live symptom-driven investigation over speculative cleanup
