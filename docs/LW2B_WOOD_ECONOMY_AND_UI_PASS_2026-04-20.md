@@ -198,6 +198,7 @@ Pass C result:
 - no new safe in-scope code fixes were required
 - build remained green
 
-Current next step from here:
-- move to the next narrow `/new` only when there is a concrete next defect cluster or approved focused follow-up
-- do not widen this wood/UI line into broad pathfinding, balance redesign, or large UI architecture work without a separate decision
+Post-Pass-C follow-up:
+- a narrow UI-only follow-up later landed in `4ddba60` (`Make upgrade target hints data-driven`)
+- after that, the next `/new` should be chosen from a fresh concrete defect cluster or an explicitly approved focused follow-up
+- this wood/UI line still should not be widened into broad pathfinding, balance redesign, or large UI architecture work without a separate decision
