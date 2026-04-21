@@ -212,4 +212,5 @@ export interface PlayerUpgradeState {
   meleeAttackLevel: number;
   armorLevel: number;
   buildingHpLevel: number;
+  doctrine: 'fieldTempo' | 'lineHold' | 'longReach' | null;
 }

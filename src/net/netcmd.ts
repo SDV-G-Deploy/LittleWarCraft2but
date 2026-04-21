@@ -9,6 +9,7 @@ import { SIM_HZ, isUnitKind, isWorkerKind, areHostile } from '../types';
 import { getResolvedCost } from '../balance/resolver';
 import { RACE_BALANCE_PROFILES } from '../balance/races';
 import { hasUpgradeGroup, resolveEntityStats } from '../balance/resolver';
+import { DOCTRINE_COST } from '../balance/doctrines';
 import { issueAttackCommand } from '../sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, issueResumeBuildCommand, refundCancelledTrainCommand } from '../sim/economy';
 import { issueMoveCommand } from '../sim/commands';
@@ -27,7 +28,7 @@ export type NetCmd =
   | { k: 'rally';   buildingId: number; tx: number; ty: number; plan?: OpeningPlan }
   | { k: 'demolish';buildingId: number }
   | { k: 'resume';  workerId: number; siteId: number }
-  | { k: 'upgrade'; buildingId: number; upgrade: 'meleeAttack' | 'armor' | 'buildingHp' };
+  | { k: 'upgrade'; buildingId: number; upgrade: 'meleeAttack' | 'armor' | 'buildingHp' | 'doctrineFieldTempo' | 'doctrineLineHold' | 'doctrineLongReach' };
 
 function getBuildingHpMultiplier(race: Race, level: number): number {
   return race === 'human' ? 1 + (level * 20) / 100 : 1 + (level * 10) / 100;
@@ -212,6 +213,18 @@ export function applyNetCmds(
         const b = getEntity(state, cmd.buildingId);
         if (!b || b.owner !== owner || b.kind !== 'lumbermill') break;
         const upgrades = state.upgrades[owner];
+        if (cmd.upgrade === 'doctrineFieldTempo' || cmd.upgrade === 'doctrineLineHold' || cmd.upgrade === 'doctrineLongReach') {
+          if (upgrades.doctrine) break;
+          if (state.gold[owner] < DOCTRINE_COST.gold || state.wood[owner] < DOCTRINE_COST.wood) break;
+          state.gold[owner] -= DOCTRINE_COST.gold;
+          state.wood[owner] -= DOCTRINE_COST.wood;
+          upgrades.doctrine = cmd.upgrade === 'doctrineFieldTempo'
+            ? 'fieldTempo'
+            : cmd.upgrade === 'doctrineLineHold'
+              ? 'lineHold'
+              : 'longReach';
+          break;
+        }
         const race = state.races[owner];
         const defs = RACE_BALANCE_PROFILES[race].upgrades;
         const config = cmd.upgrade === 'meleeAttack' ? defs.meleeAttack : cmd.upgrade === 'armor' ? defs.armor : defs.buildingHp;

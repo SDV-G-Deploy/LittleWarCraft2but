@@ -15,6 +15,7 @@ import {
   shouldApplyTempoFirstMilitaryTrainBonus,
   shouldPressureAttackMoveCommit,
 } from '../balance/openings';
+import { applyDoctrineTrainTicks } from '../balance/doctrines';
 import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity, setEntityFootprint } from './entities';
 import { findPath } from './pathfinding';
 
@@ -385,6 +386,7 @@ export function issueTrainCommand(
   const owner = building.owner as 0 | 1;
   const openingPlan = state.openingPlanSelected[owner];
   let ticksLeft = getResolvedBuildTicks(unit, state.races[building.owner as 0 | 1]);
+  ticksLeft = applyDoctrineTrainTicks(state, owner, unit, ticksLeft);
   let openingTempoCommit = false;
 
   if (shouldApplyTempoFirstMilitaryTrainBonus(openingPlan, state.openingCommitmentClaimed[owner], state.tick, unit)) {
@@ -511,6 +513,7 @@ export function processTrain(state: GameState, building: Entity): void {
     const next = cmd.queue.shift()!;
     cmd.unit      = next;
     cmd.ticksLeft = getResolvedBuildTicks(next, state.races[owner]);
+    cmd.ticksLeft = applyDoctrineTrainTicks(state, owner, next, cmd.ticksLeft);
     cmd.openingTempoCommit = false;
     if (shouldApplyTempoFirstMilitaryTrainBonus(openingPlan, state.openingCommitmentClaimed[owner], state.tick, next)) {
       cmd.ticksLeft = applyTempoTrainTicks(cmd.ticksLeft);

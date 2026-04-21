@@ -245,6 +245,15 @@ function isNetCmd(v: unknown): v is NetCmd {
       return isInt(cmd.buildingId);
     case 'resume':
       return isInt(cmd.workerId) && isInt(cmd.siteId);
+    case 'upgrade':
+      return isInt(cmd.buildingId) && typeof cmd.upgrade === 'string' && (
+        cmd.upgrade === 'meleeAttack' ||
+        cmd.upgrade === 'armor' ||
+        cmd.upgrade === 'buildingHp' ||
+        cmd.upgrade === 'doctrineFieldTempo' ||
+        cmd.upgrade === 'doctrineLineHold' ||
+        cmd.upgrade === 'doctrineLongReach'
+      );
     default:
       return false;
   }

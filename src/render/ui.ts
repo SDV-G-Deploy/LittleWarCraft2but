@@ -6,6 +6,7 @@ import { ownerRace, ownerRaceProfile } from '../data/races';
 import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedSupplyProvided, getResolvedTileSize, hasUpgradeGroup } from '../balance/resolver';
 import { resolveAttackBonus } from '../balance/modifiers';
 import { getOpeningPlanLockTicks, getOpeningPlanPresentation } from '../balance/openings';
+import { DOCTRINE_COST } from '../balance/doctrines';
 import type { Camera } from './camera';
 import { isValidPlacement } from '../sim/economy';
 import { t, getLanguage } from '../i18n';
@@ -182,10 +183,14 @@ function getLumberMillUpgradeSummary(state: GameState, owner: 0 | 1): string[] {
   const buildingHpNow = race === 'human'
     ? upgrades.buildingHpLevel * 20
     : upgrades.buildingHpLevel * 10;
+  const doctrineLine = upgrades.doctrine
+    ? `${t('doctrine_locked')}: ${upgrades.doctrine === 'fieldTempo' ? t('doctrine_field_tempo') : upgrades.doctrine === 'lineHold' ? t('doctrine_line_hold') : t('doctrine_long_reach')}`
+    : `${t('doctrine_available')}: ${t('doctrine_pick_one')}`;
   return [
     `${t('upgrade_attack')}: +${profile.upgrades.meleeAttack.perLevel} ${t('upgrade_per_level')}, ${t('upgrade_level_word')} ${upgrades.meleeAttackLevel}/${profile.upgrades.meleeAttack.maxLevel}`,
     `${t('upgrade_defense')}: +${profile.upgrades.armor.perLevel} ${t('upgrade_per_level')}, ${t('upgrade_level_word')} ${upgrades.armorLevel}/${profile.upgrades.armor.maxLevel}`,
     `${t('upgrade_building_hp')}: +${profile.upgrades.buildingHp.perLevel}% ${t('upgrade_per_level')}, ${t('upgrade_level_word')} ${upgrades.buildingHpLevel}/${profile.upgrades.buildingHp.maxLevel} (${t('upgrade_now_bonus')} +${buildingHpNow}%)`,
+    doctrineLine,
   ];
 }
 
@@ -1129,6 +1134,12 @@ function collectButtons(
     addButton(`${t('upgrade_attack')} +${melee.perLevel} ${t('upgrade_level')} ${upgrades.meleeAttackLevel}/${melee.maxLevel}\n${compactUpgradeTargetHint('meleeAttack', race)} [${melee.cost.wood}w]`, 'upgrade:meleeAttack', upgrades.meleeAttackLevel >= melee.maxLevel || state.gold[myOwner] < melee.cost.gold || state.wood[myOwner] < melee.cost.wood, false, 0);
     addButton(`${t('upgrade_defense')} +${armor.perLevel} ${t('upgrade_level')} ${upgrades.armorLevel}/${armor.maxLevel}\n${compactUpgradeTargetHint('armor', race)} [${armor.cost.wood}w]`, 'upgrade:armor', upgrades.armorLevel >= armor.maxLevel || state.gold[myOwner] < armor.cost.gold || state.wood[myOwner] < armor.cost.wood, false, 1);
     addButton(`${t('upgrade_building_hp')} +${buildingHp.perLevel}% ${t('upgrade_level')} ${upgrades.buildingHpLevel}/${buildingHp.maxLevel}\n${compactUpgradeTargetHint('buildingHp', race)} [${buildingHp.cost.wood}w]`, 'upgrade:buildingHp', upgrades.buildingHpLevel >= buildingHp.maxLevel || state.gold[myOwner] < buildingHp.cost.gold || state.wood[myOwner] < buildingHp.cost.wood, false, 2);
+    const doctrineLocked = upgrades.doctrine !== null;
+    const doctrineUnaffordable = state.gold[myOwner] < DOCTRINE_COST.gold || state.wood[myOwner] < DOCTRINE_COST.wood;
+    const doctrineCost = `[${DOCTRINE_COST.gold}g ${DOCTRINE_COST.wood}w]`;
+    addButton(`${t('doctrine_field_tempo')}\n${t('doctrine_field_tempo_desc')} ${doctrineCost}`, 'upgrade:doctrineFieldTempo', doctrineLocked || doctrineUnaffordable, false, 3);
+    addButton(`${t('doctrine_line_hold')}\n${t('doctrine_line_hold_desc')} ${doctrineCost}`, 'upgrade:doctrineLineHold', doctrineLocked || doctrineUnaffordable, false, 4);
+    addButton(`${t('doctrine_long_reach')}\n${t('doctrine_long_reach_desc')} ${doctrineCost}`, 'upgrade:doctrineLongReach', doctrineLocked || doctrineUnaffordable, false, 5);
   }
 
   // ── Stop (any player unit/building with an active command) ──────────────────

@@ -2,6 +2,7 @@ import type { AIDifficulty, Entity, EntityKind, GameState, Vec2 } from '../types
 import { SIM_HZ, isUnitKind } from '../types';
 import { RACES } from '../data/races';
 import { getResolvedCost } from '../balance/resolver';
+import { DOCTRINE_COST } from '../balance/doctrines';
 import {
   issueGatherCommand, issueTrainCommand,
   issueBuildCommand, isValidPlacement,
@@ -36,6 +37,7 @@ export interface AIController {
   expansionMineReserveMin: number;
   attackRetargetRadius: number;
   attackBaseBias: number;
+  doctrineChoice: 'fieldTempo' | 'lineHold' | 'longReach';
 }
 
 export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
@@ -60,6 +62,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       expansionMineReserveMin: 900,
       attackRetargetRadius: 7,
       attackBaseBias: 8,
+      doctrineChoice: 'lineHold',
     };
   }
   if (difficulty === 'hard') {
@@ -83,6 +86,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       expansionMineReserveMin: 500,
       attackRetargetRadius: 4,
       attackBaseBias: 0,
+      doctrineChoice: 'longReach',
     };
   }
   return {
@@ -105,6 +109,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
     expansionMineReserveMin: 700,
     attackRetargetRadius: 6,
     attackBaseBias: 3,
+    doctrineChoice: 'fieldTempo',
   };
 }
 
@@ -124,6 +129,7 @@ export function tickAI(state: GameState, ai: AIController): void {
   const rc = RACES[state.races[1]];
 
   const myBarracks = es.find(e  => e.owner === 1 && e.kind === 'barracks');
+  const myLumberMill = es.find(e => e.owner === 1 && e.kind === 'lumbermill');
   const myWorkers  = es.filter(e => e.owner === 1 && e.kind === rc.worker);
   const mySoldiers = es.filter(e => e.owner === 1 &&
     (e.kind === rc.soldier || e.kind === rc.ranged || e.kind === rc.heavy));
@@ -134,6 +140,7 @@ export function tickAI(state: GameState, ai: AIController): void {
   const buildingFarm     = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'farm');
   const buildingBarracks = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'barracks');
   const buildingTower    = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'tower');
+  const buildingLumber   = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'lumbermill');
 
   if (!state.openingPlanSelected[1] && state.tick >= ai.openingChoiceDelayTicks) {
     state.openingPlanSelected[1] = ai.openingPlan;
@@ -172,6 +179,23 @@ export function tickAI(state: GameState, ai: AIController): void {
 
     // ── Military: train soldiers, expand pop cap, wait for wave ──────────────
     case 'military': {
+      if (!myLumberMill && !buildingLumber && myBarracks) {
+        const lumberCost = getResolvedCost('lumbermill', state.races[1]);
+        if (state.gold[1] >= lumberCost.gold && state.wood[1] >= lumberCost.wood) {
+          const w = freeWorker(myWorkers);
+          if (w) {
+            const pos = findBuildSpot(state, myTH, 'lumbermill');
+            if (pos) issueBuildCommand(state, w, 'lumbermill', pos, state.tick);
+          }
+        }
+      }
+
+      if (myLumberMill && !state.upgrades[1].doctrine && state.gold[1] >= DOCTRINE_COST.gold && state.wood[1] >= DOCTRINE_COST.wood) {
+        state.gold[1] -= DOCTRINE_COST.gold;
+        state.wood[1] -= DOCTRINE_COST.wood;
+        state.upgrades[1].doctrine = ai.doctrineChoice;
+      }
+
       if (myBarracks) {
         const soldierCount = mySoldiers.filter(u => u.kind === rc.soldier).length;
         const rangedCount  = mySoldiers.filter(u => u.kind === rc.ranged).length;

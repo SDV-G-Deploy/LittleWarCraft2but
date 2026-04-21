@@ -4,6 +4,7 @@ import { getEntity } from './entities';
 import { ticksPerStep } from '../data/units';
 import { getResolvedArmor, getResolvedAttackTicks, getResolvedDamage, getResolvedRange, getResolvedSpeed, resolveEntityStats } from '../balance/resolver';
 import { resolveAttackBonus } from '../balance/modifiers';
+import { getDoctrineArmorBonus, getDoctrineRangeBonus } from '../balance/doctrines';
 import { killEntity } from './entities';
 import { findPath } from './pathfinding';
 
@@ -71,7 +72,8 @@ function distBetweenEntities(attacker: Entity, target: Entity): number {
 export function isTargetAttackableNow(state: GameState, attacker: Entity, target: Entity): boolean {
   const race = usesRaceProfile(attacker.owner) ? state.races[attacker.owner] : null;
   const resolved = resolveEntityStats(attacker.kind, race);
-  const range = resolved.range;
+  const owner = attacker.owner as 0 | 1;
+  const range = resolved.range + (usesRaceProfile(attacker.owner) ? getDoctrineRangeBonus(state, owner, attacker.kind) : 0);
   if (distBetweenEntities(attacker, target) > range) return false;
   if (range <= 1) return true;
   if (!resolved.losPolicy?.requiresLOS) return true;
@@ -227,7 +229,7 @@ export function processAttack(state: GameState, entity: Entity): void {
     if (state.tick < cmd.cooldownTick) return;
 
     const dmg       = getResolvedDamage(entity.kind, usesRaceProfile(entity.owner) ? state.races[entity.owner] : null);
-    const armor     = getResolvedArmor(target);
+    const armor     = getResolvedArmor(target) + (usesRaceProfile(target.owner) ? getDoctrineArmorBonus(state, target.owner as 0 | 1, target.kind) : 0);
     const attackBonus = resolveAttackBonus({ state, attacker: entity, target });
     const netDmg    = Math.max(1, dmg - armor + attackBonus);
     pushAttackVisual(state, entity, target);
