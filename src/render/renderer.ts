@@ -1,5 +1,5 @@
 import type { GameState, TileKind, Entity } from '../types';
-import { TILE_SIZE, MAP_W, MAP_H, CORPSE_LIFE_TICKS, isUnitKind, isNeutralOwner, usesRaceProfile } from '../types';
+import { TILE_SIZE, MAP_W, MAP_H, CORPSE_LIFE_TICKS, isUnitKind, isNeutralOwner, isOpposingPlayerOwner, usesRaceProfile } from '../types';
 import { ticksPerStep } from '../data/units';
 import type { Camera } from './camera';
 import { worldToScreen } from './camera';
@@ -218,8 +218,8 @@ export function drawMinimap(
       ctx.fillStyle = '#ffe840';
     } else if (isNeutralOwner(e.owner)) {
       ctx.fillStyle = '#b8b8b8';
-    } else if (e.owner !== myOwner) {
-      // Enemy: obey fog rules (same as entityVisible in main render)
+    } else if (isOpposingPlayerOwner(e.owner, myOwner)) {
+      // Opposing player: obey fog rules (same as entityVisible in main render)
       const cy  = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
       const cx  = Math.min(MAP_W - 1, Math.max(0, e.pos.x + Math.floor(e.tileW / 2)));
       const fog = state.fog[cy][cx];
@@ -344,7 +344,7 @@ function entityVisible(state: GameState, e: Entity, myOwner: 0 | 1): boolean {
   const cx    = Math.min(MAP_W - 1, Math.max(0, e.pos.x + Math.floor(e.tileW / 2)));
   const cy    = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
   const fog   = state.fog[cy][cx];
-  const enemy = !isNeutralOwner(e.owner) && e.owner !== myOwner;
+  const enemy = isOpposingPlayerOwner(e.owner, myOwner);
   // Enemy units only visible in actively-visible cells
   if (enemy && isUnitKind(e.kind)) return fog === 'visible';
   // Everything else (buildings, mines) visible once explored

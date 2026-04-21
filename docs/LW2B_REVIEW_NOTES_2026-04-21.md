@@ -232,21 +232,44 @@ Definition of done reached:
 - neutral no longer leaks into that contested/opening modifier helper path
 
 ### `/new` pass 3 — defensive cleanup + sanity sweep
-Scope:
-- follow through in:
-  - `src/render/renderer.ts`
-  - `src/game.ts`
-  - `src/net/netcmd.ts`
-- remove leftover binary-owner shortcuts that remain after passes 1 and 2
-- review any still-broad presentation or flow sites that clearly want opposing-player semantics
-- do a final consistency sweep for neutral-safe semantics
+Status: **done**
 
-Explicit non-goals:
-- no broad refactor
-- no new mechanic layer
-- no balance tuning piggybacked onto this cleanup
+What landed:
+- `src/render/renderer.ts`
+  - minimap enemy-dot path now uses explicit opposing-player semantics
+  - `entityVisible(...)` enemy visibility path now uses explicit opposing-player semantics
+  - neutral no longer falls through broad non-self enemy rendering logic in those reviewed paths
+- `src/game.ts`
+  - remaining opening-plan fallback owner literals were rewritten to explicit player constants
+- `src/net/netcmd.ts`
+  - reviewed and intentionally left unchanged
+  - command-layer owner checks there are ownership/authorization guards, not leftover enemy-resolution shortcuts
 
-Definition of done:
-- neutral reads as a world-side semantic owner across the reviewed surfaces
-- player-only flows stay clearly player-only
-- no accidental widening of scope happened during cleanup
+What this intentionally did **not** touch:
+- renderer sprite-bank / palette assumptions for player-owned visual banks
+- broader renderer refactor
+- game-loop refactor
+- net command architecture cleanup
+- balance/combat/attack-system work
+- presentation-only wording cleanup where no semantic-risk issue existed
+
+Why:
+- the obvious pass-3 semantic non-self shortcuts in renderer visibility flow are now explicit
+- the remaining reviewed sites were either already semantically safe or would widen scope into real refactor territory
+
+Definition of done reached:
+- remaining obvious reviewed pass-3 binary-owner shortcuts were either made explicit or confirmed safe to leave
+- neutral-safe semantics were tightened in the renderer/game/net review scope without widening into architecture work
+- the pass stayed small, defensive, and reviewable
+
+### Possible future run 4 — only if there is a concrete reason
+Recommendation:
+- do **tests first**, not another cleanup pass by default
+
+If a future run 4 happens, it should start from one of these concrete triggers:
+- live test evidence that neutral renderables need broader sprite/palette semantics in `src/render/renderer.ts`
+- a real bug where presentation text or flow still routes neutral into enemy-player semantics
+- a deliberate decision to do a wider ownership/type cleanup across renderer/UI/network boundaries
+
+Otherwise, leave it here.
+This cleanup line is now in a good stopping state, and the next highest-value step is validation/testing rather than more semantic edits.

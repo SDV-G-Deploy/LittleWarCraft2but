@@ -1,5 +1,5 @@
 import { SIM_TICK_MS, TILE_SIZE, CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL, SIM_HZ,
-         isUnitKind, isWorkerKind, NEUTRAL, areHostile, type EntityKind, type Race, type MapId, type OpeningPlan, type AIDifficulty } from './types';
+         isUnitKind, isWorkerKind, NEUTRAL, PLAYER_1, PLAYER_2, areHostile, type EntityKind, type Race, type MapId, type OpeningPlan, type AIDifficulty } from './types';
 import { createWorld } from './sim/world';
 import { spawnEntity, killEntity, setEntityFootprint } from './sim/entities';
 import { processCommand, issueMoveCommand, separateUnits, autoAttackPass } from './sim/commands';
@@ -564,15 +564,15 @@ export function startGame(
   // ── Sim tick ───────────────────────────────────────────────────────────────
   function simTick(): void {
     if (!state.openingPlanSelected[0] && state.tick > OPENING_PLAN_LOCK_TICKS) {
-      state.openingPlanSelected[0] = 'eco';
+      state.openingPlanSelected[PLAYER_1] = 'eco';
       for (const en of state.entities) {
-        if (en.owner === 0 && (en.kind === 'townhall' || en.kind === 'barracks')) en.openingPlan = 'eco';
+        if (en.owner === PLAYER_1 && (en.kind === 'townhall' || en.kind === 'barracks')) en.openingPlan = 'eco';
       }
     }
-    if (!state.openingPlanSelected[1] && state.tick > OPENING_PLAN_LOCK_TICKS) {
-      state.openingPlanSelected[1] = 'eco';
+    if (!state.openingPlanSelected[PLAYER_2] && state.tick > OPENING_PLAN_LOCK_TICKS) {
+      state.openingPlanSelected[PLAYER_2] = 'eco';
       for (const en of state.entities) {
-        if (en.owner === 1 && (en.kind === 'townhall' || en.kind === 'barracks')) en.openingPlan = 'eco';
+        if (en.owner === PLAYER_2 && (en.kind === 'townhall' || en.kind === 'barracks')) en.openingPlan = 'eco';
       }
     }
     // Online mini-lockstep: advance only when this tick is ready on both sides.
