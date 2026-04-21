@@ -4,7 +4,7 @@ import { findPath } from './pathfinding';
 import { ticksPerStep } from '../data/units';
 import { processAttack, issueAttackCommand, isTargetAttackableNow } from './combat';
 import { processGather, processTrain, processBuild } from './economy';
-import { isTileBlockedByEntity } from './entities';
+import { getEntity, isTileBlockedByEntity } from './entities';
 import { profiler } from './profiler';
 import { getResolvedRange, getResolvedSpeed } from '../balance/resolver';
 
@@ -183,7 +183,7 @@ function acquireNearestTarget(
     const dy = target.pos.y - unit.pos.y;
     const distSq = dx * dx + dy * dy;
     if (distSq > sight * sight) continue;
-    if (distSq < bestDistSq) {
+    if (distSq < bestDistSq || (distSq === bestDistSq && best && target.id < best.id)) {
       best = target;
       bestDistSq = distSq;
     }
@@ -257,7 +257,10 @@ export function autoAttackPass(state: GameState): void {
   if (state.tick % 2 !== 0) return;
 
   const t0 = profiler.now();
-  for (const entity of state.entities) {
+  const stableIds = state.entities.map(e => e.id).sort((a, b) => a - b);
+  for (const id of stableIds) {
+    const entity = getEntity(state, id);
+    if (!entity) continue;
     const isUnit = isUnitKind(entity.kind);
     const isArmedBuilding = !isUnit
       && getResolvedSpeed(entity.kind, usesRaceProfile(entity.owner) ? state.races[entity.owner] : null) === 0
@@ -277,6 +280,15 @@ export function autoAttackPass(state: GameState): void {
     if (best) issueAttackCommand(entity, best.id, state.tick, state);
   }
   profiler.recordAutoAttack(profiler.now() - t0);
+}
+
+export function processCommandPass(state: GameState): void {
+  const stableIds = state.entities.map(e => e.id).sort((a, b) => a - b);
+  for (const id of stableIds) {
+    const entity = getEntity(state, id);
+    if (!entity) continue;
+    processCommand(state, entity);
+  }
 }
 
 /** Process one sim tick for a single entity's current command. */

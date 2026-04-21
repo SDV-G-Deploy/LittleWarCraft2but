@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test": "npx tsx src/sim/determinism.test.ts",
     "preview": "vite preview",
     "balance:report": "npx tsx src/balance/report-cli.ts",
     "balance:sheet": "npx tsx src/balance/balance-sheet-cli.ts"

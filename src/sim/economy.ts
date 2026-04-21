@@ -69,7 +69,7 @@ function nearestDropoff(state: GameState, owner: 0 | 1, px: number, py: number, 
     const valid = e.owner === owner && (e.kind === 'townhall' || (resourceType === 'wood' && e.kind === 'lumbermill'));
     if (!valid) continue;
     const d = Math.hypot(e.pos.x - px, e.pos.y - py);
-    if (d < bestD) { bestD = d; best = e; }
+    if (d < bestD || (d === bestD && best && e.id < best.id)) { bestD = d; best = e; }
   }
   return best;
 }
@@ -137,7 +137,7 @@ function bestContestedMine(state: GameState, owner: 0 | 1): Entity | null {
     const enemyDist = Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y);
     const centerBias = e.pos.x > 16 && e.pos.x < 48 ? 6 : 0;
     const score = (e.goldReserve ?? 0) / 100 + centerBias - Math.abs(myDist - enemyDist) * 0.2;
-    if (score > bestScore) {
+    if (score > bestScore || (score === bestScore && best && e.id < best.id)) {
       best = e;
       bestScore = score;
     }

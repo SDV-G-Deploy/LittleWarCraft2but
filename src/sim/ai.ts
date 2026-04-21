@@ -329,7 +329,7 @@ function nearestMine(state: GameState, unit: Entity): Entity | null {
   for (const e of state.entities) {
     if (e.kind !== 'goldmine' || (e.goldReserve ?? 0) <= 0) continue;
     const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
-    if (d < bestD) { bestD = d; best = e; }
+    if (d < bestD || (d === bestD && best && e.id < best.id)) { bestD = d; best = e; }
   }
   return best;
 }
@@ -390,7 +390,7 @@ function nearestPlayerEntity(state: GameState, unit: Entity, maxDistance = Infin
     if (!isOwnedByOpposingPlayer(e, 1) || e.kind === 'goldmine' || e.kind === 'barrier') continue;
     const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
     if (d > maxDistance) continue;
-    if (d < bestD) { bestD = d; best = e; }
+    if (d < bestD || (d === bestD && best && e.id < best.id)) { bestD = d; best = e; }
   }
   return best;
 }
@@ -401,7 +401,7 @@ function nearestPlayerUnit(state: GameState, unit: Entity, maxDistance = Infinit
     if (!isOwnedByOpposingPlayer(e, 1) || !isUnitKind(e.kind)) continue;
     const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
     if (d > maxDistance) continue;
-    if (d < bestD) { bestD = d; best = e; }
+    if (d < bestD || (d === bestD && best && e.id < best.id)) { bestD = d; best = e; }
   }
   return best;
 }
@@ -419,7 +419,7 @@ function bestContestedMine(state: GameState, owner: 0 | 1, ai: AIController): En
     const enemyDist = Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y);
     const centerBias = e.pos.x > 16 && e.pos.x < 48 ? 6 : 0;
     const score = (e.goldReserve ?? 0) / 100 + centerBias - Math.abs(myDist - enemyDist) * 0.2 - ai.attackBaseBias * 0.15;
-    if (score > bestScore) {
+    if (score > bestScore || (score === bestScore && best && e.id < best.id)) {
       best = e;
       bestScore = score;
     }
@@ -440,7 +440,7 @@ function bestExpansionMine(state: GameState, owner: 0 | 1, ai: AIController): En
     const enemyDist = Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y);
     if (myDist >= enemyDist) continue;
     const score = (e.goldReserve ?? 0) / 100 - myDist * 0.25 + enemyDist * 0.12;
-    if (score > bestScore) {
+    if (score > bestScore || (score === bestScore && best && e.id < best.id)) {
       best = e;
       bestScore = score;
     }

@@ -2,7 +2,7 @@ import { SIM_TICK_MS, TILE_SIZE, CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL, SIM_HZ,
          isUnitKind, isWorkerKind, NEUTRAL, PLAYER_1, PLAYER_2, areHostile, type EntityKind, type Race, type MapId, type OpeningPlan, type AIDifficulty } from './types';
 import { createWorld } from './sim/world';
 import { spawnEntity, killEntity, setEntityFootprint } from './sim/entities';
-import { processCommand, issueMoveCommand, separateUnits, autoAttackPass } from './sim/commands';
+import { processCommandPass, issueMoveCommand, separateUnits, autoAttackPass } from './sim/commands';
 import { issueAttackCommand } from './sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, computePopCaps } from './sim/economy';
 import { updateFog } from './sim/fogofwar';
@@ -610,7 +610,7 @@ export function startGame(
     }
 
     let p0 = profiler.now();
-    for (const entity of state.entities) processCommand(state, entity);
+    processCommandPass(state);
     profiler.recordPhase('processCommand', profiler.now() - p0);
 
     p0 = profiler.now();
