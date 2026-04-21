@@ -15,7 +15,7 @@ import {
   shouldApplyTempoFirstMilitaryTrainBonus,
   shouldPressureAttackMoveCommit,
 } from '../balance/openings';
-import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity } from './entities';
+import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity, setEntityFootprint } from './entities';
 import { findPath } from './pathfinding';
 
 // ─── Population ───────────────────────────────────────────────────────────────
@@ -577,8 +577,7 @@ export function issueBuildCommand(
   const site = spawnEntity(state, 'construction', worker.owner as 0 | 1, pos);
   site.hp    = 0;
   site.hpMax = stats.buildTicks;
-  site.tileW = stats.tileW;
-  site.tileH = stats.tileH;
+  setEntityFootprint(state, site, stats.tileW, stats.tileH);
   site.constructionOf = building;
 
   worker.cmd = {

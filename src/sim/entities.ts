@@ -70,6 +70,13 @@ export function spawnEntity(
   return entity;
 }
 
+export function setEntityFootprint(state: GameState, entity: Entity, tileW: number, tileH: number): void {
+  updateBlockedFootprint(state, entity, false);
+  entity.tileW = tileW;
+  entity.tileH = tileH;
+  updateBlockedFootprint(state, entity, true);
+}
+
 export function killEntity(state: GameState, id: number): void {
   const idx = state.entities.findIndex(e => e.id === id);
   if (idx !== -1) {

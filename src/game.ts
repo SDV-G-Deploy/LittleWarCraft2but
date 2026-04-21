@@ -1,7 +1,7 @@
 import { SIM_TICK_MS, TILE_SIZE, CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL, SIM_HZ,
          isUnitKind, isWorkerKind, NEUTRAL, areHostile, type EntityKind, type Race, type MapId, type OpeningPlan, type AIDifficulty } from './types';
 import { createWorld } from './sim/world';
-import { spawnEntity, killEntity } from './sim/entities';
+import { spawnEntity, killEntity, setEntityFootprint } from './sim/entities';
 import { processCommand, issueMoveCommand, separateUnits, autoAttackPass } from './sim/commands';
 import { issueAttackCommand } from './sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, computePopCaps } from './sim/economy';
@@ -167,8 +167,9 @@ export function startGame(
   // ── Spawn neutral destructible blockers ───────────────────────────────────
   for (const blocker of mapData.blockers ?? []) {
     const entity = spawnEntity(state, 'barrier', NEUTRAL, { x: blocker.x, y: blocker.y });
-    entity.tileW = blocker.tileW ?? entity.tileW;
-    entity.tileH = blocker.tileH ?? entity.tileH;
+    const tileW = blocker.tileW ?? entity.tileW;
+    const tileH = blocker.tileH ?? entity.tileH;
+    if (tileW !== entity.tileW || tileH !== entity.tileH) setEntityFootprint(state, entity, tileW, tileH);
   }
 
   // ── Spawn AI / guest base ─────────────────────────────────────────────────
