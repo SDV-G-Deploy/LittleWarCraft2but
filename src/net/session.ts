@@ -190,8 +190,9 @@ type WireMessage =
 
 const VALID_RACES = new Set<Race>(['human', 'orc']);
 const VALID_MAP_IDS = new Set<MapId>([1, 2, 3, 4, 5, 6]);
-const VALID_BUILDINGS = new Set<EntityKind>(['townhall', 'barracks', 'farm', 'wall', 'tower']);
+const VALID_BUILDINGS = new Set<EntityKind>(['townhall', 'barracks', 'lumbermill', 'farm', 'wall', 'tower']);
 const VALID_TRAIN_UNITS = new Set<EntityKind>(['worker', 'footman', 'archer', 'knight', 'peon', 'grunt', 'troll', 'ogreFighter']);
+const VALID_OPENING_PLANS = new Set(['eco', 'tempo', 'pressure']);
 
 const MAX_PACKET_BYTES = 16 * 1024;
 const MAX_CMDS_PER_PACKET = 128;
@@ -240,7 +241,7 @@ function isNetCmd(v: unknown): v is NetCmd {
     case 'set_plan':
       return isInt(cmd.buildingId) && typeof cmd.plan === 'string' && (cmd.plan === 'eco' || cmd.plan === 'tempo' || cmd.plan === 'pressure');
     case 'rally':
-      return isInt(cmd.buildingId) && isInt(cmd.tx) && isInt(cmd.ty);
+      return isInt(cmd.buildingId) && isInt(cmd.tx) && isInt(cmd.ty) && (cmd.plan === undefined || (typeof cmd.plan === 'string' && VALID_OPENING_PLANS.has(cmd.plan)));
     case 'demolish':
       return isInt(cmd.buildingId);
     case 'resume':
