@@ -726,8 +726,8 @@ export function startGame(
       renderAlpha = simAccum / SIM_TICK_MS;
     }
 
+    const dockLayout = getDockLayout(canvas.width, viewH);
     render(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, selectedIds, myOwner, renderAlpha);
-    drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, myOwner, getDockLayout(canvas.width, viewH).minimapRect);
     if (placementMode) {
       const { tx, ty } = screenToTile(mouse.x, mouse.y, cam);
       drawGhostBuilding(ctx, state, cam, placementMode.building, tx, ty);
@@ -742,6 +742,7 @@ export function startGame(
       statusMsg: lastNetChecksumLine ? `${net.statusMsg} | ${lastNetChecksumLine}` : net.statusMsg,
       stats: net.getStats(),
     } : null, openingPlanFeedback);
+    drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, myOwner, dockLayout.minimapRect);
     drawGroupBadges();
     drawResultOverlay();
 

@@ -56,7 +56,7 @@ export const RACE_BALANCE_PROFILES: Record<Race, RaceBalanceProfile> = {
       rangedLabel: 'Troll',
       heavyLabel: 'Ogre Fighter',
       hallLabel: 'Great Hall',
-      barrLabel: 'War Mill',
+      barrLabel: 'Barracks',
       farmLabel: 'Pig Farm',
       towerLabel: 'Watch Tower',
       lumberMillLabel: 'War Mill',

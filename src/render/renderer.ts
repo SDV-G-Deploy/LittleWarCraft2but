@@ -249,12 +249,6 @@ export function drawMinimap(
   ctx.lineWidth   = 1;
   ctx.strokeRect(MX + vx, MY + vy, vw, vh);
 
-  // ── Label ─────────────────────────────────────────────────────────────────
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.font      = '9px monospace';
-  ctx.textAlign = 'right';
-  ctx.fillText('MAP', MX + MINI_W - 2, MY + MINI_H - 2);
-  ctx.textAlign = 'left';
 }
 
 // ─── Tiles ────────────────────────────────────────────────────────────────────
@@ -642,7 +636,7 @@ function drawBuilding(
   } else if (renderKind === 'townhall') {
     sprite = isOrc ? sp.greathall[e.owner as 0 | 1] : sp.townhall[e.owner as 0 | 1];
   } else if (renderKind === 'barracks') {
-    sprite = isOrc ? sp.warmill[e.owner as 0 | 1]   : sp.barracks[e.owner as 0 | 1];
+    sprite = sp.barracks[e.owner as 0 | 1];
   } else if (renderKind === 'tower') {
     sprite = isOrc ? sp.watchtower[e.owner as 0 | 1] : sp.tower[e.owner as 0 | 1];
   } else {

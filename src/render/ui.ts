@@ -1056,7 +1056,21 @@ function collectButtons(
   let nextSlot = 0;
 
   function addButton(label: string, action: string, disabled = false, danger = false, slot?: number): void {
-    const targetSlot = typeof slot === 'number' ? slot : nextSlot;
+    const gridCapacity = CMD_GRID_COLS * CMD_GRID_ROWS;
+    const used = new Set(specs.map(spec => spec.slot));
+
+    let targetSlot = typeof slot === 'number' ? slot : nextSlot;
+    if (targetSlot < 0 || targetSlot >= gridCapacity || used.has(targetSlot)) {
+      targetSlot = -1;
+      for (let i = 0; i < gridCapacity; i++) {
+        if (!used.has(i)) {
+          targetSlot = i;
+          break;
+        }
+      }
+      if (targetSlot === -1) return;
+    }
+
     nextSlot = Math.max(nextSlot, targetSlot + 1);
     specs.push({ slot: targetSlot, label, action, disabled, danger });
   }
@@ -1124,7 +1138,7 @@ function collectButtons(
     addButton(`${farmLabel} [F]\n[${farmCost.gold}g${farmCost.wood ? ` ${farmCost.wood}w` : ''}]`, 'build:farm',     state.gold[myOwner] < farmCost.gold || state.wood[myOwner] < farmCost.wood, false, 2);
     addButton(`${translateDisplayLabel(rc.towerLabel)} [G]\n[${towerCost.gold}g${towerCost.wood ? ` ${towerCost.wood}w` : ''}]`, 'build:tower', state.gold[myOwner] < towerCost.gold || state.wood[myOwner] < towerCost.wood || !hasBarracks || !hasLumbermill, false, 3);
     addButton(`${t('wall')} [W]\n[${wallCost.gold}g${wallCost.wood ? ` ${wallCost.wood}w` : ''}]`,  'build:wall',     state.gold[myOwner] < wallCost.gold || state.wood[myOwner] < wallCost.wood, false, 4);
-    if (state.gold[myOwner] >= wallCost.gold && state.wood[myOwner] >= wallCost.wood) {
+    if (e.cmd === null && state.gold[myOwner] >= wallCost.gold && state.wood[myOwner] >= wallCost.wood) {
       addButton(t('hold_line'), 'build:wall', false, false, 5);
     }
   }
