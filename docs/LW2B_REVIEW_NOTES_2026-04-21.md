@@ -24,6 +24,11 @@ Recommendation:
 - generate upgrade target summaries from resolved data / `upgradeGroups`
 - keep UI as a consumer of balance metadata, not a second rules source
 
+Status update:
+- **done** in narrow follow-up commit `4ddba60`
+- upgrade target summaries now derive from resolved metadata / applies-to groups instead of hardcoded race-specific hint branches
+- compact summaries were also moved off the second manual rules list
+
 ### 2. `src/render/ui.ts`
 Some enemy-resolution logic still uses `owner !== myOwner` where the intended meaning is really opposing player, not any non-self owner.
 
@@ -165,9 +170,8 @@ It is weaker when too much variety comes from narrowly-authored bonus windows.
    - blockers
    - watch-post leverage
    - center-rich objective stacking
-2. Keep UI upgrade summaries moving toward fully data-driven balance metadata
-3. Finish the remaining neutral-semantics cleanup in small isolated passes
-4. Avoid adding another layer of opening-specific combat bonuses until live tests prove it is needed
+2. Finish the remaining neutral-semantics cleanup only if a concrete trigger appears
+3. Avoid adding another layer of opening-specific combat bonuses until live tests prove it is needed
 
 ## Neutral ownership cleanup status update
 

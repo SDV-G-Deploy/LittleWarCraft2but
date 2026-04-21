@@ -177,11 +177,34 @@ That is the recommended workflow for the remaining LW2B cleanup.
 
 ---
 
+## Post-Pass-C narrow follow-up
+Status: **done**
+
+Scope:
+- UI upgrade target summaries only
+- remove the remaining hardcoded race-specific target hint paths in `src/render/ui.ts`
+- move summary generation to resolved balance metadata via upgrade groups / applies-to data
+
+What landed:
+- upgrade target hints are now generated from data instead of hardcoded race-specific helper branches
+- compact target summaries also derive from the resolved target set instead of a second manual rules list
+- the pass stayed local to the summary layer in `src/render/ui.ts`
+
+Code result:
+- build green
+- pushed to `main`
+- commit: `4ddba60`
+
+Notes:
+- this was a narrow UI-truth-source cleanup, not a broader UI architecture change
+- no balance, AI, renderer, pathfinding, network, or semantic-cleanup scope was mixed into this pass
+
 ## Recommended next `/new`
-Pass C is now closed.
+The immediate upgrade-summary follow-up is now closed.
 
 Best next `/new` instruction:
 - start from the next concrete live-found defect or next approved narrow gameplay/UI issue
+- prefer validation/testing over speculative cleanup by default
 - keep the same small-pass discipline: one clearly bounded defect cluster only
 - reproduce the issue, fix only that issue, build, self-review diff, then commit/push if clean
 
@@ -190,6 +213,7 @@ Still avoid:
 - larger UI architecture rewrites
 - unrelated balance retunes
 - mixed multi-problem cleanup passes
+- additional cleanup passes without a real trigger
 
 ---
 
@@ -198,5 +222,5 @@ Current state:
 - Pass A is done and pushed
 - Pass B is done and pushed
 - Pass C validation is done and clean
-- repo remains clean after validation
-- next work should continue through small `/new` iterations, not one large cleanup branch
+- narrow UI upgrade-summary follow-up is done and pushed
+- repo should continue through small `/new` iterations, not one large cleanup branch
