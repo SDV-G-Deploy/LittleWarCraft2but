@@ -52,7 +52,7 @@ Notes:
 ---
 
 ### Pass B — wood gather reroute + AI wood harvesting + small UI text compaction
-Status: **next planned pass**
+Status: **done**
 
 Scope:
 1. worker wood depletion reroute bug
@@ -79,6 +79,24 @@ Definition of done:
   - returns carried wood correctly, or
   - goes safely idle
 - no drift toward invalid fallback coordinates
+
+What landed:
+- wood depletion reroute now re-evaluates from the worker's current position instead of clinging to the exhausted tree's old tile id
+- gather state is explicitly reset on successful wood retarget so stale path / stale phase state does not leak through the return loop
+- post-return guard was tightened so a worker does not resume toward a dead tree target after deposit
+- AI now uses a narrow demand-based wood worker allocation policy instead of keeping nearly all workers gold-first
+- AI wood demand considers near-term lumbermill, farm, doctrine, tower, and wood-cost production pressure
+- lower command-panel labels were compacted by removing unnecessary bracket noise around cost lines
+
+Code result:
+- build green
+- pushed to `main`
+- commit: `bcb0628`
+
+Notes:
+- this stayed narrow to `src/sim/economy.ts`, `src/sim/ai.ts`, and `src/render/ui.ts`
+- no broad pathfinding rewrite
+- no balance retune, map redesign, netcode work, or large UI architecture changes
 
 #### B2. AI wood harvesting
 Primary target file:
@@ -154,8 +172,10 @@ That is the recommended workflow for the remaining LW2B cleanup.
 
 ## Recommended next `/new`
 Best next `/new` instruction:
-- do **Pass B only**
-- keep reroute, AI wood policy, and compact text cleanup narrow
+- do **Pass C only**
+- treat it as focused live verification of the Pass B fixes
+- verify worker reroute, carry-return behavior, AI wood timing, and lower-panel readability
+- only fix tiny validation-found defects if they are clearly in-scope and low-risk
 - build
 - self-review diff
 - commit/push only if clean
@@ -171,5 +191,6 @@ Avoid in that pass:
 ## Short operational summary
 Current state:
 - Pass A is done and pushed
-- next highest-value work is Pass B
+- Pass B is done and pushed
+- next highest-value work is Pass C focused validation
 - remaining work should continue through small `/new` iterations, not one large cleanup branch

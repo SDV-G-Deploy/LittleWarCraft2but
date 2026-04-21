@@ -503,8 +503,10 @@ What this pass fixed:
 For the next `/new` iterations, the UI side should proceed in this order:
 
 1. **small text-compaction cleanup only**
-   - reduce overcrowding in the most text-heavy command-button states
-   - keep this narrow and local to `src/render/ui.ts`
+   - status: done
+   - lower command-panel cost lines were compacted in the reviewed worker / barracks / build / upgrade / doctrine states
+   - this stayed narrow and local to `src/render/ui.ts`
+   - commit: `bcb0628`
 
 2. **validation pass**
    - verify worker, barracks, lumbermill, construction/demolish, and doctrine-button states in live play

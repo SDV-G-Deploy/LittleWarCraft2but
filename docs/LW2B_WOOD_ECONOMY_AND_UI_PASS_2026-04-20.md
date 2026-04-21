@@ -152,19 +152,20 @@ The most important outcome to validate now is whether the wood resource feels li
 
 A later direct review confirmed that this pass improved the wood layer, but did **not** finish the whole wood-related cleanup line.
 
-### Confirmed still-open follow-up items
-1. **worker depletion/reroute edge case still needs a narrow fix pass**
-   - symptom reported: after a tree tile is exhausted, workers can sometimes enter a bad fallback/reroute state
-   - target area for next fix: `src/sim/economy.ts`
+### Follow-up items resolved on 2026-04-21 Pass B
+1. **worker depletion/reroute edge case**
+   - fixed in `src/sim/economy.ts`
+   - reroute now re-evaluates from the worker's current position and safely resets gather state when retargeting
+   - post-return logic no longer blindly resumes toward a depleted old tree target
 
-2. **AI wood harvesting policy still lags behind the newer wood-cost model**
-   - the economy model now expects wood-sensitive decisions
-   - AI still needs an explicit narrow wood-allocation policy update instead of relying on gold-first behavior
-   - target area for next fix: `src/sim/ai.ts`
+2. **AI wood harvesting policy**
+   - fixed in `src/sim/ai.ts`
+   - AI now allocates a small number of workers to wood based on near-term demand instead of staying nearly pure gold-first
+   - the policy remains intentionally narrow and is not a large economy rewrite
 
-3. **UI text compaction still needs one narrow cleanup pass**
-   - the larger top HUD and friendlier selection panel landed well
-   - but some lower command-panel labels remain too dense in a few states
+3. **UI text compaction**
+   - fixed in `src/render/ui.ts`
+   - lower command-panel labels were compacted in the reviewed high-density states without a broader redesign
 
 ### Confirmed completed related cleanup
 A separate narrow cleanup pass already landed and was pushed:
@@ -175,10 +176,20 @@ That pass fixed:
 - worker `Wall` vs `Stop` slot collision
 - orc barracks vs orc lumbermill visual/naming confusion
 
-### Recommended next step from here
-Proceed through a small `/new` pass that handles only:
-- worker wood reroute edge case
-- AI wood harvesting update
-- small UI text compaction
+A later narrow follow-up pass also landed and was pushed:
+- `bcb0628` — `Fix wood reroute edge cases, AI harvesting, and UI text density`
 
-Do not widen that pass into broader UI architecture or balance redesign.
+That pass fixed:
+- worker wood depletion / reroute edge cases
+- AI demand-based wood harvesting behavior
+- small lower-panel text density cleanup
+
+### Current next step from here
+Proceed through a small `/new` validation pass that checks only:
+- worker chopping a tree that depletes on the final chop tick
+- worker carrying wood when source disappears before/around return
+- AI early wood timing in at least one Human and one Orc flow
+- lower command-panel readability in the reviewed states
+
+If validation is clean, stop there.
+Do not widen the next pass into broader UI architecture or balance redesign.
