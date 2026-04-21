@@ -24,10 +24,8 @@ export function buildMap05(): MapData {
 
   // Openings in lane walls.
   fill(map, 20, 10, 6, 7, G);
-  fill(map, 20, 28, 6, 7, G);
   fill(map, 20, 46, 6, 7, G);
   fill(map, 38, 16, 6, 7, G);
-  fill(map, 38, 34, 6, 7, G);
   fill(map, 38, 52, 6, 6, G);
 
   fill(map, 28, 18, 2, 6, R);
@@ -36,13 +34,8 @@ export function buildMap05(): MapData {
   map[26][31] = P();
   map[30][27] = P();
 
-  // Slightly widen one staggered lane opening on each wall to strengthen route-choice variety.
-  // Keep this pair rotation-mirrored so neither spawn gets a cleaner center-to-side pivot.
-  fill(map, 20, 30, 6, 3, G);
-  fill(map, 38, 31, 6, 3, G);
-
-  // Add one midline gate on each forest wall so the center mine is a real objective,
-  // not a sealed visual element behind continuous lane walls.
+  // Midline gates stay blocked by destructibles at start,
+  // opening a faster route into the contested center only after commitment.
   fill(map, 20, 31, 6, 3, G);
   fill(map, 38, 31, 6, 3, G);
 
@@ -70,8 +63,8 @@ export function buildMap05(): MapData {
     ],
     goldMineReserves: [1600, 1450, 1600, 1450, 2300],
     blockers: [
-      { x: 26, y: 22, tileW: 2, tileH: 1 },
-      { x: 36, y: 40, tileW: 2, tileH: 1 },
+      { x: 20, y: 31, tileW: 6, tileH: 3 },
+      { x: 38, y: 31, tileW: 6, tileH: 3 },
     ],
     name: 'Timber Lanes',
     description: 'Tree walls split the map into staged corridors.\nLane choices, watch posts, and center value reward control.',

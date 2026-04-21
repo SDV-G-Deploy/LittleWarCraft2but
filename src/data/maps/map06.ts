@@ -61,8 +61,10 @@ export function buildMap06(): MapData {
     ],
     goldMineReserves: [1600, 1600, 1400, 1400, 2400, 2400],
     blockers: [
-      { x: 29, y: 18, tileW: 2, tileH: 1 },
-      { x: 33, y: 44, tileW: 2, tileH: 1 },
+      { x: 29, y: 22, tileW: 6, tileH: 4 },
+      { x: 29, y: 38, tileW: 6, tileH: 4 },
+      { x: 22, y: 29, tileW: 4, tileH: 6 },
+      { x: 38, y: 29, tileW: 4, tileH: 6 },
     ],
     name: 'Crown Pit',
     description: 'Rich center ring creates a hard contest point.\nWatch posts, entries, and mine risk shape pit control.',
