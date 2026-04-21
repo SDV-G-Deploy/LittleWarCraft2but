@@ -149,8 +149,8 @@ export function tickAI(state: GameState, ai: AIController): void {
     }
   }
 
-  // Always keep workers on gold
-  keepGathering(state, myWorkers);
+  const woodDemand = estimateWoodDemand(state, ai, myBarracks, myLumberMill, farmCount, towerCount, mySoldiers.length);
+  keepGathering(state, myWorkers, woodDemand);
 
   switch (ai.phase) {
     // ── Economy: build workforce, first farm, first barracks ─────────────────
@@ -277,21 +277,36 @@ export function tickAI(state: GameState, ai: AIController): void {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function keepGathering(state: GameState, workers: Entity[]): void {
+function keepGathering(state: GameState, workers: Entity[], desiredWoodWorkers: number): void {
+  const activeWoodWorkers = workers.filter(w => w.cmd?.type === 'gather' && w.cmd.resourceType === 'wood').length;
+  let woodAssignmentsNeeded = Math.max(0, Math.min(desiredWoodWorkers, workers.length) - activeWoodWorkers);
+
   for (const w of workers) {
     if (w.cmd && w.cmd.type !== 'gather') continue;
     if (w.cmd?.type === 'gather') {
       const gatherCmd = w.cmd;
       if (gatherCmd.resourceType === 'gold') {
         const mine = state.entities.find(e => e.id === gatherCmd.targetId);
-        if (mine && (mine.goldReserve ?? 0) > 0) continue;
+        if (mine && (mine.goldReserve ?? 0) > 0 && woodAssignmentsNeeded <= 0) continue;
       } else {
         const tx = gatherCmd.targetId % 64;
         const ty = Math.floor(gatherCmd.targetId / 64);
         const tile = state.tiles[ty]?.[tx];
-        if (tile?.kind === 'tree' && (tile.woodReserve ?? 0) > 0) continue;
+        if (tile?.kind === 'tree' && (tile.woodReserve ?? 0) > 0) {
+          continue;
+        }
       }
     }
+
+    if (woodAssignmentsNeeded > 0) {
+      const treeId = nearestTree(state, w);
+      if (treeId !== null) {
+        issueGatherCommand(state, w, treeId, state.tick);
+        woodAssignmentsNeeded--;
+        continue;
+      }
+    }
+
     const mine = nearestMine(state, w);
     if (mine) issueGatherCommand(state, w, mine.id, state.tick);
   }
@@ -310,6 +325,42 @@ function nearestMine(state: GameState, unit: Entity): Entity | null {
     if (d < bestD) { bestD = d; best = e; }
   }
   return best;
+}
+
+function nearestTree(state: GameState, unit: Entity): number | null {
+  let bestId: number | null = null;
+  let bestD = Infinity;
+  for (let ty = 0; ty < state.tiles.length; ty++) {
+    for (let tx = 0; tx < state.tiles[ty].length; tx++) {
+      const tile = state.tiles[ty][tx];
+      if (tile?.kind !== 'tree' || (tile.woodReserve ?? 0) <= 0) continue;
+      const d = Math.hypot(tx - unit.pos.x, ty - unit.pos.y);
+      if (d < bestD) {
+        bestD = d;
+        bestId = ty * 64 + tx;
+      }
+    }
+  }
+  return bestId;
+}
+
+function estimateWoodDemand(state: GameState, ai: AIController, myBarracks: Entity | undefined, myLumberMill: Entity | undefined, farmCount: number, towerCount: number, soldierCount: number): number {
+  let demand = 0;
+  const wood = state.wood[1];
+  const races = state.races[1];
+  const farmCost = getResolvedCost('farm', races).wood;
+  const lumberCost = getResolvedCost('lumbermill', races).wood;
+  const towerCost = getResolvedCost('tower', races).wood;
+  const soldierCost = getResolvedCost(RACES[races].soldier, races).wood;
+
+  if (!myLumberMill) demand += lumberCost;
+  if (state.popCap[1] - state.pop[1] <= 2 && farmCount < ai.maxFarms) demand += farmCost;
+  if (myBarracks) demand += soldierCost * Math.max(1, Math.min(2, ai.attackWaveSize - soldierCount));
+  if (myLumberMill && !state.upgrades[1].doctrine) demand += DOCTRINE_COST.wood;
+  if (myBarracks && soldierCount >= ai.towerMinArmy && towerCount < ai.maxTowers) demand += towerCost;
+
+  if (wood < Math.max(40, demand)) return Math.min(3, Math.max(1, Math.ceil((Math.max(40, demand) - wood) / 60)));
+  return wood < 120 ? 1 : 0;
 }
 
 function findBuildSpot(state: GameState, anchor: Entity, kind: EntityKind): Vec2 | null {

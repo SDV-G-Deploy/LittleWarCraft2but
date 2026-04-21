@@ -1081,7 +1081,7 @@ function collectButtons(
     const barracksCost = getResolvedCost('barracks', state.races[myOwner]);
     const workerBusy = e.cmd?.type === 'train';
     const selectedPlan = getSelectedOpeningPlan(state, myOwner);
-    addButton(`${translateDisplayLabel(rc.workerLabel)} [V]\n[${workerCost.gold}g${workerCost.wood ? ` ${workerCost.wood}w` : ''}]`, `train:${rc.worker}`,
+    addButton(`${translateDisplayLabel(rc.workerLabel)} [V]\n${workerCost.gold}g${workerCost.wood ? ` ${workerCost.wood}w` : ''}`, `train:${rc.worker}`,
       state.gold[myOwner] < workerCost.gold || state.wood[myOwner] < workerCost.wood, false, 0);
     if (!workerBusy && state.gold[myOwner] >= workerCost.gold && state.wood[myOwner] >= workerCost.wood) {
       addButton(t('worker_spike'), `train:${rc.worker}`, false, false, 3);
@@ -1105,11 +1105,11 @@ function collectButtons(
     const wantsRanged = rangedCount + queuedRanged < Math.max(1, Math.floor((frontlineMass + anchorCount) / 2));
     const wantsHeavy = anchorCount < 2 && frontlineMass >= 2;
 
-    addButton(`${translateDisplayLabel(rc.soldierLabel)} [T]\n[${soldierCost.gold}g${soldierCost.wood ? ` ${soldierCost.wood}w` : ''}]`, `train:${rc.soldier}`,
+    addButton(`${translateDisplayLabel(rc.soldierLabel)} [T]\n${soldierCost.gold}g${soldierCost.wood ? ` ${soldierCost.wood}w` : ''}`, `train:${rc.soldier}`,
       state.gold[myOwner] < soldierCost.gold || state.wood[myOwner] < soldierCost.wood, false, 0);
-    addButton(`${translateDisplayLabel(rc.rangedLabel)} [A]\n[${rangedCost.gold}g${rangedCost.wood ? ` ${rangedCost.wood}w` : ''}]`, 'train_ranged',
+    addButton(`${translateDisplayLabel(rc.rangedLabel)} [A]\n${rangedCost.gold}g${rangedCost.wood ? ` ${rangedCost.wood}w` : ''}`, 'train_ranged',
       state.gold[myOwner] < rangedCost.gold || state.wood[myOwner] < rangedCost.wood, false, 1);
-    addButton(`${translateDisplayLabel(rc.heavyLabel)} [H]\n[${heavyCost.gold}g${heavyCost.wood ? ` ${heavyCost.wood}w` : ''}]`, `train:${rc.heavy}`,
+    addButton(`${translateDisplayLabel(rc.heavyLabel)} [H]\n${heavyCost.gold}g${heavyCost.wood ? ` ${heavyCost.wood}w` : ''}`, `train:${rc.heavy}`,
       state.gold[myOwner] < heavyCost.gold || state.wood[myOwner] < heavyCost.wood, false, 2);
     if (state.gold[myOwner] >= soldierCost.gold && state.wood[myOwner] >= soldierCost.wood && wantsFrontline) {
       addButton(t('frontline_add'), `train:${rc.soldier}`, false, false, 3);
@@ -1133,11 +1133,11 @@ function collectButtons(
     const hasLumbermill = state.entities.some(en => en.owner === myOwner && en.kind === 'lumbermill');
     const barrLabel = translateDisplayLabel(rc.barrLabel);
     const farmLabel = translateDisplayLabel(rc.farmLabel);
-    addButton(`${barrLabel} [B]\n[${barrCost.gold}g${barrCost.wood ? ` ${barrCost.wood}w` : ''}]`, 'build:barracks', state.gold[myOwner] < barrCost.gold || state.wood[myOwner] < barrCost.wood, false, 0);
-    addButton(`${t('lumber_mill')} [L]\n[${lumberCost.gold}g${lumberCost.wood ? ` ${lumberCost.wood}w` : ''}]`, 'build:lumbermill', state.gold[myOwner] < lumberCost.gold || state.wood[myOwner] < lumberCost.wood || hasLumbermill, false, 1);
-    addButton(`${farmLabel} [F]\n[${farmCost.gold}g${farmCost.wood ? ` ${farmCost.wood}w` : ''}]`, 'build:farm',     state.gold[myOwner] < farmCost.gold || state.wood[myOwner] < farmCost.wood, false, 2);
-    addButton(`${translateDisplayLabel(rc.towerLabel)} [G]\n[${towerCost.gold}g${towerCost.wood ? ` ${towerCost.wood}w` : ''}]`, 'build:tower', state.gold[myOwner] < towerCost.gold || state.wood[myOwner] < towerCost.wood || !hasBarracks || !hasLumbermill, false, 3);
-    addButton(`${t('wall')} [W]\n[${wallCost.gold}g${wallCost.wood ? ` ${wallCost.wood}w` : ''}]`,  'build:wall',     state.gold[myOwner] < wallCost.gold || state.wood[myOwner] < wallCost.wood, false, 4);
+    addButton(`${barrLabel} [B]\n${barrCost.gold}g${barrCost.wood ? ` ${barrCost.wood}w` : ''}`, 'build:barracks', state.gold[myOwner] < barrCost.gold || state.wood[myOwner] < barrCost.wood, false, 0);
+    addButton(`${t('lumber_mill')} [L]\n${lumberCost.gold}g${lumberCost.wood ? ` ${lumberCost.wood}w` : ''}`, 'build:lumbermill', state.gold[myOwner] < lumberCost.gold || state.wood[myOwner] < lumberCost.wood || hasLumbermill, false, 1);
+    addButton(`${farmLabel} [F]\n${farmCost.gold}g${farmCost.wood ? ` ${farmCost.wood}w` : ''}`, 'build:farm',     state.gold[myOwner] < farmCost.gold || state.wood[myOwner] < farmCost.wood, false, 2);
+    addButton(`${translateDisplayLabel(rc.towerLabel)} [G]\n${towerCost.gold}g${towerCost.wood ? ` ${towerCost.wood}w` : ''}`, 'build:tower', state.gold[myOwner] < towerCost.gold || state.wood[myOwner] < towerCost.wood || !hasBarracks || !hasLumbermill, false, 3);
+    addButton(`${t('wall')} [W]\n${wallCost.gold}g${wallCost.wood ? ` ${wallCost.wood}w` : ''}`,  'build:wall',     state.gold[myOwner] < wallCost.gold || state.wood[myOwner] < wallCost.wood, false, 4);
     if (e.cmd === null && state.gold[myOwner] >= wallCost.gold && state.wood[myOwner] >= wallCost.wood) {
       addButton(t('hold_line'), 'build:wall', false, false, 5);
     }
@@ -1150,12 +1150,12 @@ function collectButtons(
     const melee = profile.upgrades.meleeAttack;
     const armor = profile.upgrades.armor;
     const buildingHp = profile.upgrades.buildingHp;
-    addButton(`${t('upgrade_attack')} +${melee.perLevel} ${t('upgrade_level')} ${upgrades.meleeAttackLevel}/${melee.maxLevel}\n${compactUpgradeTargetHint('meleeAttack', race)} [${melee.cost.wood}w]`, 'upgrade:meleeAttack', upgrades.meleeAttackLevel >= melee.maxLevel || state.gold[myOwner] < melee.cost.gold || state.wood[myOwner] < melee.cost.wood, false, 0);
-    addButton(`${t('upgrade_defense')} +${armor.perLevel} ${t('upgrade_level')} ${upgrades.armorLevel}/${armor.maxLevel}\n${compactUpgradeTargetHint('armor', race)} [${armor.cost.wood}w]`, 'upgrade:armor', upgrades.armorLevel >= armor.maxLevel || state.gold[myOwner] < armor.cost.gold || state.wood[myOwner] < armor.cost.wood, false, 1);
-    addButton(`${t('upgrade_building_hp')} +${buildingHp.perLevel}% ${t('upgrade_level')} ${upgrades.buildingHpLevel}/${buildingHp.maxLevel}\n${compactUpgradeTargetHint('buildingHp', race)} [${buildingHp.cost.wood}w]`, 'upgrade:buildingHp', upgrades.buildingHpLevel >= buildingHp.maxLevel || state.gold[myOwner] < buildingHp.cost.gold || state.wood[myOwner] < buildingHp.cost.wood, false, 2);
+    addButton(`${t('upgrade_attack')} +${melee.perLevel} ${t('upgrade_level')} ${upgrades.meleeAttackLevel}/${melee.maxLevel}\n${compactUpgradeTargetHint('meleeAttack', race)} ${melee.cost.wood}w`, 'upgrade:meleeAttack', upgrades.meleeAttackLevel >= melee.maxLevel || state.gold[myOwner] < melee.cost.gold || state.wood[myOwner] < melee.cost.wood, false, 0);
+    addButton(`${t('upgrade_defense')} +${armor.perLevel} ${t('upgrade_level')} ${upgrades.armorLevel}/${armor.maxLevel}\n${compactUpgradeTargetHint('armor', race)} ${armor.cost.wood}w`, 'upgrade:armor', upgrades.armorLevel >= armor.maxLevel || state.gold[myOwner] < armor.cost.gold || state.wood[myOwner] < armor.cost.wood, false, 1);
+    addButton(`${t('upgrade_building_hp')} +${buildingHp.perLevel}% ${t('upgrade_level')} ${upgrades.buildingHpLevel}/${buildingHp.maxLevel}\n${compactUpgradeTargetHint('buildingHp', race)} ${buildingHp.cost.wood}w`, 'upgrade:buildingHp', upgrades.buildingHpLevel >= buildingHp.maxLevel || state.gold[myOwner] < buildingHp.cost.gold || state.wood[myOwner] < buildingHp.cost.wood, false, 2);
     const doctrineLocked = upgrades.doctrine !== null;
     const doctrineUnaffordable = state.gold[myOwner] < DOCTRINE_COST.gold || state.wood[myOwner] < DOCTRINE_COST.wood;
-    const doctrineCost = `[${DOCTRINE_COST.gold}g ${DOCTRINE_COST.wood}w]`;
+    const doctrineCost = `${DOCTRINE_COST.gold}g ${DOCTRINE_COST.wood}w`;
     addButton(`${t('doctrine_field_tempo')}\n${t('doctrine_field_tempo_desc')} ${doctrineCost}`, 'upgrade:doctrineFieldTempo', doctrineLocked || doctrineUnaffordable, false, 3);
     addButton(`${t('doctrine_line_hold')}\n${t('doctrine_line_hold_desc')} ${doctrineCost}`, 'upgrade:doctrineLineHold', doctrineLocked || doctrineUnaffordable, false, 4);
     addButton(`${t('doctrine_long_reach')}\n${t('doctrine_long_reach_desc')} ${doctrineCost}`, 'upgrade:doctrineLongReach', doctrineLocked || doctrineUnaffordable, false, 5);

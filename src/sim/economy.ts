@@ -213,14 +213,22 @@ export function processGather(state: GameState, entity: Entity): void {
     ec._gatherTarget = undefined;
   };
 
+  const lastTargetId = cmd.targetId;
   let target = resolveGatherTarget(state, cmd.targetId);
   let resourceDepleted = !target;
   if (resourceDepleted && cmd.resourceType === 'wood') {
-    const nextTreeId = findNearestTreeTarget(state, entity, cmd.targetId % MAP_W, Math.floor(cmd.targetId / MAP_W));
+    const searchTx = entity.pos.x;
+    const searchTy = entity.pos.y;
+    const nextTreeId = findNearestTreeTarget(state, entity, searchTx, searchTy);
     if (nextTreeId !== null) {
       cmd.targetId = nextTreeId;
       target = resolveGatherTarget(state, cmd.targetId);
       resourceDepleted = !target;
+      if (target) {
+        cmd.phase = 'toresource';
+        cmd.waitTicks = state.tick;
+        clearGatherState();
+      }
     }
   }
   if (resourceDepleted) {
@@ -331,8 +339,27 @@ export function processGather(state: GameState, entity: Entity): void {
         entity.carryWood = 0;
         ec._gatherPath = undefined;
         if (resourceDepleted) {
+          if (cmd.resourceType === 'wood') {
+            const nextTreeId = findNearestTreeTarget(state, entity, entity.pos.x, entity.pos.y);
+            if (nextTreeId !== null) {
+              cmd.targetId = nextTreeId;
+              cmd.phase = 'toresource';
+              cmd.waitTicks = state.tick;
+              clearGatherState();
+              return;
+            }
+          }
           entity.cmd = null;
           return;
+        }
+        if (cmd.resourceType === 'wood' && cmd.targetId === lastTargetId) {
+          const originalTx = lastTargetId % MAP_W;
+          const originalTy = Math.floor(lastTargetId / MAP_W);
+          const originalTile = state.tiles[originalTy]?.[originalTx];
+          if (originalTile?.kind !== 'tree' || (originalTile.woodReserve ?? 0) <= 0) {
+            const nextTreeId = findNearestTreeTarget(state, entity, entity.pos.x, entity.pos.y);
+            if (nextTreeId !== null) cmd.targetId = nextTreeId;
+          }
         }
         cmd.phase = 'toresource';
         return;
