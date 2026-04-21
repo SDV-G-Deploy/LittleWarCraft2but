@@ -95,7 +95,8 @@ Update it when a phase is completed, reframed, or split.
 - do not introduce dynamic unit occupancy as a live mutable grid in-path yet; if needed later, use snapshot/fixed-phase discipline
 - keep all perf throttling tick-based only, never wall-clock/runtime-budget based
 - any heap/path selection changes must keep deterministic tie-break rules explicit
-- neutral ownership exists in the data model, pass 1 is now done in the highest-risk AI/UI/economy paths, but semantic cleanup is still incomplete elsewhere
+- neutral ownership exists in the data model, passes 1-2 are now done in the highest-risk AI/UI/economy/modifier paths, but semantic cleanup is still incomplete elsewhere
+- pass 2 intentionally did not touch renderer/game/net or presentation-only enemy labeling, to avoid mixing semantic cleanup with broader refactor scope
 - avoid accumulating too many authored opening/combat bonus rules before combined live tests prove they are worth the complexity
 
 ## Strategic priority
@@ -147,8 +148,11 @@ Immediate project note:
   - semantic ownership helpers added
   - highest-risk AI/UI/economy opposing-player shortcuts replaced
   - neutral no longer leaks into the main enemy-player lookup paths in those files
-- remaining cleanup should now be kept as **two more `/new` passes**, not folded into one broad refactor:
-  - pass 2: `src/balance/modifiers.ts` plus other small still-local semantic enemy-resolution sites
+- neutral-ownership semantic cleanup pass 2 is now done:
+  - `src/balance/modifiers.ts` contested-mine logic now uses explicit opposing-player Town Hall resolution
+  - neutral is excluded from that modifier path instead of being treated as generic non-self ownership
+  - the diff stayed intentionally narrow and reviewable
+- remaining cleanup should now be kept as **one more small `/new` pass**, not widened into a broad refactor:
   - pass 3: `src/render/renderer.ts`, `src/game.ts`, `src/net/netcmd.ts` sanity sweep and leftover shortcut cleanup
 - if more map work is needed later, keep it point-fix only and driven by concrete spawn-side findings
 

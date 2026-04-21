@@ -1,5 +1,5 @@
 import type { Entity, GameState } from '../types';
-import { SIM_HZ, isUnitKind, usesRaceProfile } from '../types';
+import { SIM_HZ, isOwnedByOpposingPlayer, isUnitKind, usesRaceProfile } from '../types';
 import { hasUpgradeGroup } from './resolver';
 
 export interface AttackModifierContext {
@@ -38,9 +38,11 @@ function isNearOwnTownHall(state: GameState, entity: Entity, radius: number): bo
 
 function isNearContestedMine(state: GameState, attacker: Entity, target: Entity): boolean {
   if (target.kind === 'goldmine') return false;
+  if (!usesRaceProfile(attacker.owner)) return false;
 
-  const myTownHall = state.entities.find(e => e.owner === attacker.owner && e.kind === 'townhall');
-  const enemyTownHall = state.entities.find(e => e.owner !== attacker.owner && e.kind === 'townhall');
+  const owner = attacker.owner;
+  const myTownHall = state.entities.find(e => e.owner === owner && e.kind === 'townhall');
+  const enemyTownHall = state.entities.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
 
   return state.entities.some(e => {
     if (e.kind !== 'goldmine' || (e.goldReserve ?? 0) <= 0) return false;

@@ -137,8 +137,11 @@ Immediate next `/new` target:
   - semantic ownership helpers added
   - highest-risk opposing-player shortcuts cleaned in `src/sim/ai.ts`, `src/render/ui.ts`, and `src/sim/economy.ts`
   - neutral no longer leaks into the most important enemy-player lookup paths there
+- neutral-ownership semantic cleanup pass 2 is now done:
+  - `src/balance/modifiers.ts` now resolves contested-mine enemy Town Hall semantics via explicit opposing-player lookup
+  - neutral no longer accidentally participates in that modifier path
+  - the pass stayed narrow and did not widen into balance tuning or broader gameplay refactor
 - remaining neutral cleanup is intentionally split:
-  - pass 2: `src/balance/modifiers.ts` and other still-local semantic enemy-resolution sites
   - pass 3: `src/render/renderer.ts`, `src/game.ts`, `src/net/netcmd.ts` and broader defensive consistency sweep
 
 AI support pass is now good enough to stop being the blocker.
@@ -209,7 +212,8 @@ Latest focused review note:
 - `docs/LW2B_REVIEW_NOTES_2026-04-21.md`
 
 Current review-driven cautions:
-- neutral ownership semantics exist, and pass 1 is done, but broader semantic cleanup is still incomplete outside the highest-risk AI/UI/economy paths
+- neutral ownership semantics exist, and passes 1-2 are now done, but broader semantic cleanup is still incomplete outside the highest-risk AI/UI/economy/modifier paths
+- pass 2 intentionally did not touch renderer/game/net layers or presentation-only enemy labels; those remain pass-3 work
 - do not casually expand special-case opening combat bonuses; prefer map incentives, timing, and opportunity cost first
 - validate route blockers, contested mines, watch posts, and rich-center objectives as one combined gameplay system
 - keep `move` / `repath` / `sidestep` changes high-discipline because that remains the most sensitive simulation area

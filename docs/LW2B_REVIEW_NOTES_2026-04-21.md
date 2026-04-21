@@ -205,24 +205,31 @@ Reason:
 
 ## Recommended execution plan for future `/new`
 
-This cleanup should now be finished in **two more small `/new` runs**, not expanded into one broad pass.
+This cleanup should now be finished in **one more small `/new` run**, not expanded into one broad pass.
 
 ### `/new` pass 2 — local semantic follow-through
-Scope:
-- follow through in:
-  - `src/balance/modifiers.ts`
-  - any other small still-local enemy-resolution helper sites that clearly mean opposing player
-- remove leftover broad `owner !== ...` shortcuts where the real meaning is opposing player
-- keep the diff narrow and semantic, not architectural
+Status: **done**
 
-Explicit non-goals:
-- no broad refactor
-- no renderer/game/net sweep yet
-- no balance tuning piggybacked onto this cleanup
+What landed:
+- `src/balance/modifiers.ts`
+- contested-mine modifier logic now resolves enemy Town Hall via explicit opposing-player lookup
+- a player-only guard keeps neutral from entering that modifier path
+- the broad local shortcut `owner !== attacker.owner` was removed from the enemy Town Hall resolution there
 
-Definition of done:
-- remaining high-value local semantic enemy-resolution shortcuts are explicit
-- neutral no longer leaks into obvious helper-level opposing-player logic outside pass 1 files
+What this intentionally did **not** touch:
+- `src/render/renderer.ts`
+- `src/game.ts`
+- `src/net/netcmd.ts`
+- presentation-only `PLAYER/ENEMY` wording where semantics were not gameplay-risky
+- wider attack-system or target-typing cleanup
+
+Why:
+- these are still real follow-up candidates
+- but touching them in pass 2 would have widened scope beyond the intended narrow semantic cleanup
+
+Definition of done reached:
+- the remaining high-value local semantic enemy-resolution shortcut in `src/balance/modifiers.ts` is now explicit
+- neutral no longer leaks into that contested/opening modifier helper path
 
 ### `/new` pass 3 — defensive cleanup + sanity sweep
 Scope:
@@ -231,6 +238,7 @@ Scope:
   - `src/game.ts`
   - `src/net/netcmd.ts`
 - remove leftover binary-owner shortcuts that remain after passes 1 and 2
+- review any still-broad presentation or flow sites that clearly want opposing-player semantics
 - do a final consistency sweep for neutral-safe semantics
 
 Explicit non-goals:
