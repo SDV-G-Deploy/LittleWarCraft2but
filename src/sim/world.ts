@@ -26,8 +26,8 @@ export function createWorld(mapData: MapData, races: [Race, Race]): GameState {
     popCap:   [4, 4],
     races,
     upgrades: [
-      { meleeAttackLevel: 0, armorLevel: 0, buildingHpLevel: 0, doctrine: null },
-      { meleeAttackLevel: 0, armorLevel: 0, buildingHpLevel: 0, doctrine: null },
+      { meleeAttackLevel: 0, armorLevel: 0, buildingHpLevel: 0, doctrine: null, pendingLumberUpgrade: null },
+      { meleeAttackLevel: 0, armorLevel: 0, buildingHpLevel: 0, doctrine: null, pendingLumberUpgrade: null },
     ],
     mapName: mapData.name,
     mapDescription: mapData.description,

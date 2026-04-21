@@ -7,6 +7,7 @@ import { issueAttackCommand } from './sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, computePopCaps } from './sim/economy';
 import { updateFog } from './sim/fogofwar';
 import { createAI, tickAI, AIController } from './sim/ai';
+import { tickLumberUpgrades } from './sim/upgrades';
 import { profiler } from './sim/profiler';
 import { render, drawMinimap, resetRenderCache } from './render/renderer';
 import { drawUi, drawGhostBuilding, UiButton } from './render/ui';
@@ -599,6 +600,7 @@ export function startGame(
     }
 
     state.tick++;
+    tickLumberUpgrades(state);
 
     if (state.recentAttackEvents) {
       state.recentAttackEvents = state.recentAttackEvents.filter(ev => state.tick - ev.tick <= 12);

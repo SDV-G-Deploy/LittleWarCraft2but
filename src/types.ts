@@ -225,4 +225,18 @@ export interface PlayerUpgradeState {
   armorLevel: number;
   buildingHpLevel: number;
   doctrine: 'fieldTempo' | 'lineHold' | 'longReach' | null;
+  pendingLumberUpgrade: PendingLumberUpgrade | null;
+}
+
+export type LumberUpgradeKind =
+  | 'meleeAttack'
+  | 'armor'
+  | 'buildingHp'
+  | 'doctrineFieldTempo'
+  | 'doctrineLineHold'
+  | 'doctrineLongReach';
+
+export interface PendingLumberUpgrade {
+  kind: LumberUpgradeKind;
+  completeTick: number;
 }

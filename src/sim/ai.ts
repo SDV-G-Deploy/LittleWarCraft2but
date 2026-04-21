@@ -3,6 +3,7 @@ import { SIM_HZ, isOwnedByOpposingPlayer, isUnitKind } from '../types';
 import { RACES } from '../data/races';
 import { getResolvedCost } from '../balance/resolver';
 import { DOCTRINE_COST } from '../balance/doctrines';
+import { tryStartLumberUpgrade } from './upgrades';
 import {
   issueGatherCommand, issueTrainCommand,
   issueBuildCommand, isValidPlacement,
@@ -191,9 +192,15 @@ export function tickAI(state: GameState, ai: AIController): void {
       }
 
       if (myLumberMill && !state.upgrades[1].doctrine && state.gold[1] >= DOCTRINE_COST.gold && state.wood[1] >= DOCTRINE_COST.wood) {
-        state.gold[1] -= DOCTRINE_COST.gold;
-        state.wood[1] -= DOCTRINE_COST.wood;
-        state.upgrades[1].doctrine = ai.doctrineChoice;
+        tryStartLumberUpgrade(
+          state,
+          1,
+          ai.doctrineChoice === 'fieldTempo'
+            ? 'doctrineFieldTempo'
+            : ai.doctrineChoice === 'lineHold'
+              ? 'doctrineLineHold'
+              : 'doctrineLongReach',
+        );
       }
 
       if (myBarracks) {

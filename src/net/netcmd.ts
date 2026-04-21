@@ -8,8 +8,7 @@ import type { EntityKind, GameState, OpeningPlan, Race } from '../types';
 import { SIM_HZ, isUnitKind, isWorkerKind, areHostile } from '../types';
 import { getResolvedCost } from '../balance/resolver';
 import { RACE_BALANCE_PROFILES } from '../balance/races';
-import { hasUpgradeGroup, resolveEntityStats } from '../balance/resolver';
-import { DOCTRINE_COST } from '../balance/doctrines';
+import { tryStartLumberUpgrade } from '../sim/upgrades';
 import { issueAttackCommand } from '../sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, issueResumeBuildCommand, refundCancelledTrainCommand } from '../sim/economy';
 import { issueMoveCommand } from '../sim/commands';
@@ -29,10 +28,6 @@ export type NetCmd =
   | { k: 'demolish';buildingId: number }
   | { k: 'resume';  workerId: number; siteId: number }
   | { k: 'upgrade'; buildingId: number; upgrade: 'meleeAttack' | 'armor' | 'buildingHp' | 'doctrineFieldTempo' | 'doctrineLineHold' | 'doctrineLongReach' };
-
-function getBuildingHpMultiplier(race: Race, level: number): number {
-  return race === 'human' ? 1 + (level * 20) / 100 : 1 + (level * 10) / 100;
-}
 
 export interface TickPacket {
   tick: number;
@@ -212,52 +207,7 @@ export function applyNetCmds(
       case 'upgrade': {
         const b = getEntity(state, cmd.buildingId);
         if (!b || b.owner !== owner || b.kind !== 'lumbermill') break;
-        const upgrades = state.upgrades[owner];
-        if (cmd.upgrade === 'doctrineFieldTempo' || cmd.upgrade === 'doctrineLineHold' || cmd.upgrade === 'doctrineLongReach') {
-          if (upgrades.doctrine) break;
-          if (state.gold[owner] < DOCTRINE_COST.gold || state.wood[owner] < DOCTRINE_COST.wood) break;
-          state.gold[owner] -= DOCTRINE_COST.gold;
-          state.wood[owner] -= DOCTRINE_COST.wood;
-          upgrades.doctrine = cmd.upgrade === 'doctrineFieldTempo'
-            ? 'fieldTempo'
-            : cmd.upgrade === 'doctrineLineHold'
-              ? 'lineHold'
-              : 'longReach';
-          break;
-        }
-        const race = state.races[owner];
-        const defs = RACE_BALANCE_PROFILES[race].upgrades;
-        const config = cmd.upgrade === 'meleeAttack' ? defs.meleeAttack : cmd.upgrade === 'armor' ? defs.armor : defs.buildingHp;
-        const levelKey = cmd.upgrade === 'meleeAttack' ? 'meleeAttackLevel' : cmd.upgrade === 'armor' ? 'armorLevel' : 'buildingHpLevel';
-        const currentLevel = upgrades[levelKey];
-        if (currentLevel >= config.maxLevel) break;
-        const cost = config.cost;
-        if (state.gold[owner] < cost.gold || state.wood[owner] < cost.wood) break;
-        state.gold[owner] -= cost.gold;
-        state.wood[owner] -= cost.wood;
-        upgrades[levelKey] = currentLevel + 1;
-        if (cmd.upgrade === 'buildingHp') {
-          const prevMult = getBuildingHpMultiplier(race, currentLevel);
-          const nextMult = getBuildingHpMultiplier(race, currentLevel + 1);
-          for (const e of state.entities) {
-            if (e.owner !== owner || e.kind === 'goldmine' || isUnitKind(e.kind)) continue;
-            const baseMax = Math.round(e.hpMax / prevMult);
-            const nextMax = Math.round(baseMax * nextMult);
-            const hpRatio = e.hpMax > 0 ? e.hp / e.hpMax : 1;
-            e.hpMax = nextMax;
-            e.hp = Math.round(nextMax * hpRatio);
-            e.statHpMax = nextMax;
-          }
-        }
-        if (cmd.upgrade === 'armor') {
-          for (const e of state.entities) {
-            if (e.owner !== owner || !isUnitKind(e.kind)) continue;
-            if (!hasUpgradeGroup(e.kind, race, 'military')) continue;
-            const baseArmor = resolveEntityStats(e.kind, race).armor;
-            const perLevel = race === 'human' ? 2 : 1;
-            e.statArmor = baseArmor + upgrades.armorLevel * perLevel;
-          }
-        }
+        tryStartLumberUpgrade(state, owner, cmd.upgrade);
         break;
       }
     }
