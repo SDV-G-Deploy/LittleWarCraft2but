@@ -1,5 +1,5 @@
 import type { Entity, EntityKind, GameState, Tile, Vec2 } from '../types';
-import { GATHER_TICKS, GATHER_AMOUNT, MAP_W, MAP_H, SIM_HZ, isUnitKind, isWorkerKind } from '../types';
+import { GATHER_TICKS, GATHER_AMOUNT, MAP_W, MAP_H, SIM_HZ, isOwnedByOpposingPlayer, isUnitKind, isWorkerKind } from '../types';
 import { ticksPerStep } from '../data/units';
 import { getResolvedBuildTicks, getResolvedCost, getResolvedSupplyProvided, getResolvedTileSize } from '../balance/resolver';
 import {
@@ -128,7 +128,7 @@ function bestContestedMine(state: GameState, owner: 0 | 1): Entity | null {
   let best: Entity | null = null;
   let bestScore = -Infinity;
   const myTownHall = state.entities.find(e => e.owner === owner && e.kind === 'townhall');
-  const enemyTownHall = state.entities.find(e => e.owner !== owner && e.kind === 'townhall');
+  const enemyTownHall = state.entities.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
   if (!myTownHall || !enemyTownHall) return null;
 
   for (const e of state.entities) {
@@ -463,7 +463,7 @@ export function processTrain(state: GameState, building: Entity): void {
   // Walk to rally point immediately if one is set.
   // Pressure fallback: if rally is unset, commit toward enemy Town Hall.
   const pressureFallbackTarget = openingPressureAttackMove && !building.rallyPoint
-    ? state.entities.find(e => e.owner !== owner && e.kind === 'townhall')
+    ? state.entities.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall')
     : null;
   const ecoFallbackTownHall = openingEcoHomeMove
     ? state.entities.find(e => e.owner === owner && e.kind === 'townhall')

@@ -1,5 +1,5 @@
 import type { AIDifficulty, Entity, EntityKind, GameState, Vec2 } from '../types';
-import { SIM_HZ, isUnitKind } from '../types';
+import { SIM_HZ, isOwnedByOpposingPlayer, isUnitKind } from '../types';
 import { RACES } from '../data/races';
 import { getResolvedCost } from '../balance/resolver';
 import { DOCTRINE_COST } from '../balance/doctrines';
@@ -236,7 +236,7 @@ export function tickAI(state: GameState, ai: AIController): void {
 
     // ── Assault: send army toward player base ─────────────────────────────────
     case 'assault': {
-      const playerTH = es.find(e => e.owner === 0 && e.kind === 'townhall');
+      const opposingPlayerTH = es.find(e => isOwnedByOpposingPlayer(e, 1) && e.kind === 'townhall');
       const contestedMine = bestContestedMine(state, 1, ai);
       const expansionMine = bestExpansionMine(state, 1, ai);
 
@@ -257,9 +257,9 @@ export function tickAI(state: GameState, ai: AIController): void {
           const tx = expansionMine.pos.x;
           const ty = expansionMine.pos.y - 1;
           if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
-        } else if (playerTH) {
-          const tx = playerTH.pos.x + 1;
-          const ty = playerTH.pos.y + 2;
+        } else if (opposingPlayerTH) {
+          const tx = opposingPlayerTH.pos.x + 1;
+          const ty = opposingPlayerTH.pos.y + 2;
           if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
         }
       }
@@ -329,7 +329,7 @@ function findBuildSpot(state: GameState, anchor: Entity, kind: EntityKind): Vec2
 function nearestPlayerEntity(state: GameState, unit: Entity, maxDistance = Infinity): Entity | null {
   let best: Entity | null = null; let bestD = Infinity;
   for (const e of state.entities) {
-    if (e.owner !== 0 || e.kind === 'goldmine' || e.kind === 'barrier') continue;
+    if (!isOwnedByOpposingPlayer(e, 1) || e.kind === 'goldmine' || e.kind === 'barrier') continue;
     const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
     if (d > maxDistance) continue;
     if (d < bestD) { bestD = d; best = e; }
@@ -340,7 +340,7 @@ function nearestPlayerEntity(state: GameState, unit: Entity, maxDistance = Infin
 function nearestPlayerUnit(state: GameState, unit: Entity, maxDistance = Infinity): Entity | null {
   let best: Entity | null = null; let bestD = Infinity;
   for (const e of state.entities) {
-    if (e.owner !== 0 || !isUnitKind(e.kind)) continue;
+    if (!isOwnedByOpposingPlayer(e, 1) || !isUnitKind(e.kind)) continue;
     const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
     if (d > maxDistance) continue;
     if (d < bestD) { bestD = d; best = e; }
@@ -352,7 +352,7 @@ function bestContestedMine(state: GameState, owner: 0 | 1, ai: AIController): En
   let best: Entity | null = null;
   let bestScore = -Infinity;
   const myTownHall = state.entities.find(e => e.owner === owner && e.kind === 'townhall');
-  const enemyTownHall = state.entities.find(e => e.owner === (owner === 0 ? 1 : 0) && e.kind === 'townhall');
+  const enemyTownHall = state.entities.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
   if (!myTownHall || !enemyTownHall) return null;
 
   for (const e of state.entities) {
@@ -373,7 +373,7 @@ function bestExpansionMine(state: GameState, owner: 0 | 1, ai: AIController): En
   let best: Entity | null = null;
   let bestScore = -Infinity;
   const myTownHall = state.entities.find(e => e.owner === owner && e.kind === 'townhall');
-  const enemyTownHall = state.entities.find(e => e.owner === (owner === 0 ? 1 : 0) && e.kind === 'townhall');
+  const enemyTownHall = state.entities.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
   if (!myTownHall || !enemyTownHall) return null;
 
   for (const e of state.entities) {

@@ -95,6 +95,8 @@ Update it when a phase is completed, reframed, or split.
 - do not introduce dynamic unit occupancy as a live mutable grid in-path yet; if needed later, use snapshot/fixed-phase discipline
 - keep all perf throttling tick-based only, never wall-clock/runtime-budget based
 - any heap/path selection changes must keep deterministic tie-break rules explicit
+- neutral ownership exists in the data model, pass 1 is now done in the highest-risk AI/UI/economy paths, but semantic cleanup is still incomplete elsewhere
+- avoid accumulating too many authored opening/combat bonus rules before combined live tests prove they are worth the complexity
 
 ## Strategic priority
 
@@ -141,6 +143,13 @@ Immediate project note:
 - map-balance correction pass v1 is now done
 - wood / lumber-mill economy pass is now in and needs explicit gameplay verification
 - next useful step is live validation, not another blind architecture pass
+- neutral-ownership semantic cleanup pass 1 is now done:
+  - semantic ownership helpers added
+  - highest-risk AI/UI/economy opposing-player shortcuts replaced
+  - neutral no longer leaks into the main enemy-player lookup paths in those files
+- remaining cleanup should now be kept as **two more `/new` passes**, not folded into one broad refactor:
+  - pass 2: `src/balance/modifiers.ts` plus other small still-local semantic enemy-resolution sites
+  - pass 3: `src/render/renderer.ts`, `src/game.ts`, `src/net/netcmd.ts` sanity sweep and leftover shortcut cleanup
 - if more map work is needed later, keep it point-fix only and driven by concrete spawn-side findings
 
 Infrastructure note:
@@ -198,6 +207,7 @@ Focus ideas:
 - basic unit mix decisions instead of one obvious mass strategy
 - incentives for committing early tempo or delayed power
 - make contested resource interaction produce real opening divergence, not just extra text
+- prefer divergence through map incentives, timing, production shape, and opportunity cost before adding more narrow combat bonus windows
 
 Definition of done:
 - first minutes of a match allow multiple plausible plans
@@ -258,6 +268,8 @@ Immediate map-balance checklist:
 - validate that each start can macro/build cleanly in real play
 - validate that contested mines are now worth fighting over instead of being dead map objects
 - validate that center-rich mines create better expansion tension without forced snowball
+- validate watch-post leverage, blockers, and rich-center objectives as a combined system rather than independent features
+- watch for stacked positional advantage where early center hold also gives the cleanest mine access and safest route leverage
 
 Focus ideas:
 - contested resource points

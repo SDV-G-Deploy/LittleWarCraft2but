@@ -1,6 +1,6 @@
 import type { Entity, EntityKind, GameState, OpeningPlan } from '../types';
 import type { SessionStats, SessionStatus } from '../net/session';
-import { SIM_HZ, TILE_SIZE, MAP_H, MAP_W, isUnitKind, isWorkerKind, isNeutralOwner, usesRaceProfile } from '../types';
+import { SIM_HZ, TILE_SIZE, MAP_H, MAP_W, getOpposingPlayer, isOwnedByOpposingPlayer, isUnitKind, isWorkerKind, isNeutralOwner, usesRaceProfile } from '../types';
 import { STATS } from '../data/units';
 import { ownerRace, ownerRaceProfile } from '../data/races';
 import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedSupplyProvided, getResolvedTileSize, hasUpgradeGroup } from '../balance/resolver';
@@ -168,11 +168,16 @@ function getMilitaryArmorBase(kind: EntityKind): number {
     : 0;
 }
 
+function getPreviewOpposingTarget(state: GameState, entity: Entity): Entity {
+  if (!usesRaceProfile(entity.owner)) return entity;
+  return { ...entity, owner: getOpposingPlayer(entity.owner) };
+}
+
 function getUnitDisplayedAttack(state: GameState, e: Entity): number {
-  const race = e.owner === 0 || e.owner === 1 ? state.races[e.owner] : null;
+  const race = usesRaceProfile(e.owner) ? state.races[e.owner] : null;
   const base = resolveEntityStatsForEntity(state, e).damage;
   if (!hasUpgradeGroup(e.kind, race, 'melee')) return base;
-  const bonus = resolveAttackBonus({ state, attacker: e, target: { ...e, owner: e.owner === 0 ? 1 : 0 } });
+  const bonus = resolveAttackBonus({ state, attacker: e, target: getPreviewOpposingTarget(state, e) });
   return base + bonus;
 }
 
@@ -819,7 +824,7 @@ function drawEntityInfo(
     ctx.fillText(t('gold_remaining', { amount: e.goldReserve ?? 0 }), x, y); y += LINE;
 
     const myTownHall = state.entities.find(en => en.owner === myOwner && en.kind === 'townhall');
-    const enemyTownHall = state.entities.find(en => en.owner !== myOwner && en.kind === 'townhall');
+    const enemyTownHall = state.entities.find(en => isOwnedByOpposingPlayer(en, myOwner) && en.kind === 'townhall');
     const myDist = myTownHall ? Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y) : Infinity;
     const enemyDist = enemyTownHall ? Math.hypot(e.pos.x - enemyTownHall.pos.x, e.pos.y - enemyTownHall.pos.y) : Infinity;
     const distanceGap = Math.abs(myDist - enemyDist);
@@ -934,7 +939,7 @@ function drawEntityInfo(
       ctx.fillStyle = UI_THEME.accent.gold;
       ctx.fillText(t('rally_to', { x: e.rallyPoint.x, y: e.rallyPoint.y }), x, y); y += LINE - 1;
       const myTownHall = state.entities.find(en => en.owner === myOwner && en.kind === 'townhall');
-      const enemyTownHall = state.entities.find(en => en.owner !== myOwner && en.kind === 'townhall');
+      const enemyTownHall = state.entities.find(en => isOwnedByOpposingPlayer(en, myOwner) && en.kind === 'townhall');
       const myDist = myTownHall ? Math.hypot(e.rallyPoint.x - myTownHall.pos.x, e.rallyPoint.y - myTownHall.pos.y) : Infinity;
       const enemyDist = enemyTownHall ? Math.hypot(e.rallyPoint.x - enemyTownHall.pos.x, e.rallyPoint.y - enemyTownHall.pos.y) : Infinity;
       ctx.fillStyle = UI_THEME.text.secondary;

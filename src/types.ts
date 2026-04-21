@@ -82,6 +82,18 @@ export function usesRaceProfile(owner: Owner): owner is PlayerOwner {
   return isPlayerOwner(owner);
 }
 
+export function getOpposingPlayer(owner: PlayerOwner): PlayerOwner {
+  return owner === PLAYER_1 ? PLAYER_2 : PLAYER_1;
+}
+
+export function isOpposingPlayerOwner(owner: Owner, other: PlayerOwner): owner is PlayerOwner {
+  return isPlayerOwner(owner) && owner === getOpposingPlayer(other);
+}
+
+export function isOwnedByOpposingPlayer(entity: { owner: Owner }, other: PlayerOwner): boolean {
+  return isOpposingPlayerOwner(entity.owner, other);
+}
+
 export function areHostile(a: Owner, b: Owner): boolean {
   if (a === b) return false;
   if (isNeutralOwner(a) && isNeutralOwner(b)) return false;

@@ -127,10 +127,22 @@ Immediate next `/new` target:
 - confirm workers can harvest forest, carry wood home, and credit it correctly
 - confirm depleted forest turns into passable grass and pathing updates correctly
 - confirm Lumber Mill can be built, towers are gated by it, and all three upgrades apply correctly
-- only after that, return to broader map-balance validation and follow-up point edits
+- after that, validate current map-pressure systems as a combined package, not as isolated features:
+  - contested mines
+  - watch-post leverage
+  - center-rich objectives
+  - route blockers where present
+- only then return to broader follow-up point edits
+- neutral-ownership semantic cleanup pass 1 is now done:
+  - semantic ownership helpers added
+  - highest-risk opposing-player shortcuts cleaned in `src/sim/ai.ts`, `src/render/ui.ts`, and `src/sim/economy.ts`
+  - neutral no longer leaks into the most important enemy-player lookup paths there
+- remaining neutral cleanup is intentionally split:
+  - pass 2: `src/balance/modifiers.ts` and other still-local semantic enemy-resolution sites
+  - pass 3: `src/render/renderer.ts`, `src/game.ts`, `src/net/netcmd.ts` and broader defensive consistency sweep
 
 AI support pass is now good enough to stop being the blocker.
-The next likely source of unfair matches is map imbalance, not bot behavior.
+The next likely source of unfair matches is map imbalance and stacked positional leverage, not bot behavior.
 
 ## How to play the opening branches
 
@@ -165,6 +177,7 @@ Current layering is:
 3. `src/balance/tuning.ts`
 
 Use `tuning.ts` for quick temporary overrides without touching the base faction definitions.
+UI and gameplay logic should keep moving toward consuming resolved balance data instead of duplicating race-specific rules in display helpers.
 Example:
 - `human.farm.supplyProvided = 5`
 - `human.footman.armor = 5`
@@ -189,6 +202,18 @@ Use this checklist in the next validation session:
 - buy `Melee +1`, then confirm melee units deal +1 damage
 - buy `Armor +1`, then confirm military units gain +1 armor
 - buy `Building HP +15%`, then confirm existing player buildings gain HP and new ones inherit the bonus
+
+## Review notes and current cautions
+
+Latest focused review note:
+- `docs/LW2B_REVIEW_NOTES_2026-04-21.md`
+
+Current review-driven cautions:
+- neutral ownership semantics exist, and pass 1 is done, but broader semantic cleanup is still incomplete outside the highest-risk AI/UI/economy paths
+- do not casually expand special-case opening combat bonuses; prefer map incentives, timing, and opportunity cost first
+- validate route blockers, contested mines, watch posts, and rich-center objectives as one combined gameplay system
+- keep `move` / `repath` / `sidestep` changes high-discipline because that remains the most sensitive simulation area
+- keep remaining neutral-semantics cleanup split into small passes, not one wide refactor
 
 ## Useful commands
 
