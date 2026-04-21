@@ -114,10 +114,16 @@ function getRuntimePeerConfig(mode: NetMode): RuntimeNetConfig {
   return mode === 'public' ? getPublicNetConfig() : getSelfHostedNetConfig();
 }
 
+function getRuntimeIceApiUrl(): string {
+  const configured = (import.meta.env.VITE_ICE_API_URL as string | undefined)?.trim();
+  if (configured) return configured;
+  return './api/ice';
+}
+
 async function fetchRuntimeIceServers(): Promise<RTCIceServer[] | null> {
   if (typeof window === 'undefined' || typeof fetch !== 'function') return null;
   try {
-    const response = await fetch('./api/ice', {
+    const response = await fetch(getRuntimeIceApiUrl(), {
       method: 'GET',
       headers: { Accept: 'application/json' },
       cache: 'no-store',
