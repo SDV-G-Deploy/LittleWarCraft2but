@@ -22,7 +22,16 @@ function mergeEntityStats(base: EntityBlueprint, override?: Partial<EntityBalanc
     tileW: override?.tileW ?? base.tileW,
     tileH: override?.tileH ?? base.tileH,
     supplyProvided: override?.supplyProvided ?? base.supplyProvided,
+    targetPolicy: override?.targetPolicy ?? base.targetPolicy,
+    losPolicy: override?.losPolicy ?? base.losPolicy,
+    attackProfile: override?.attackProfile ?? base.attackProfile,
+    upgradeGroups: override?.upgradeGroups ?? base.upgradeGroups,
   };
+}
+
+export function hasUpgradeGroup(kind: EntityKind, race: Race | null | undefined, group: string): boolean {
+  const stats = resolveEntityStats(kind, race ?? null);
+  return stats.upgradeGroups?.includes(group as never) ?? false;
 }
 
 export function resolveRaceProfile(race: Race): RaceBalanceProfile {
@@ -69,6 +78,10 @@ export function resolveEntityStats(kind: EntityKind, race?: Race | null): Resolv
     tileW: blueprint.tileW,
     tileH: blueprint.tileH,
     supplyProvided: blueprint.supplyProvided,
+    targetPolicy: blueprint.targetPolicy,
+    losPolicy: blueprint.losPolicy,
+    attackProfile: blueprint.attackProfile,
+    upgradeGroups: blueprint.upgradeGroups,
     tags: blueprint.tags,
     roleText: blueprint.roleText,
   };
@@ -96,8 +109,8 @@ export function applyResolvedStatsToEntity(entity: Entity, stats: ResolvedEntity
       ? (ownerUpgrades?.buildingHpLevel ?? 0) * 10
       : 0;
   const armorPerLevel = race === 'human' ? 2 : race === 'orc' ? 1 : 0;
-  const isMilitary = entity.kind === 'footman' || entity.kind === 'archer' || entity.kind === 'knight' || entity.kind === 'grunt' || entity.kind === 'troll' || entity.kind === 'ogreFighter';
-  const buildingHpBonus = stats.speed === 0 && entity.kind !== 'goldmine' && entity.kind !== 'barrier' ? 1 + (buildingHpPct / 100) : 1;
+  const isMilitary = stats.upgradeGroups?.includes('military') ?? false;
+  const buildingHpBonus = stats.upgradeGroups?.includes('building') ? 1 + (buildingHpPct / 100) : 1;
   entity.statHpMax = Math.round(stats.hp * buildingHpBonus);
   entity.statArmor = stats.armor + (isMilitary ? (ownerUpgrades?.armorLevel ?? 0) * armorPerLevel : 0);
 }

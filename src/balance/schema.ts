@@ -5,6 +5,22 @@ export interface CostProfile {
   wood: number;
 }
 
+export interface TargetPolicy {
+  canAttackUnits: boolean;
+  canAttackBuildings: boolean;
+  canAttackWalls: boolean;
+  canAttackResources?: boolean;
+}
+
+export interface LOSPolicy {
+  requiresLOS: boolean;
+  elevated?: boolean;
+}
+
+export interface AttackProfile {
+  projectile?: boolean;
+}
+
 export interface EntityBalanceStats {
   hp: number;
   damage: number;
@@ -18,9 +34,15 @@ export interface EntityBalanceStats {
   tileW: number;
   tileH: number;
   supplyProvided?: number;
+  targetPolicy?: TargetPolicy;
+  losPolicy?: LOSPolicy;
+  attackProfile?: AttackProfile;
+  upgradeGroups?: readonly UpgradeGroup[];
 }
 
 export type EntityClass = 'unit' | 'building' | 'resource' | 'scaffold';
+
+export type UpgradeGroup = 'military' | 'melee' | 'ranged' | 'building';
 
 export interface EntityBlueprint extends EntityBalanceStats {
   kind: EntityKind;
@@ -62,6 +84,7 @@ export interface UpgradeDefinition {
   perLevel: number;
   maxLevel: number;
   cost: CostProfile;
+  appliesTo: UpgradeGroup[];
 }
 
 export interface RaceBalanceProfile {
@@ -81,5 +104,6 @@ export interface ResolvedEntityStats extends EntityBalanceStats {
   race: Race | null;
   class: EntityClass;
   tags: readonly string[];
+  upgradeGroups?: readonly UpgradeGroup[];
   roleText?: string;
 }

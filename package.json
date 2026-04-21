@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "balance:report": "npx tsx src/balance/report-cli.ts"
+    "balance:report": "npx tsx src/balance/report-cli.ts",
+    "balance:sheet": "npx tsx src/balance/balance-sheet-cli.ts"
   },
   "devDependencies": {
     "ts-node": "^10.9.2",

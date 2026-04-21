@@ -1,5 +1,6 @@
 import type { Entity, GameState } from '../types';
 import { SIM_HZ, isUnitKind, usesRaceProfile } from '../types';
+import { hasUpgradeGroup } from './resolver';
 
 export interface AttackModifierContext {
   state: GameState;
@@ -17,12 +18,12 @@ function isWorkerTarget(target: Entity): boolean {
   return target.kind === 'worker' || target.kind === 'peon';
 }
 
-function isHumanMilitaryUnit(entity: Entity): boolean {
-  return entity.kind === 'footman' || entity.kind === 'archer' || entity.kind === 'knight';
+function isHumanMilitaryUnit(state: GameState, entity: Entity): boolean {
+  return usesRaceProfile(entity.owner) && state.races[entity.owner] === 'human' && hasUpgradeGroup(entity.kind, state.races[entity.owner], 'military');
 }
 
-function isMeleeMilitary(entity: Entity): boolean {
-  return entity.kind === 'footman' || entity.kind === 'knight' || entity.kind === 'grunt' || entity.kind === 'ogreFighter';
+function isMeleeMilitary(state: GameState, entity: Entity): boolean {
+  return usesRaceProfile(entity.owner) && hasUpgradeGroup(entity.kind, state.races[entity.owner], 'melee');
 }
 
 function isNearOwnTownHall(state: GameState, entity: Entity, radius: number): boolean {
@@ -93,7 +94,7 @@ export const ATTACK_MODIFIER_RULES: AttackModifierRule[] = [
     id: 'lumbermill_melee_attack_1',
     description: 'Lumbermill upgrade grants +1 damage to melee military units.',
     apply: ({ state, attacker }) => (
-      isMeleeMilitary(attacker)
+      isMeleeMilitary(state, attacker)
         ? (() => {
             const owner = attacker.owner as 0 | 1;
             const race = state.races[owner];
@@ -111,7 +112,7 @@ export const ATTACK_MODIFIER_RULES: AttackModifierRule[] = [
       state.races[attacker.owner] === 'human' &&
       state.openingPlanSelected[attacker.owner] === 'eco' &&
       state.openingCommitmentClaimed[attacker.owner] &&
-      isHumanMilitaryUnit(attacker) &&
+      isHumanMilitaryUnit(state, attacker) &&
       state.tick <= SIM_HZ * 26 &&
       isNearOwnTownHall(state, attacker, 11)
         ? 1
@@ -126,7 +127,7 @@ export const ATTACK_MODIFIER_RULES: AttackModifierRule[] = [
       state.races[attacker.owner] === 'human' &&
       state.openingPlanSelected[attacker.owner] === 'tempo' &&
       state.openingCommitmentClaimed[attacker.owner] &&
-      isHumanMilitaryUnit(attacker) &&
+      isHumanMilitaryUnit(state, attacker) &&
       state.tick <= SIM_HZ * 30 &&
       isNearContestedMine(state, attacker, target)
         ? 1

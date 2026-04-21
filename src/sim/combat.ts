@@ -2,7 +2,7 @@ import type { Entity, GameState, ProjectileVisualEvent } from '../types';
 import { MAP_H, MAP_W, SIM_HZ, isUnitKind, isRangedUnit, canAttack, usesRaceProfile } from '../types';
 import { getEntity } from './entities';
 import { ticksPerStep } from '../data/units';
-import { getResolvedArmor, getResolvedAttackTicks, getResolvedDamage, getResolvedRange, getResolvedSpeed } from '../balance/resolver';
+import { getResolvedArmor, getResolvedAttackTicks, getResolvedDamage, getResolvedRange, getResolvedSpeed, resolveEntityStats } from '../balance/resolver';
 import { resolveAttackBonus } from '../balance/modifiers';
 import { killEntity } from './entities';
 import { findPath } from './pathfinding';
@@ -69,11 +69,12 @@ function distBetweenEntities(attacker: Entity, target: Entity): number {
 }
 
 export function isTargetAttackableNow(state: GameState, attacker: Entity, target: Entity): boolean {
-  const range = getResolvedRange(attacker.kind, usesRaceProfile(attacker.owner) ? state.races[attacker.owner] : null);
+  const race = usesRaceProfile(attacker.owner) ? state.races[attacker.owner] : null;
+  const resolved = resolveEntityStats(attacker.kind, race);
+  const range = resolved.range;
   if (distBetweenEntities(attacker, target) > range) return false;
   if (range <= 1) return true;
-  // Towers are elevated by design: they shoot over buildings/objects.
-  if (attacker.kind === 'tower') return true;
+  if (!resolved.losPolicy?.requiresLOS) return true;
   return hasLOSToEntity(state, attacker, target, range);
 }
 
@@ -201,8 +202,16 @@ export function processAttack(state: GameState, entity: Entity): void {
     return;
   }
 
-  // Ranged units (archer, troll) only fight mobile units — not buildings or walls
-  if (isRangedUnit(entity.kind) && !isUnitKind(target.kind)) {
+  const attackerRace = usesRaceProfile(entity.owner) ? state.races[entity.owner] : null;
+  const attackerStats = resolveEntityStats(entity.kind, attackerRace);
+  const targetIsUnit = isUnitKind(target.kind);
+  const targetIsWall = target.kind === 'wall';
+  const targetIsBuilding = !targetIsUnit && !targetIsWall && target.kind !== 'goldmine' && target.kind !== 'barrier' && target.kind !== 'construction';
+  if (
+    (targetIsUnit && !attackerStats.targetPolicy?.canAttackUnits) ||
+    (targetIsWall && !attackerStats.targetPolicy?.canAttackWalls) ||
+    (targetIsBuilding && !attackerStats.targetPolicy?.canAttackBuildings)
+  ) {
     clearAttackState();
     entity.cmd = null;
     return;

@@ -37,9 +37,9 @@ export const RACE_BALANCE_PROFILES: Record<Race, RaceBalanceProfile> = {
       },
     },
     upgrades: {
-      meleeAttack: { id: 'meleeAttack', label: 'Attack', perLevel: 1, maxLevel: 2, cost: { gold: 0, wood: 100 } },
-      armor: { id: 'armor', label: 'Defense', perLevel: 2, maxLevel: 3, cost: { gold: 0, wood: 80 } },
-      buildingHp: { id: 'buildingHp', label: 'Bld HP', perLevel: 20, maxLevel: 1, cost: { gold: 0, wood: 120 } },
+      meleeAttack: { id: 'meleeAttack', label: 'Attack', perLevel: 1, maxLevel: 2, cost: { gold: 0, wood: 100 }, appliesTo: ['melee'] },
+      armor: { id: 'armor', label: 'Defense', perLevel: 2, maxLevel: 3, cost: { gold: 0, wood: 80 }, appliesTo: ['military'] },
+      buildingHp: { id: 'buildingHp', label: 'Bld HP', perLevel: 20, maxLevel: 1, cost: { gold: 0, wood: 120 }, appliesTo: ['building'] },
     },
     identityNotes: ['Stronger fortified play, safer line holding.'],
   },
@@ -66,7 +66,7 @@ export const RACE_BALANCE_PROFILES: Record<Race, RaceBalanceProfile> = {
     },
     entityOverrides: {
       tower: {
-        hp: 560,
+        hp: 500,
         damage: 12,
         armor: 3,
         range: 5,
@@ -75,9 +75,9 @@ export const RACE_BALANCE_PROFILES: Record<Race, RaceBalanceProfile> = {
       },
     },
     upgrades: {
-      meleeAttack: { id: 'meleeAttack', label: 'Attack', perLevel: 2, maxLevel: 3, cost: { gold: 0, wood: 80 } },
-      armor: { id: 'armor', label: 'Defense', perLevel: 1, maxLevel: 2, cost: { gold: 0, wood: 120 } },
-      buildingHp: { id: 'buildingHp', label: 'Bld HP', perLevel: 10, maxLevel: 2, cost: { gold: 0, wood: 100 } },
+      meleeAttack: { id: 'meleeAttack', label: 'Attack', perLevel: 2, maxLevel: 3, cost: { gold: 0, wood: 80 }, appliesTo: ['melee'] },
+      armor: { id: 'armor', label: 'Defense', perLevel: 1, maxLevel: 2, cost: { gold: 0, wood: 120 }, appliesTo: ['military'] },
+      buildingHp: { id: 'buildingHp', label: 'Bld HP', perLevel: 10, maxLevel: 2, cost: { gold: 0, wood: 80 }, appliesTo: ['building'] },
     },
     identityNotes: ['Shock-pressure faction, stronger raw contact.'],
   },

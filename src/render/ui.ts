@@ -3,7 +3,7 @@ import type { SessionStats, SessionStatus } from '../net/session';
 import { SIM_HZ, TILE_SIZE, MAP_H, MAP_W, isUnitKind, isWorkerKind, isNeutralOwner, usesRaceProfile } from '../types';
 import { STATS } from '../data/units';
 import { ownerRace, ownerRaceProfile } from '../data/races';
-import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedSupplyProvided, getResolvedTileSize } from '../balance/resolver';
+import { resolveEntityStatsForEntity, resolveEntityStatsForOwner, getResolvedBuildTicks, getResolvedCost, getResolvedHpMax, getResolvedSpeed, getResolvedSupplyProvided, getResolvedTileSize, hasUpgradeGroup } from '../balance/resolver';
 import { resolveAttackBonus } from '../balance/modifiers';
 import { getOpeningPlanLockTicks, getOpeningPlanPresentation } from '../balance/openings';
 import type { Camera } from './camera';
@@ -111,8 +111,9 @@ function getMilitaryArmorBase(kind: EntityKind): number {
 }
 
 function getUnitDisplayedAttack(state: GameState, e: Entity): number {
+  const race = e.owner === 0 || e.owner === 1 ? state.races[e.owner] : null;
   const base = resolveEntityStatsForEntity(state, e).damage;
-  if (!(e.kind === 'footman' || e.kind === 'knight' || e.kind === 'grunt' || e.kind === 'ogreFighter')) return base;
+  if (!hasUpgradeGroup(e.kind, race, 'melee')) return base;
   const bonus = resolveAttackBonus({ state, attacker: e, target: { ...e, owner: e.owner === 0 ? 1 : 0 } });
   return base + bonus;
 }
@@ -636,7 +637,8 @@ function drawEntityInfo(
       : '—';
     const rngStr = stats.range > 1 ? `${stats.range}` : 'melee';
     const shownAtk = getUnitDisplayedAttack(state, e);
-    const shownDef = e.kind === 'footman' || e.kind === 'archer' || e.kind === 'knight' || e.kind === 'grunt' || e.kind === 'troll' || e.kind === 'ogreFighter'
+    const race = e.owner === 0 || e.owner === 1 ? state.races[e.owner] : null;
+    const shownDef = hasUpgradeGroup(e.kind, race, 'military')
       ? (e.statArmor ?? stats.armor)
       : stats.armor;
     ctx.fillStyle = '#ffcc88';

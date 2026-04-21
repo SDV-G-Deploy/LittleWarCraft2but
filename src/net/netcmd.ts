@@ -8,6 +8,7 @@ import type { EntityKind, GameState, OpeningPlan, Race } from '../types';
 import { SIM_HZ, isUnitKind, isWorkerKind, areHostile } from '../types';
 import { getResolvedCost } from '../balance/resolver';
 import { RACE_BALANCE_PROFILES } from '../balance/races';
+import { hasUpgradeGroup, resolveEntityStats } from '../balance/resolver';
 import { issueAttackCommand } from '../sim/combat';
 import { issueGatherCommand, issueTrainCommand, issueBuildCommand, issueResumeBuildCommand, refundCancelledTrainCommand } from '../sim/economy';
 import { issueMoveCommand } from '../sim/commands';
@@ -238,15 +239,8 @@ export function applyNetCmds(
         if (cmd.upgrade === 'armor') {
           for (const e of state.entities) {
             if (e.owner !== owner || !isUnitKind(e.kind)) continue;
-            const isMilitary = e.kind === 'footman' || e.kind === 'archer' || e.kind === 'knight' || e.kind === 'grunt' || e.kind === 'troll' || e.kind === 'ogreFighter';
-            if (!isMilitary) continue;
-            const baseArmor = e.kind === 'footman' ? 4
-              : e.kind === 'archer' ? 0
-              : e.kind === 'knight' ? 6
-              : e.kind === 'grunt' ? 4
-              : e.kind === 'troll' ? 0
-              : e.kind === 'ogreFighter' ? 4
-              : 0;
+            if (!hasUpgradeGroup(e.kind, race, 'military')) continue;
+            const baseArmor = resolveEntityStats(e.kind, race).armor;
             const perLevel = race === 'human' ? 2 : 1;
             e.statArmor = baseArmor + upgrades.armorLevel * perLevel;
           }
