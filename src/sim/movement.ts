@@ -101,6 +101,12 @@ export const CHASE_STEP_POLICY: MovementStepPolicy = {
   clearPathOnSidestepRepathFailure: true,
 };
 
+export const WORKER_TRAVEL_STEP_POLICY: MovementStepPolicy = {
+  allowRepath: true,
+  allowSidestep: false,
+  clearPathOnSidestepRepathFailure: false,
+};
+
 type AdvanceMovementStepArgs = {
   state: GameState;
   entity: Entity;

@@ -18,6 +18,7 @@ import {
 import { applyDoctrineTrainTicks } from '../balance/doctrines';
 import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity, setEntityFootprint } from './entities';
 import { findPath } from './pathfinding';
+import { advanceMovementStepCore, WORKER_TRAVEL_STEP_POLICY } from './movement';
 
 // ─── Population ───────────────────────────────────────────────────────────────
 
@@ -75,9 +76,11 @@ function nearestDropoff(state: GameState, owner: 0 | 1, px: number, py: number, 
 }
 
 type EntityWithCache = Entity & {
-  _gatherPath?: Vec2[];
+  _gatherPath?: Vec2[] | null;
   _gatherTarget?: Vec2;
-  _buildPath?:  Vec2[];
+  _gatherPathBlockedUntil?: number;
+  _buildPath?:  Vec2[] | null;
+  _buildPathBlockedUntil?: number;
 };
 
 function logBuildDebug(message: string): void {
@@ -215,6 +218,7 @@ export function processGather(state: GameState, entity: Entity): void {
   const clearGatherState = () => {
     ec._gatherPath = undefined;
     ec._gatherTarget = undefined;
+    ec._gatherPathBlockedUntil = undefined;
   };
 
   const lastTargetId = cmd.targetId;
@@ -267,13 +271,27 @@ export function processGather(state: GameState, entity: Entity): void {
         ec._gatherPath = approach.path;
         ec._gatherTarget = approach.target;
       }
+      if (ec._gatherPath === null) return;
       if (ec._gatherPath.length === 0) {
         cmd.phase = 'gathering'; cmd.waitTicks = state.tick; ec._gatherTarget = undefined; return;
       }
       if (state.tick - cmd.waitTicks < tps) return;
-      const next = ec._gatherPath.shift()!;
-      entity.pos.x = next.x; entity.pos.y = next.y;
-      cmd.waitTicks = state.tick;
+      const targetPos = ec._gatherTarget ?? ec._gatherPath[ec._gatherPath.length - 1]!;
+      const stepResult = advanceMovementStepCore({
+        state,
+        entity,
+        path: ec._gatherPath,
+        goal: targetPos,
+        policy: WORKER_TRAVEL_STEP_POLICY,
+        tryRepath: () => {
+          const approach = target.resourceType === 'gold'
+            ? bestMineApproach(state, entity, target.entity)
+            : bestTreeApproach(state, entity, cmd.targetId % MAP_W, Math.floor(cmd.targetId / MAP_W));
+          ec._gatherTarget = approach?.target;
+          return approach?.path ?? null;
+        },
+      });
+      if (stepResult !== 'no-path') cmd.waitTicks = state.tick;
       if (ec._gatherPath.length === 0) {
         cmd.phase = 'gathering'; cmd.waitTicks = state.tick; ec._gatherPath = undefined; ec._gatherTarget = undefined;
       }
@@ -327,7 +345,17 @@ export function processGather(state: GameState, entity: Entity): void {
         const dropX = dropoff.pos.x + Math.floor(dropoff.tileW / 2);
         const dropY = dropoff.pos.y + dropoff.tileH;
         const raw = findPath(state, entity.pos.x, entity.pos.y, dropX, dropY);
-        ec._gatherPath = raw ?? [];
+        ec._gatherPath = raw;
+        if (raw === null) {
+          ec._gatherPathBlockedUntil = state.tick + SIM_HZ;
+          return;
+        }
+      }
+      if (ec._gatherPath === null) {
+        if (state.tick < (ec._gatherPathBlockedUntil ?? 0)) return;
+        ec._gatherPath = undefined;
+        ec._gatherPathBlockedUntil = undefined;
+        return;
       }
       if (ec._gatherPath.length === 0) {
         const owner = entity.owner as 0 | 1;
@@ -369,9 +397,19 @@ export function processGather(state: GameState, entity: Entity): void {
         return;
       }
       if (state.tick - cmd.waitTicks < tps) return;
-      const next = ec._gatherPath.shift()!;
-      entity.pos.x = next.x; entity.pos.y = next.y;
-      cmd.waitTicks = state.tick;
+      const dropGoal = {
+        x: dropoff.pos.x + Math.floor(dropoff.tileW / 2),
+        y: dropoff.pos.y + dropoff.tileH,
+      };
+      const stepResult = advanceMovementStepCore({
+        state,
+        entity,
+        path: ec._gatherPath,
+        goal: dropGoal,
+        policy: WORKER_TRAVEL_STEP_POLICY,
+        tryRepath: () => findPath(state, entity.pos.x, entity.pos.y, dropGoal.x, dropGoal.y),
+      });
+      if (stepResult !== 'no-path') cmd.waitTicks = state.tick;
       break;
     }
   }
@@ -691,6 +729,7 @@ export function processBuild(state: GameState, entity: Entity): void {
 
   const clearBuildState = () => {
     ec._buildPath = undefined;
+    ec._buildPathBlockedUntil = undefined;
   };
 
   // Construction site must exist — if demolished, abandon this command
@@ -707,7 +746,17 @@ export function processBuild(state: GameState, entity: Entity): void {
       const bStats = getResolvedTileSize(cmd.building);
       const adjX   = cmd.pos.x + Math.floor((bStats.tileW ?? 1) / 2);
       const adjY   = cmd.pos.y + (bStats.tileH ?? 1);
-      ec._buildPath = findPath(state, entity.pos.x, entity.pos.y, adjX, adjY) ?? [];
+      ec._buildPath = findPath(state, entity.pos.x, entity.pos.y, adjX, adjY);
+      if (ec._buildPath === null) {
+        ec._buildPathBlockedUntil = state.tick + SIM_HZ;
+        return;
+      }
+    }
+    if (ec._buildPath === null) {
+      if (state.tick < (ec._buildPathBlockedUntil ?? 0)) return;
+      ec._buildPath = undefined;
+      ec._buildPathBlockedUntil = undefined;
+      return;
     }
     if (ec._buildPath.length === 0) {
       cmd.phase = 'building';
@@ -715,9 +764,20 @@ export function processBuild(state: GameState, entity: Entity): void {
       return;
     }
     if (state.tick - cmd.stepTick < tps) return;
-    const next = ec._buildPath.shift()!;
-    entity.pos.x = next.x; entity.pos.y = next.y;
-    cmd.stepTick = state.tick;
+    const bStats = getResolvedTileSize(cmd.building);
+    const buildGoal = {
+      x: cmd.pos.x + Math.floor((bStats.tileW ?? 1) / 2),
+      y: cmd.pos.y + (bStats.tileH ?? 1),
+    };
+    const stepResult = advanceMovementStepCore({
+      state,
+      entity,
+      path: ec._buildPath,
+      goal: buildGoal,
+      policy: WORKER_TRAVEL_STEP_POLICY,
+      tryRepath: () => findPath(state, entity.pos.x, entity.pos.y, buildGoal.x, buildGoal.y),
+    });
+    if (stepResult !== 'no-path') cmd.stepTick = state.tick;
     if (ec._buildPath.length === 0) {
       cmd.phase = 'building';
       clearBuildState();
