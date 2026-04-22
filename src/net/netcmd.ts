@@ -139,7 +139,20 @@ export function applyNetCmds(
       }
       case 'build': {
         const w = getEntity(state, cmd.workerId);
-        if (w && w.owner === owner && isWorkerKind(w.kind)) issueBuildCommand(state, w, cmd.building, { x: cmd.tx, y: cmd.ty }, state.tick);
+        if (!w) {
+          console.info(`[build-debug] net-apply reject owner=${owner} reason=missing-worker worker=${cmd.workerId} building=${cmd.building} at=${cmd.tx},${cmd.ty} tick=${state.tick}`);
+          break;
+        }
+        if (w.owner !== owner) {
+          console.info(`[build-debug] net-apply reject owner=${owner} reason=worker-owner-mismatch worker=${cmd.workerId} actualOwner=${w.owner} building=${cmd.building} at=${cmd.tx},${cmd.ty} tick=${state.tick}`);
+          break;
+        }
+        if (!isWorkerKind(w.kind)) {
+          console.info(`[build-debug] net-apply reject owner=${owner} reason=not-worker worker=${cmd.workerId} kind=${w.kind} building=${cmd.building} at=${cmd.tx},${cmd.ty} tick=${state.tick}`);
+          break;
+        }
+        console.info(`[build-debug] net-apply owner=${owner} worker=${cmd.workerId} kind=${w.kind} building=${cmd.building} at=${cmd.tx},${cmd.ty} tick=${state.tick}`);
+        issueBuildCommand(state, w, cmd.building, { x: cmd.tx, y: cmd.ty }, state.tick);
         break;
       }
       case 'stop': {

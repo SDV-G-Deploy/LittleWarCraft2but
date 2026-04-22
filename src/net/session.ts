@@ -234,6 +234,28 @@ const MAX_INBOUND_PACKETS_PER_WINDOW = 120;
 const MAX_WAITING_STALL_TICKS = 600;
 const ACCEPT_LOG_INTERVAL_TICKS = 40;
 
+function summarizeCmdKinds(cmds: NetCmd[]): string {
+  if (cmds.length === 0) return 'none';
+  const counts = new Map<string, number>();
+  for (const cmd of cmds) {
+    counts.set(cmd.k, (counts.get(cmd.k) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([kind, count]) => `${kind}:${count}`)
+    .join(',');
+}
+
+function summarizeBuildCmd(cmd: Extract<NetCmd, { k: 'build' }>): string {
+  return `worker=${cmd.workerId} building=${cmd.building} at=${cmd.tx},${cmd.ty}`;
+}
+
+function logBuildCmds(scope: string, cmds: NetCmd[]): void {
+  const builds = cmds.filter((cmd): cmd is Extract<NetCmd, { k: 'build' }> => cmd.k === 'build');
+  if (builds.length === 0) return;
+  console.info(`[net:build] ${scope} ${builds.map(summarizeBuildCmd).join(' | ')}`);
+}
+
 function isInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v);
 }
@@ -470,10 +492,12 @@ export async function createSession(
     const prev = outboundPending.get(tick);
     if (!prev) {
       outboundPending.set(tick, [...cmds]);
+      logBuildCmds(`queue tick=${tick}`, cmds);
       return;
     }
     if (cmds.length === 0) return;
     prev.push(...cmds);
+    logBuildCmds(`merge tick=${tick}`, cmds);
   }
 
   function flushOutboundPackets(): void {
@@ -482,6 +506,8 @@ export async function createSession(
     for (const pendingTick of ticks) {
       const cmds = outboundPending.get(pendingTick);
       if (!cmds) continue;
+      console.info(`[net:out] tick=${pendingTick} cmds=${cmds.length} kinds=${summarizeCmdKinds(cmds)}`);
+      logBuildCmds(`send tick=${pendingTick}`, cmds);
       conn.send({ tick: pendingTick, cmds } satisfies TickPacket);
       outboundPending.delete(pendingTick);
     }
@@ -495,13 +521,22 @@ export async function createSession(
     netMode,
 
     push(cmd) {
-      if (localBuf.length < MAX_LOCAL_CMDS_PER_TICK) localBuf.push(cmd);
+      if (localBuf.length < MAX_LOCAL_CMDS_PER_TICK) {
+        localBuf.push(cmd);
+        if (cmd.k === 'build') {
+          console.info(`[net:build] local-buffer ${summarizeBuildCmd(cmd)}`);
+        }
+      }
     },
 
     exchange(tick) {
       const scheduledTick = tick + EXECUTION_DELAY_TICKS;
       const toSend = localBuf;
       localBuf = [];
+      if (toSend.length > 0) {
+        console.info(`[net:exchange] now=${tick} scheduled=${scheduledTick} cmds=${toSend.length} kinds=${summarizeCmdKinds(toSend)}`);
+        logBuildCmds(`exchange now=${tick} scheduled=${scheduledTick}`, toSend);
+      }
       enqueueLocalForTick(scheduledTick, toSend);
 
       // Send every sim tick so remote can advance lockstep even on empty-input ticks.
@@ -526,12 +561,14 @@ export async function createSession(
       if (local.length > 0) {
         queuedLocalCmdCount -= local.length;
         localQueue.delete(tick);
+        logBuildCmds(`apply-local tick=${tick}`, local);
       }
 
       const remote = remoteQueue.get(tick) ?? [];
       if (remote.length > 0) {
         queuedRemoteCmdCount -= remote.length;
         remoteQueue.delete(tick);
+        logBuildCmds(`apply-remote tick=${tick}`, remote);
       }
 
       return { ready: true, local, remote };
@@ -684,6 +721,10 @@ export async function createSession(
           lastAcceptedTickLogged = pkt.tick;
         } else {
           summarizeInbound(summary);
+        }
+        if (pkt.cmds.length > 0) {
+          console.info(`[net:in] tick=${pkt.tick} cmds=${pkt.cmds.length} kinds=${summarizeCmdKinds(pkt.cmds)}`);
+          logBuildCmds(`recv tick=${pkt.tick}`, pkt.cmds);
         }
         enqueueRemotePacket(pkt);
         return;

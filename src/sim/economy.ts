@@ -80,6 +80,10 @@ type EntityWithCache = Entity & {
   _buildPath?:  Vec2[];
 };
 
+function logBuildDebug(message: string): void {
+  console.info(`[build-debug] ${message}`);
+}
+
 function getMineApproachTiles(state: GameState, mine: Entity): Vec2[] {
   const tiles: Vec2[] = [];
   for (let y = mine.pos.y - 1; y <= mine.pos.y + mine.tileH; y++) {
@@ -575,6 +579,28 @@ export function isValidPlacement(
   return true;
 }
 
+export function getPlacementBlockReason(
+  state: GameState,
+  building: EntityKind,
+  tx: number,
+  ty: number,
+): string | null {
+  const stats = getResolvedTileSize(building);
+  for (let dy = 0; dy < stats.tileH; dy++) {
+    for (let dx = 0; dx < stats.tileW; dx++) {
+      const x = tx + dx; const y = ty + dy;
+      if (x < 1 || y < 1 || x >= MAP_W - 1 || y >= MAP_H - 1) return `out-of-bounds tile=${x},${y}`;
+      if (!state.tiles[y][x].passable) return `impassable tile=${x},${y} kind=${state.tiles[y][x].kind}`;
+      const blocking = state.entities.find(e =>
+        x >= e.pos.x && x < e.pos.x + e.tileW &&
+        y >= e.pos.y && y < e.pos.y + e.tileH,
+      );
+      if (blocking) return `occupied tile=${x},${y} by=${blocking.kind}#${blocking.id} owner=${blocking.owner}`;
+    }
+  }
+  return null;
+}
+
 export function issueBuildCommand(
   state: GameState,
   worker: Entity,
@@ -582,9 +608,13 @@ export function issueBuildCommand(
   pos: Vec2,
   currentTick: number,
 ): boolean {
+  logBuildDebug(`attempt owner=${worker.owner} worker=${worker.id} kind=${worker.kind} building=${building} at=${pos.x},${pos.y} tick=${currentTick} gold=${state.gold[worker.owner as 0 | 1]} wood=${state.wood[worker.owner as 0 | 1]}`);
   if (building === 'tower') {
     const hasBarracks = state.entities.some(e => e.owner === worker.owner && e.kind === 'barracks');
-    if (!hasBarracks) return false;
+    if (!hasBarracks) {
+      logBuildDebug(`reject owner=${worker.owner} worker=${worker.id} building=${building} reason=missing-barracks`);
+      return false;
+    }
   }
 
   const stats = {
@@ -593,9 +623,19 @@ export function issueBuildCommand(
     cost: getResolvedCost(building, state.races[worker.owner as 0 | 1]),
   };
   const cost = stats.cost;
-  if (state.gold[worker.owner as 0 | 1] < cost.gold) return false;
-  if (state.wood[worker.owner as 0 | 1] < cost.wood) return false;
-  if (!isValidPlacement(state, building, pos.x, pos.y)) return false;
+  if (state.gold[worker.owner as 0 | 1] < cost.gold) {
+    logBuildDebug(`reject owner=${worker.owner} worker=${worker.id} building=${building} reason=insufficient-gold need=${cost.gold} have=${state.gold[worker.owner as 0 | 1]}`);
+    return false;
+  }
+  if (state.wood[worker.owner as 0 | 1] < cost.wood) {
+    logBuildDebug(`reject owner=${worker.owner} worker=${worker.id} building=${building} reason=insufficient-wood need=${cost.wood} have=${state.wood[worker.owner as 0 | 1]}`);
+    return false;
+  }
+  const placementReason = getPlacementBlockReason(state, building, pos.x, pos.y);
+  if (placementReason) {
+    logBuildDebug(`reject owner=${worker.owner} worker=${worker.id} building=${building} reason=invalid-placement ${placementReason}`);
+    return false;
+  }
 
   state.gold[worker.owner as 0 | 1] -= cost.gold;
   state.wood[worker.owner as 0 | 1] -= cost.wood;
@@ -609,6 +649,7 @@ export function issueBuildCommand(
   site.hpMax = stats.buildTicks;
   setEntityFootprint(state, site, stats.tileW, stats.tileH);
   site.constructionOf = building;
+  logBuildDebug(`site-spawned owner=${worker.owner} worker=${worker.id} site=${site.id} building=${building} at=${pos.x},${pos.y} hpMax=${site.hpMax}`);
 
   worker.cmd = {
     type: 'build', building, pos: { ...pos },
@@ -616,6 +657,7 @@ export function issueBuildCommand(
     phase: 'moving', stepTick: currentTick,
   };
   (worker as EntityWithCache)._buildPath = undefined;
+  logBuildDebug(`accepted owner=${worker.owner} worker=${worker.id} site=${site.id} building=${building} at=${pos.x},${pos.y}`);
   return true;
 }
 
