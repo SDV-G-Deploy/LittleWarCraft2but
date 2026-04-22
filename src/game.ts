@@ -109,6 +109,9 @@ export function startGame(
   const commandMarkers: CommandMarker[] = [];
   let openingPlanFeedback: { plan: OpeningPlan; untilTick: number } | null = null;
   let lastNetChecksumLine = '';
+  let onlineStartupPhase: 'lobby_config_ready' | 'transport_ready' | 'simulation_ready' | 'input_unlocked' =
+    net ? 'lobby_config_ready' : 'input_unlocked';
+  let onlineInputUnlocked = !net;
 
   /**
    * Emit a command.
@@ -131,6 +134,8 @@ export function startGame(
   }
 
   function emit(cmd: NetCmd): void {
+    if (net && !onlineInputUnlocked) return;
+
     if (cmd.k === 'move') {
       pushMarker('move', cmd.tx, cmd.ty);
       if (cmd.ids.length === 1) pushMarker('moveExact', cmd.tx, cmd.ty);
@@ -578,6 +583,10 @@ export function startGame(
     }
     // Online mini-lockstep: advance only when this tick is ready on both sides.
     if (net) {
+      if (onlineStartupPhase === 'lobby_config_ready' && net.status === 'ready') {
+        onlineStartupPhase = 'transport_ready';
+      }
+
       if (net.status === 'error' && gameResult === 'playing') {
         gameResult = 'lose';
         return;
@@ -596,6 +605,16 @@ export function startGame(
         }
         return;
       }
+
+      if (!onlineInputUnlocked) {
+        const stats = net.getStats();
+        if (stats.remoteAnnouncedUpToTick >= state.tick) {
+          onlineStartupPhase = 'simulation_ready';
+          onlineInputUnlocked = true;
+          onlineStartupPhase = 'input_unlocked';
+        }
+      }
+
       if (myOwner === 0) {
         if (exchange.local.length > 0) applyNetCmds(state, exchange.local, 0);
         if (exchange.remote.length > 0) applyNetCmds(state, exchange.remote, 1);
@@ -687,6 +706,42 @@ export function startGame(
     ctx.fillRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
   }
 
+  function drawOnlineStartupOverlay(): void {
+    if (!net || onlineInputUnlocked || gameResult !== 'playing') return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const boxW = Math.min(520, w - 40);
+    const boxH = 88;
+    const x = (w - boxW) / 2;
+    const y = Math.max(26, h * 0.08);
+
+    const statusLabel = onlineStartupPhase === 'lobby_config_ready'
+      ? 'Lobby ready, waiting for transport…'
+      : onlineStartupPhase === 'transport_ready'
+        ? 'Transport ready, syncing simulation…'
+        : 'Preparing online match…';
+
+    ctx.fillStyle = 'rgba(0,0,0,0.70)';
+    ctx.fillRect(x, y, boxW, boxH);
+    ctx.strokeStyle = '#88bbff';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, boxW - 1, boxH - 1);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#88bbff';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText('Online sync in progress', x + boxW / 2, y + 30);
+
+    ctx.fillStyle = '#c8d7f5';
+    ctx.font = '12px monospace';
+    ctx.fillText(statusLabel, x + boxW / 2, y + 52);
+    ctx.fillStyle = '#9ba9c2';
+    ctx.fillText('Gameplay commands unlock only after peer sync is proven.', x + boxW / 2, y + 72);
+
+    ctx.textAlign = 'left';
+  }
+
   function drawGroupBadges(): void {
     let gx = 4;
     controlGroups.forEach((ids, slot) => {
@@ -753,6 +808,7 @@ export function startGame(
     } : null, openingPlanFeedback);
     drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, myOwner, dockLayout.minimapRect);
     drawGroupBadges();
+    drawOnlineStartupOverlay();
     drawResultOverlay();
 
     requestAnimationFrame(loop);
