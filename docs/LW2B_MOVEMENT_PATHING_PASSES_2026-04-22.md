@@ -168,3 +168,42 @@ Success criteria for the refactor:
 - fewer obvious stuck/reject edge cases
 - same or better determinism confidence
 - better player control feel
+
+## Movement stabilization checkpoint after passes #1-#4
+
+### What changed today
+- Fixed adjacent one-tile move rejection and misleading offline move/error marker overlap.
+- Extracted a shared movement step core for movement execution.
+- Moved `move` and `chase` onto the shared movement core.
+- Added movement policy profiles so movement semantics can stay role-specific.
+- Partially unified worker travel onto the shared core while keeping economy state machines specialized.
+- Fixed worker correctness bugs where unreachable travel could be mistaken for successful arrival:
+  - unreachable build path no longer starts building remotely
+  - unreachable return path no longer deposits resources remotely
+
+### Current intended architecture
+- Shared core owns: path-step execution, occupancy/reservation handling, repath hooks, step result statuses.
+- Domain modules still own: move intent, chase/attack logic, gather logic, build logic, economic side effects.
+- Worker movement remains intentionally softer/lighter than combat movement.
+- This is a partial unification, not a mega-command rewrite.
+
+### What we are consciously NOT doing yet
+- No deep crowd simulation / ORCA / boids-style rewrite.
+- No full merge of gather/build state machines into combat/move semantics.
+- No lockstep scheduling or protocol changes.
+- No further movement refactor pass until manual gameplay validation reveals a concrete need.
+
+### Manual stabilization checklist
+- Adjacent move: combat/military unit moves correctly to a neighboring valid tile.
+- Blocked build path: worker does not begin building if path is impossible.
+- Unblocked-later build path: worker retries and resumes sensibly after the route opens.
+- Blocked return path: worker does not deposit without actually returning.
+- Unblocked-later return path: worker eventually returns and deposits correctly.
+- Multi-worker traffic near resource/dropoff stays lightweight and does not feel over-constrained.
+- Combat choke traffic still feels deterministic and not obviously worse after refactor.
+
+### Recommended next action
+- Stop refactoring movement for now.
+- Do short manual playtests.
+- Only schedule the next pass if playtesting reveals a concrete new bug, regression, or remaining pain point.
+
