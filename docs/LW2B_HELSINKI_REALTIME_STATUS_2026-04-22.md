@@ -148,74 +148,50 @@ Current rollback snapshot:
 
 If needed, restore from that snapshot before this migration pass.
 
-## Remaining recommended checks after this milestone
+## Gameplay/runtime debugging update after newer live tests
 
-- verify end-to-end TURN usage from a real browser client, not only OpenSSL
-- test difficult-network behavior from Russia specifically
-- decide whether old `5349` should remain as fallback or be retired later
-- decide whether cert-copy refresh should be documented/manual or later automated on certificate renewal
-- after infra stabilizes, verify repo local-vs-push sync so operational docs stay aligned with reality
+Newer live tests changed the interpretation of the runtime problem:
+- the new UI and server flow complete successfully
+- connection can stabilize after some time
+- the match can begin
+- on one laptop with two browser windows, fullscreen / background-window behavior can distort the result because only the foreground game may remain truly active
+- when both windows remain effectively active and visible, online play progresses much further
+- host gameplay works
+- remote guest can move and gather
+- remote guest still cannot build
 
-## Safe recall note for future `/new`
+This is important because it narrows the current active bug.
+The runtime path is no longer best described as a total SERVER-mode startup failure.
+The strongest remaining gameplay/runtime issue is now:
+- **remote non-host build actions still fail**
 
-When resuming `ПРОЕКТ LW2B`, remember:
-- there is a separate active gameplay track
-- and there is an active Helsinki realtime infra track
-- a rollback snapshot exists at:
-  - `/root/lw2b-net-snapshots/20260422T093107Z`
-- if the user mentions Hetzner Helsinki, `rts.kislota.today`, floating IP, TURN, PeerJS, nginx, or Russia accessibility, this document is one of the first places to resume from
-  - `443/tcp` on the chosen TURN edge
-  - `3478/tcp`
-  - `3478/udp`
-  - `5349/tcp` if kept as fallback
-- Verify whether TURN/TLS on `443` materially improves difficult-network behavior
+## Updated engineering interpretation
 
-### Priority 3
-- Reassess whether production ICE should remain TURN-only / TURN-first
-- Decide whether STUN fallback should be restored for broader compatibility or kept disabled intentionally
+What now looks proven enough:
+- Helsinki realtime infra is operational enough for real match start
+- TURN/TLS on floating `443` is not the main blocker anymore
+- at least part of the earlier "dead controls" diagnosis was polluted by browser visibility / scheduling artifacts from one-laptop testing
 
-## Planned safe migration shape
+What now looks most likely:
+- the earlier startup/readiness-gate work likely improved the broad online path
+- the current highest-value bug is narrower and probably lives in the remote guest build-command path
+- likely failure layers are now command-specific, such as:
+  - guest build emit path
+  - build packet queueing / delivery
+  - owner-1 command application
+  - placement validation divergence between peers
+  - construction-site spawn / worker-state validation mismatch
 
-Current confirmed bind shape:
-- nginx listens on `0.0.0.0:443`
-- coturn listens on `3478` and `5349`, also on wildcard host bindings through docker proxy
-- this means coturn cannot take `443` until nginx is narrowed to the main IP only
+## Best current next engineering step
 
-Recommended low-risk migration order:
-1. bind nginx HTTPS only to main server IP `204.168.242.157:443`
-2. keep existing website/API behavior unchanged on the main IP during transition
-3. verify at runtime that nginx no longer owns floating `95.216.182.141:443`
-4. move coturn TLS listener to `95.216.182.141:443`
-5. set coturn `external-ip` / public edge semantics to the floating IP for TLS-facing clients if that matches final design
-6. only then change ICE output to prefer `turns:...:443`
-7. keep `3478` and possibly `5349` as fallback until real-world tests confirm the new path
+Do not prioritize more infra work first.
+The best next step is:
+1. reproduce the issue on two truly active peers if possible
+2. add narrow build-command-specific diagnostics
+3. identify whether guest build fails at emit, send, receive, apply, validate, or construction spawn
 
-Why this order is safer:
-- avoids immediate outage on the existing HTTPS/API entrypoint
-- lets TURN `443` be introduced incrementally
-- keeps rollback simple: restore nginx wildcard bind and revert coturn TLS port mapping if needed
-
-## Current migration blocker discovered during implementation
-
-A live attempt to move coturn TLS to floating `95.216.182.141:443` initially failed with:
-- `failed to bind host port 95.216.182.141:443/tcp: address already in use`
-
-That blocker is now understood:
-- nginx reload left old wildcard listener sockets open
-- a full `systemctl restart nginx` released floating `443`
-- after restart, nginx listens only on main IP `204.168.242.157:443`
-
-Current implementation state after retry:
-- coturn container now starts with intended ICE output using `turns:rts.kislota.today:443?transport=tcp`
-- main HTTPS on `204.168.242.157` still works
-- nginx no longer owns floating `95.216.182.141:443`
-- floating `95.216.182.141:443` is now successfully bound by docker/coturn infrastructure
-- coturn TLS on floating `443` is now confirmed with a successful OpenSSL handshake and the correct `rts.kislota.today` Let's Encrypt certificate
-- current working fix uses dedicated copied cert files under:
-  - `/opt/lw2b-realtime/certs/fullchain.pem`
-  - `/opt/lw2b-realtime/certs/privkey.pem`
-- this avoids permission/symlink issues from direct certbot mounts inside the coturn container
-- current live state should be treated as a valid rollback-safe milestone
+Companion note added for this narrowed bug:
+- `docs/LW2B_REMOTE_GUEST_BUILD_DEBUG_CHECKLIST_2026-04-22.md`
 
 ## Remaining recommended checks after this milestone
 
@@ -224,6 +200,7 @@ Current implementation state after retry:
 - decide whether old `5349` should remain as fallback or be retired later
 - decide whether cert-copy refresh should be documented/manual or later automated on certificate renewal
 - after infra stabilizes, verify repo local-vs-push sync so operational docs stay aligned with reality
+- continue gameplay/runtime debugging with focus on remote guest build failure rather than broad startup failure framing
 
 ## Safe recall note for future `/new`
 
@@ -232,4 +209,6 @@ When resuming `ПРОЕКТ LW2B`, remember:
 - and there is an active Helsinki realtime infra track
 - a rollback snapshot exists at:
   - `/root/lw2b-net-snapshots/20260422T093107Z`
-- if the user mentions Hetzner Helsinki, `rts.kislota.today`, floating IP, TURN, PeerJS, nginx, or Russia accessibility, this document is one of the first places to resume from
+- broad network bring-up is much healthier than the earlier failing tests implied
+- current active gameplay/runtime bug is narrowed to remote guest build behavior after successful online match start
+- if the user mentions Hetzner Helsinki, `rts.kislota.today`, floating IP, TURN, PeerJS, nginx, Russia accessibility, or guest build failure, this document is one of the first places to resume from
