@@ -1,22 +1,36 @@
 # LW2B remote guest build debug checklist (2026-04-22)
 
-## Current narrowed problem
+## Status update
 
-As of 2026-04-22, the broad Helsinki realtime path looks substantially more alive than the earlier failing tests suggested.
+This document is now primarily historical.
 
-New observed shape from live testing:
-- the new UI and server flow complete
-- connection can stabilize after some time
-- the match starts successfully
-- on one laptop with two browsers, fullscreen / background-window behavior can distort the result because only the foreground window remains truly active
-- when both browser windows remain visible instead of one effectively backgrounded, online play becomes functional enough for movement and harvesting
-- host can play
-- remote guest can move and gather
-- remote guest still cannot build
+The previously narrowed bug where the remote guest could move and gather but could not build has since been fixed in live project state.
+That means this checklist should no longer be treated as the current top-priority LW2B blocker.
 
-This narrows the active gameplay/runtime bug significantly.
-It is no longer best described as a total online startup failure.
-It now looks like a more specific **remote non-host action-path bug**, with build commands the strongest current repro.
+What remains useful here:
+- the earlier narrowing logic
+- the command-path breakdown for future online command-specific regressions
+- the reminder that one-laptop backgrounded-window testing can distort lockstep diagnosis
+
+Current project-level priority has moved to **Russia-facing online accessibility / reachability**, not guest build acceptance.
+
+## Historical narrowed problem
+
+As of the earlier 2026-04-22 live-debug stage, the broad Helsinki realtime path looked substantially more alive than the first failing tests suggested.
+
+Observed shape at that stage:
+- the new UI and server flow completed
+- connection could stabilize after some time
+- the match started successfully
+- on one laptop with two browsers, fullscreen / background-window behavior could distort the result because only the foreground window remained truly active
+- when both browser windows remained visible instead of one effectively backgrounded, online play became functional enough for movement and harvesting
+- host could play
+- remote guest could move and gather
+- remote guest could not build
+
+At that time, this narrowed the active gameplay/runtime bug significantly.
+It was no longer best described as a total online startup failure.
+It looked like a more specific **remote non-host action-path bug**, with build commands the strongest current repro.
 
 ## What is already likely true
 
@@ -198,8 +212,7 @@ Only after that should a fix be chosen.
 
 ## Current short status summary
 
-- Helsinki realtime infra: operational enough
-- startup/runtime flow: no longer looks totally broken
-- browser visibility on one laptop: confirmed confounder
-- current active bug: remote guest can move and gather, but cannot build
-- best next move: narrow build-path instrumentation and repro on two truly active peers
+- this checklist describes a bug that has already been fixed
+- Helsinki realtime infra remains operational enough for real match start
+- browser visibility on one laptop remains a useful diagnostic confounder to remember
+- current top-level project blocker is now Russia-facing accessibility and online reachability, not guest build acceptance
