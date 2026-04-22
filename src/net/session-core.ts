@@ -38,6 +38,7 @@ export interface NetSession {
   status: SessionStatus;
   statusMsg: string;
   netMode: NetMode;
+  transportMode: TransportMode;
 
   onStatusChange?: () => void;
   onConfig?: (cfg: SessionConfig) => void;
@@ -60,6 +61,7 @@ interface FriendlyError {
 }
 
 export type NetMode = 'public' | 'selfhost';
+export type TransportMode = 'peerjs' | 'ws-relay';
 
 const VALID_RACES = new Set<Race>(['human', 'orc']);
 const VALID_MAP_IDS = new Set<MapId>([1, 2, 3, 4, 5, 6]);
@@ -154,6 +156,7 @@ interface SessionCoreInit {
   hostConfig?: Pick<SessionConfig, 'race' | 'mapId'>;
   guestRace?: Race;
   netMode: NetMode;
+  transportMode: TransportMode;
   destroyPeer: () => void;
 }
 
@@ -169,7 +172,7 @@ export interface SessionCore {
 }
 
 export function createSessionCore(init: SessionCoreInit): SessionCore {
-  const { role, hostCode, hostConfig, guestRace, netMode, destroyPeer } = init;
+  const { role, hostCode, hostConfig, guestRace, netMode, transportMode, destroyPeer } = init;
   const safeHostConfig = hostConfig && isRace(hostConfig.race) && isMapId(hostConfig.mapId) ? hostConfig : undefined;
   const safeGuestRace: Race = isRace(guestRace) ? guestRace : 'human';
 
@@ -329,6 +332,7 @@ export function createSessionCore(init: SessionCoreInit): SessionCore {
     status: 'init',
     statusMsg: 'Initialising…',
     netMode,
+    transportMode,
 
     push(cmd) {
       if (localBuf.length < MAX_LOCAL_CMDS_PER_TICK) {

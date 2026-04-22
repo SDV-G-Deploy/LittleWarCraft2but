@@ -262,6 +262,7 @@ Supported Vite env vars:
 - `VITE_PEER_PATH`
 - `VITE_PEER_SECURE`
 - `VITE_ICE_SERVERS` as a JSON array string
+- `VITE_WS_RELAY_URL` (manual WS relay transport endpoint)
 
 Runtime ICE override:
 - client first tries `GET /api/ice`
@@ -277,7 +278,12 @@ Online menu now supports two runtime test modes:
 - `SERVER` uses the self-hosted PeerJS/TURN config from the build env
 - `DIRECT` uses public PeerJS (`0.peerjs.com`) plus browser STUN fallback
 
+Online menu also supports manual transport selection:
+- `PEERJS` keeps existing WebRTC data-channel behavior
+- `WS RELAY` uses a websocket relay path (`VITE_WS_RELAY_URL`)
+
 Share links preserve the selected mode via `?mode=public` when needed.
+Relay links preserve transport selection via `?transport=ws-relay`.
 Room-code input is normalized before join, so copied codes/URLs with accidental surrounding whitespace do not cause avoidable guest connect failures.
 
 Examples:
