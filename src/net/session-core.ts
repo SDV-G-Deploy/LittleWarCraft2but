@@ -1,5 +1,6 @@
 import type { NetCmd, TickPacket } from './netcmd';
 import type { Race, MapId, EntityKind } from '../types';
+import type { CoreTransport, TransportRtcStatePatch, WireMessage } from './transport-types';
 
 export type SessionStatus =
   | 'init'
@@ -59,11 +60,6 @@ interface FriendlyError {
 }
 
 export type NetMode = 'public' | 'selfhost';
-
-type WireMessage =
-  | { type: 'hello'; race: string }
-  | { type: 'config'; race: string; guestRace: string; mapId: number }
-  | (TickPacket & { type?: undefined });
 
 const VALID_RACES = new Set<Race>(['human', 'orc']);
 const VALID_MAP_IDS = new Set<MapId>([1, 2, 3, 4, 5, 6]);
@@ -152,12 +148,6 @@ function parseConfig(v: unknown): SessionConfig | null {
   return { race: cfg.race, guestRace: cfg.guestRace, mapId: cfg.mapId };
 }
 
-interface CoreTransport {
-  send(msg: WireMessage): void;
-  close(): void;
-  isOpen(): boolean;
-}
-
 interface SessionCoreInit {
   role: 'host' | 'guest';
   hostCode?: string;
@@ -175,11 +165,7 @@ export interface SessionCore {
   onConnClose(): void;
   onConnError(rawMessage: string): void;
   onPeerError(rawMessage: string): void;
-  updateRtcState(state: {
-    iceConnectionState?: RTCIceConnectionState | null;
-    connectionState?: RTCPeerConnectionState | null;
-    iceGatheringState?: RTCIceGatheringState | null;
-  }): void;
+  updateRtcState(state: TransportRtcStatePatch): void;
 }
 
 export function createSessionCore(init: SessionCoreInit): SessionCore {
