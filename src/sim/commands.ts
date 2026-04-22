@@ -7,6 +7,7 @@ import { processGather, processTrain, processBuild } from './economy';
 import { getEntity, isTileBlockedByEntity } from './entities';
 import { profiler } from './profiler';
 import { getResolvedRange, getResolvedSpeed } from '../balance/resolver';
+import { tryAdvancePathWithAvoidance } from './movement';
 
 type TargetPredicate = (target: Entity) => boolean;
 
@@ -17,40 +18,6 @@ const MOVE_REPATH_LIMIT = 5;
 const MOVE_FALLBACK_RADIUS = 3;
 const MOVE_REPATH_COOLDOWN_TICKS = 8;
 const MOVE_GOAL_PATH_TRIALS = 3;
-
-function isTileOccupiedByOtherUnit(state: GameState, entity: Entity, tx: number, ty: number): boolean {
-  return state.entities.some(other =>
-    other.id !== entity.id &&
-    isUnitKind(other.kind) &&
-    other.pos.x === tx &&
-    other.pos.y === ty,
-  );
-}
-
-function findDeterministicSidestep(state: GameState, entity: Entity, blocked: Vec2): Vec2 | null {
-  let best: Vec2 | null = null;
-  let bestScore = Infinity;
-  const goal = entity.cmd?.type === 'move' ? entity.cmd.goal : blocked;
-
-  for (const d of NUDGE_DIRS) {
-    const nx = entity.pos.x + d.x;
-    const ny = entity.pos.y + d.y;
-    if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H) continue;
-    if (!state.tiles[ny][nx].passable) continue;
-    if (isTileBlockedByEntity(state, nx, ny)) continue;
-    if (isTileOccupiedByOtherUnit(state, entity, nx, ny)) continue;
-
-    const blockedDist = Math.max(Math.abs(blocked.x - nx), Math.abs(blocked.y - ny));
-    const goalDist = Math.max(Math.abs(goal.x - nx), Math.abs(goal.y - ny));
-    const score = blockedDist * 100 + goalDist;
-    if (!best || score < bestScore) {
-      best = { x: nx, y: ny };
-      bestScore = score;
-    }
-  }
-
-  return best;
-}
 
 function clampGoalToMap(tx: number, ty: number): Vec2 {
   return {
@@ -192,15 +159,15 @@ function acquireNearestTarget(
   return best;
 }
 
+/**
+ * Push stacked units apart. Call once per sim tick.
+ * Only nudges stationary units — units already walking sort themselves out.
+ */
 const NUDGE_DIRS = [
   { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 },
   { x: 1, y: 1 }, { x: -1, y: 1 }, { x: 1, y: -1 }, { x: -1, y: -1 },
 ];
 
-/**
- * Push stacked units apart. Call once per sim tick.
- * Only nudges stationary units — units already walking sort themselves out.
- */
 function tileKey(x: number, y: number): number {
   return y * MAP_W + x;
 }
@@ -342,58 +309,54 @@ export function processCommand(state: GameState, entity: Entity): void {
 
       if (cmd.path.length === 0) { entity.cmd = null; return; }
 
-      const next = cmd.path[0]!;
-      if (isTileOccupiedByOtherUnit(state, entity, next.x, next.y)) {
-        if (cmd.repathCount < MOVE_REPATH_LIMIT && canAttemptRepath(state, entity)) {
-          const movePlan = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
-          cmd.repathCount++;
-          const repathOk = !!(movePlan && movePlan.path.length > 0);
-          profiler.recordMoveRepath(repathOk);
-          if (repathOk) {
-            cmd.goal = movePlan!.goal;
-            cmd.path = movePlan!.path;
-            cmd.stepTick = state.tick;
-            return;
-          }
-        }
+      let latestRepathGoal: Vec2 | null = null;
+      const tryRepath = (): Vec2[] | null => {
+        if (cmd.repathCount >= MOVE_REPATH_LIMIT || !canAttemptRepath(state, entity)) return null;
+        const movePlan = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
+        cmd.repathCount++;
+        const repathOk = !!(movePlan && movePlan.path.length > 0);
+        profiler.recordMoveRepath(repathOk);
+        if (!repathOk) return null;
+        latestRepathGoal = movePlan!.goal;
+        return movePlan!.path;
+      };
 
-        const sidestep = findDeterministicSidestep(state, entity, next);
-        cmd.lastProgressTick = state.tick;
-        cmd.lastPos.x = entity.pos.x;
-        cmd.lastPos.y = entity.pos.y;
+      const stepResult = tryAdvancePathWithAvoidance(state, entity, cmd.path, cmd.goal, tryRepath);
 
-        const sidestepOk = !!sidestep;
-        profiler.recordMoveSidestep(sidestepOk);
-
-        if (sidestep) {
-          entity.pos.x = sidestep.x;
-          entity.pos.y = sidestep.y;
-          const movePlan = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
-          cmd.stepTick = state.tick;
-          cmd.lastPos.x = entity.pos.x;
-          cmd.lastPos.y = entity.pos.y;
-          cmd.lastProgressTick = state.tick;
-          if (movePlan && movePlan.path.length > 0) {
-            cmd.goal = movePlan.goal;
-            cmd.path = movePlan.path;
-            cmd.repathCount = 0;
-          } else {
-            cmd.path = [];
-          }
-          return;
-        }
-
+      if (stepResult === 'repathed') {
+        if (latestRepathGoal) cmd.goal = latestRepathGoal;
+        cmd.stepTick = state.tick;
         return;
       }
 
-      cmd.path.shift();
-      entity.pos.x = next.x;
-      entity.pos.y = next.y;
-      cmd.stepTick = state.tick;
-      if (entity.pos.x !== cmd.lastPos.x || entity.pos.y !== cmd.lastPos.y) {
+      if (stepResult === 'sidestep') {
+        profiler.recordMoveSidestep(true);
+        if (latestRepathGoal) {
+          cmd.goal = latestRepathGoal;
+          cmd.repathCount = 0;
+        }
+        cmd.stepTick = state.tick;
         cmd.lastPos.x = entity.pos.x;
         cmd.lastPos.y = entity.pos.y;
         cmd.lastProgressTick = state.tick;
+        return;
+      }
+
+      if (stepResult === 'blocked') {
+        profiler.recordMoveSidestep(false);
+        cmd.lastProgressTick = state.tick;
+        cmd.lastPos.x = entity.pos.x;
+        cmd.lastPos.y = entity.pos.y;
+        return;
+      }
+
+      if (stepResult === 'moved') {
+        cmd.stepTick = state.tick;
+        if (entity.pos.x !== cmd.lastPos.x || entity.pos.y !== cmd.lastPos.y) {
+          cmd.lastPos.x = entity.pos.x;
+          cmd.lastPos.y = entity.pos.y;
+          cmd.lastProgressTick = state.tick;
+        }
       }
       break;
     }
