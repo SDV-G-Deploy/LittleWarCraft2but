@@ -7,6 +7,7 @@ import { resolveAttackBonus } from '../balance/modifiers';
 import { getDoctrineArmorBonus, getDoctrineRangeBonus } from '../balance/doctrines';
 import { killEntity } from './entities';
 import { findPath } from './pathfinding';
+import { tryAdvancePathWithAvoidance } from './movement';
 
 // ─── Issue ────────────────────────────────────────────────────────────────────
 
@@ -263,10 +264,23 @@ export function processAttack(state: GameState, entity: Entity): void {
     }
 
     if (cmd.chasePath.length > 0) {
-      const next = cmd.chasePath.shift()!;
-      entity.pos.x = next.x;
-      entity.pos.y = next.y;
-      cmd.chaseStepTick = state.tick;
+      const tryRepath = (): { x: number; y: number }[] | null => {
+        const nearX = Math.max(target.pos.x, Math.min(entity.pos.x, target.pos.x + target.tileW - 1));
+        const nearY = Math.max(target.pos.y, Math.min(entity.pos.y, target.pos.y + target.tileH - 1));
+        const path = findPath(state, entity.pos.x, entity.pos.y, nearX, nearY);
+        cmd.chasePathTick = state.tick;
+        return path;
+      };
+
+      const chaseGoal = {
+        x: Math.max(target.pos.x, Math.min(entity.pos.x, target.pos.x + target.tileW - 1)),
+        y: Math.max(target.pos.y, Math.min(entity.pos.y, target.pos.y + target.tileH - 1)),
+      };
+      const stepResult = tryAdvancePathWithAvoidance(state, entity, cmd.chasePath, chaseGoal, tryRepath);
+
+      if (stepResult === 'moved' || stepResult === 'sidestep') {
+        cmd.chaseStepTick = state.tick;
+      }
     }
   }
 }

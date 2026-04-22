@@ -9,7 +9,7 @@ import type { GameOptions } from './game';
 import { RACES } from './data/races';
 import { MAP_CATALOG, buildMapById } from './data/maps';
 import { createSession } from './net/session';
-import type { NetSession, NetMode } from './net/session';
+import type { NetSession, NetMode, TransportMode } from './net/session';
 import { getLanguage, setLanguage, t, type Language } from './i18n';
 import { MENU_TOKENS } from './menu.tokens';
 import {
@@ -36,6 +36,7 @@ interface MenuState {
   joinCode:    string;      // text being typed in the join field
   guestRace:   Race;        // race the joining player picks
   netMode:     NetMode;
+  transportMode: TransportMode;
 }
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
@@ -137,6 +138,7 @@ export function runMenu(
     joinCode:   '',
     guestRace:  'orc',
     netMode:    'selfhost',
+    transportMode: 'peerjs',
   };
 
   // ── Auto-fill join code from URL param (?room=CODE) ─────────────────────
@@ -145,8 +147,12 @@ export function runMenu(
   const urlParams = new URLSearchParams(window.location.search);
   const urlRoom   = urlParams.get('room');
   const urlMode   = urlParams.get('mode');
+  const urlTransport = urlParams.get('transport');
   if (urlMode === 'public' || urlMode === 'selfhost') {
     ms.netMode = urlMode;
+  }
+  if (urlTransport === 'ws-relay' || urlTransport === 'peerjs') {
+    ms.transportMode = urlTransport;
   }
   if (urlRoom) {
     ms.screen   = 'online';
@@ -205,7 +211,7 @@ export function runMenu(
       case 'host_game': {
         ms.netSession?.destroy();
         ms.netRole    = 'host';
-        ms.netSession = await createSession('host', undefined, { race: ms.playerRace, mapId: ms.mapId }, undefined, ms.netMode);
+        ms.netSession = await createSession('host', undefined, { race: ms.playerRace, mapId: ms.mapId }, undefined, ms.netMode, ms.transportMode);
         // Host starts game after receiving guest's hello (which includes guest race)
         ms.netSession.onConfig = (cfg) => {
           ms.guestRace = cfg.guestRace;
@@ -220,7 +226,7 @@ export function runMenu(
         ms.netSession?.destroy();
         ms.netRole    = 'guest';
         // Pass guest's chosen race so it's sent in the hello message
-        ms.netSession = await createSession('guest', normalizedJoinCode, undefined, ms.guestRace, ms.netMode);
+        ms.netSession = await createSession('guest', normalizedJoinCode, undefined, ms.guestRace, ms.netMode, ms.transportMode);
         // Guest starts game after receiving full config from host
         ms.netSession.onConfig = (cfg) => {
           ms.playerRace = cfg.race;
@@ -241,6 +247,11 @@ export function runMenu(
           ms.aiDifficulty = action.slice(7) as AIDifficulty;
         } else if (action.startsWith('set_net_mode_')) {
           ms.netMode = action.slice(13) as NetMode;
+          ms.netSession?.destroy();
+          ms.netSession = undefined;
+          ms.netRole = undefined;
+        } else if (action.startsWith('set_transport_mode_')) {
+          ms.transportMode = action.slice(19) as TransportMode;
           ms.netSession?.destroy();
           ms.netSession = undefined;
           ms.netRole = undefined;
@@ -790,10 +801,36 @@ export function runMenu(
     }
 
     ctx.fillStyle = GREY;
+    ctx.font = '11px monospace';
+    ctx.fillText(t('transport_mode'), cx, cy - 24);
+
+    const transportDefs: Array<{ mode: TransportMode; label: string; accent: string }> = [
+      { mode: 'peerjs', label: t('transport_peerjs'), accent: '#88bbff' },
+      { mode: 'ws-relay', label: t('transport_ws_relay'), accent: '#ffbb66' },
+    ];
+    for (let i = 0; i < transportDefs.length; i++) {
+      const def = transportDefs[i];
+      const bx = cx - 110 + i * 120;
+      const by = cy - 10;
+      const sel = ms.transportMode === def.mode;
+      ctx.fillStyle = sel ? `${def.accent}44` : 'rgba(0,0,0,0.2)';
+      ctx.fillRect(bx, by, 100, 28);
+      ctx.strokeStyle = sel ? def.accent : '#444';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx + 0.5, by + 0.5, 99, 27);
+      ctx.fillStyle = sel ? def.accent : GREY;
+      ctx.font = 'bold 12px monospace';
+      ctx.fillText(def.label, bx + 50, by + 18);
+      newBtns.push({ x: bx, y: by, w: 100, h: 28, label: def.label, action: `set_transport_mode_${def.mode}` });
+    }
+
+    ctx.fillStyle = GREY;
     ctx.font = '10px monospace';
-    const modeHint = ms.netMode === 'selfhost'
-      ? t('mode_hint_server')
-      : t('mode_hint_direct');
+    const modeHint = ms.transportMode === 'ws-relay'
+      ? t('transport_hint_ws_relay')
+      : ms.netMode === 'selfhost'
+        ? t('mode_hint_server')
+        : t('mode_hint_direct');
     ctx.fillText(modeHint, cx, cy - 50);
 
     // ── HOST panel ─────────────────────────────────────────────────────────────
@@ -866,7 +903,9 @@ export function runMenu(
       if (sess.status === 'waiting') {
         // Build shareable URL — race/map are negotiated in-protocol now
         const origin = window.location.origin + window.location.pathname;
-        const link   = `${origin}?room=${sess.code}${ms.netMode === 'public' ? '&mode=public' : ''}`;
+        const modeParam = ms.netMode === 'public' ? '&mode=public' : '';
+        const transportParam = ms.transportMode === 'ws-relay' ? '&transport=ws-relay' : '';
+        const link   = `${origin}?room=${sess.code}${modeParam}${transportParam}`;
         ctx.fillStyle = WHITE;
         ctx.font      = '11px monospace';
         ctx.fillText(t('share_link'), hx + hw / 2, hy + hh + 36);

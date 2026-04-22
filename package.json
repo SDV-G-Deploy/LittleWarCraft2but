@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "npx tsx src/sim/determinism.test.ts && npx tsx src/sim/build-net-debug.test.ts",
+    "test": "npx tsx src/sim/determinism.test.ts && npx tsx src/sim/build-net-debug.test.ts && npx tsx src/sim/move-command.test.ts",
     "test:determinism": "npx tsx src/sim/determinism.test.ts",
     "test:build-net": "npx tsx src/sim/build-net-debug.test.ts",
     "preview": "vite preview",
@@ -19,6 +19,7 @@
     "vite": "^5.2.0"
   },
   "dependencies": {
-    "peerjs": "^1.5.5"
+    "peerjs": "^1.5.5",
+    "ws": "^8.20.0"
   }
 }

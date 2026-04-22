@@ -87,3 +87,19 @@ services:
       - "8081"
     volumes:
       - ./ice-server.js:/app/ice-server.js:ro
+
+  ws-relay:
+    image: node:20-alpine
+    container_name: lwc2-ws-relay
+    restart: unless-stopped
+    working_dir: /app
+    command: ["node", "infra/ws-relay-server.js"]
+    environment:
+      WS_RELAY_PORT: 8082
+      WS_RELAY_PATH: /ws-relay
+      WS_RELAY_MAX_MESSAGE_BYTES: 16384
+      WS_RELAY_ROOM_TTL_MS: 600000
+    expose:
+      - "8082"
+    volumes:
+      - ..:/app:ro

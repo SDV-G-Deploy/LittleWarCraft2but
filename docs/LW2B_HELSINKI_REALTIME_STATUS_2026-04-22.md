@@ -202,6 +202,247 @@ Companion note added for this narrowed bug:
 - after infra stabilizes, verify repo local-vs-push sync so operational docs stay aligned with reality
 - continue gameplay/runtime debugging with focus on remote guest build failure rather than broad startup failure framing
 
+## New network accessibility hypothesis after Russia reachability signal
+
+New outside signal from real user testing changed the working interpretation again:
+- `w2.kislota.today` did not open for a tester in Russia
+- the GitHub Pages build did open for the same tester
+- on the GitHub Pages build, attempting online join still resulted in a PeerJS-side failure
+
+This strongly suggests the online-access problem is not a single bug.
+It is more likely a layered reachability problem with at least two independent failure surfaces:
+
+1. **frontend reachability risk**
+   - custom domain `w2.kislota.today` may be less reachable from some Russia networks than GitHub Pages
+   - this can be caused by DNS interference, custom-domain filtering, HTTPS issues on the route, or simply worse regional routing behavior
+
+2. **realtime path reachability risk**
+   - even when the frontend loads, PeerJS signaling and/or WebRTC ICE traversal can still fail
+   - likely causes include strict NAT, CGNAT, blocked UDP, unstable websocket reachability, or protocol-level degradation affecting STUN/TURN/WebRTC behavior
+
+3. **Russia-specific protocol interference is now plausible enough to plan around**
+   - public discussions and best-practice references indicate that in some Russia networks, WebRTC-related traffic may be unstable or partially degraded
+   - this should be treated as an environmental risk factor, not as proven universal censorship and not as a reason to assume one exact blocking mechanism
+
+## Updated strategic interpretation
+
+For LW2B, network accessibility should now be treated as a multi-layer resilience problem:
+- **Layer A:** can the user load the game frontend at all?
+- **Layer B:** can the client reach the signaling endpoint reliably?
+- **Layer C:** can ICE establish a usable path?
+- **Layer D:** if direct path fails, can TURN relay over TCP/TLS 443 still rescue the session?
+- **Layer E:** if some Russia networks degrade WebRTC patterns themselves, can the product still offer an acceptable fallback path?
+
+This changes the practical strategy.
+A second server in Helsinki helps, but server geography alone is not enough.
+If the user sits behind CGNAT, symmetric NAT, blocked UDP, or protocol-aware interference, a different host region by itself may not solve the problem.
+
+## Recommended strategy going forward
+
+### 1. Separate frontend availability from realtime availability
+
+Do not rely on a single custom domain as the only user entrypoint.
+Recommended shape:
+- keep a highly reachable static frontend path available, such as GitHub Pages
+- treat the custom domain as a nice primary entrypoint, not the only survivable one
+- if needed, add a second neutral fallback frontend hostname outside the main project domain family
+
+### 2. Treat TURN relay as a core compatibility path, not a rare fallback
+
+For difficult networks, assume direct peer-to-peer may fail.
+Production ICE policy should preserve a strong relay path:
+- `turn:...:3478?transport=udp`
+- `turn:...:3478?transport=tcp`
+- `turns:...:443?transport=tcp`
+
+Meaning:
+- prefer lower-latency paths when available
+- but ensure a real relay escape hatch exists for blocked UDP, strict NAT, and degraded networks
+
+### 3. Do not bind all critical realtime traffic to one potentially fragile hostname strategy
+
+If `kislota.today` shows Russia reachability weakness, signaling and TURN should be reviewed from a naming/routing perspective.
+Recommended direction:
+- keep the Helsinki realtime stack
+- consider a more neutral fallback hostname for signaling/realtime access if additional evidence continues to point at domain-level fragility
+- avoid coupling frontend trust, websocket signaling, and TURN identity too tightly to one externally fragile entrypoint
+
+### 4. Accept that some networks may remain hostile to browser P2P even after good TURN setup
+
+The goal should be to **improve success rate materially**, not assume universal success.
+If Russia reachability becomes a product-critical requirement, long-term architecture may need a less pure-P2P fallback model.
+That does not need to be built now, but it should be recognized early as a possible future requirement.
+
+## Short execution plan
+
+### Immediate
+- keep GitHub Pages as a known-good frontend fallback
+- preserve and verify TURN/TLS on `443`
+- verify actual browser TURN usage where possible, not only TLS handshake success
+- avoid removing `3478/tcp`, `3478/udp`, or `5349/tcp` until real difficult-network evidence is stronger
+
+### Next
+- review whether production frontend should expose a fallback entrypoint separate from `w2.kislota.today`
+- review whether signaling/TURN should keep current hostname strategy or gain a more neutral fallback hostname
+- keep ICE output broad enough to support hard networks instead of over-optimizing too early for one preferred path
+
+### Later, if Russia accessibility becomes priority
+- consider explicit “hard-network mode” policy
+- consider a more server-assisted realtime fallback if WebRTC reliability remains too low on target networks
+
+## Practical hypothesis to test in future field runs
+
+The most useful current working hypothesis is:
+- GitHub Pages or another neutral static host can improve **frontend reachability**
+- Helsinki TURN/TLS on `443` can improve **transport survivability**
+- but **PeerJS/WebRTC success in Russia may still remain probabilistic** on some networks due to CGNAT, blocked UDP, signaling fragility, or protocol-level interference
+
+So the best short-term product strategy is:
+- stabilize frontend fallback
+- keep strong TURN coverage
+- avoid premature narrowing of ICE/network options
+- gather more hard-network evidence before making aggressive simplifications
+
+## Server-assisted fallback options without full netcode rewrite
+
+A new strategy review was done specifically for the question:
+- how to add a more server-centric fallback **without rewriting the whole LW2B networking model**
+
+Current conclusion:
+- a full authoritative dedicated server is **not** the first recommended move
+- the most realistic next layer is a **transport fallback**, not a gameplay-model rewrite
+
+### Option A, recommended first: WebSocket relay fallback for lockstep commands
+
+Shape:
+- keep the current deterministic simulation on both clients
+- keep the current lockstep/tick/command model
+- add a server relay path where clients send command packets to a central room server over WebSocket
+- the room server rebroadcasts or fan-outs those commands to both players in the canonical tick order
+
+What stays the same:
+- game simulation remains client-side on both peers
+- command schema mostly stays the same
+- tick model mostly stays the same
+- deterministic assumptions stay the same
+
+What changes:
+- transport abstraction must support at least two backends:
+  - WebRTC / PeerJS data path
+  - WebSocket relay path
+- join/session logic must be able to choose or fall back to relay mode
+- the relay server must manage room membership, ordering, fan-out, and disconnect handling
+
+Why this is the best first fallback:
+- much simpler than a full authoritative server
+- avoids the weakest assumption that peers can always establish viable browser-to-browser transport
+- can work over plain HTTPS/WSS, which is often easier to route than WebRTC on hostile networks
+- keeps the current gameplay model largely intact
+
+Primary downside:
+- WebSocket is TCP-based, so head-of-line blocking and jitter sensitivity are worse than a good UDP-like WebRTC path
+- but for a 1v1 deterministic RTS command stream, this tradeoff is often acceptable as a fallback mode
+
+### Option B, second step if needed: authoritative relay for command ordering and validation
+
+Shape:
+- still do not move full simulation to the server
+- but the relay server becomes the canonical sequencer for match commands
+- it validates basic command legality / timing / player ownership before forwarding
+
+What this adds beyond Option A:
+- cleaner ordering guarantees
+- easier cheat-resistance for obvious invalid command injection
+- simpler replay / match log capture
+- better place to enforce lockstep timing policy centrally
+
+What this still avoids:
+- no need for full server-side simulation
+- no need to stream world state continuously
+- no need to rewrite the game into classic server-authoritative action netcode
+
+When to choose it:
+- after a plain relay fallback works
+- if command-ordering, desync debugging, or anti-abuse benefits become worth the extra complexity
+
+### Option C, not recommended as first rescue: full authoritative dedicated server
+
+Shape:
+- server runs the real game simulation
+- clients become presentation/input terminals
+
+Why not first:
+- this is the largest rewrite
+- it changes authority, state sync, recovery, simulation hosting, and likely large parts of session lifecycle
+- it solves more than the current immediate problem needs
+
+## Recommended architectural direction now
+
+For LW2B the best evolutionary path currently looks like:
+
+1. keep improving the current WebRTC path
+   - frontend fallback
+   - strong TURN/TLS 443
+   - broad ICE coverage
+
+2. add a **transport abstraction layer** if not already present
+   - same command/tick protocol
+   - swappable transport backend
+
+3. implement **WebSocket relay mode** as the first true hard-network fallback
+   - selected manually, automatically, or after WebRTC failure
+
+4. only later evaluate whether relay mode should become:
+   - always-available fallback
+   - Russia/hard-network preferred mode
+   - or base for a more authoritative relay design
+
+## Practical coding implication
+
+The most promising low-pain move is **not** “rewrite multiplayer”.
+It is:
+- keep deterministic lockstep
+- keep command packets
+- keep most of match logic
+- replace only the delivery path when P2P transport is unreliable
+
+In other words:
+- the likely future refactor target is the **transport layer**, not the full gameplay netcode layer
+
+## Candidate implementation shape for LW2B
+
+A practical minimal design would look like:
+
+- `transport.sendCommand(cmd)`
+- `transport.onCommand(cb)`
+- `transport.onDisconnect(cb)`
+- `transport.getMode()` -> `webrtc` | `ws-relay`
+
+Then two implementations:
+- `PeerJsTransport`
+- `WsRelayTransport`
+
+And one small room service on the server side:
+- create/join room
+- assign player slots
+- receive command for tick N from player P
+- fan out canonical packet to both peers
+- emit disconnect / timeout / readiness events
+
+This preserves maximum reuse while opening the door to a more survivable networking mode.
+
+## Current recommendation
+
+If future field tests keep showing Russia reachability pain, the next engineering move should be:
+- **build a WebSocket relay fallback first**
+- not a full authoritative dedicated server rewrite
+
+That is currently the best balance of:
+- implementation cost
+- clarity
+- compatibility improvement
+- reuse of existing deterministic RTS logic
+
 ## Safe recall note for future `/new`
 
 When resuming `ПРОЕКТ LW2B`, remember:

@@ -40,7 +40,15 @@ export interface AIController {
   attackRetargetRadius: number;
   attackBaseBias: number;
   doctrineChoice: 'fieldTempo' | 'lineHold' | 'longReach';
+  baseDefenseRadius: number;
+  defenseRecallWindowTicks: number;
 }
+
+type ArmyMixPlan = {
+  rangedRatio: number;
+  heavyRatio: number;
+  minFrontline: number;
+};
 
 export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
   if (difficulty === 'easy') {
@@ -65,6 +73,8 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       attackRetargetRadius: 7,
       attackBaseBias: 8,
       doctrineChoice: 'lineHold',
+      baseDefenseRadius: 10,
+      defenseRecallWindowTicks: Math.round(SIM_HZ * 5),
     };
   }
   if (difficulty === 'hard') {
@@ -89,6 +99,8 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       attackRetargetRadius: 4,
       attackBaseBias: 0,
       doctrineChoice: 'longReach',
+      baseDefenseRadius: 12,
+      defenseRecallWindowTicks: Math.round(SIM_HZ * 6),
     };
   }
   return {
@@ -112,6 +124,8 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
     attackRetargetRadius: 6,
     attackBaseBias: 3,
     doctrineChoice: 'fieldTempo',
+    baseDefenseRadius: 11,
+    defenseRecallWindowTicks: Math.round(SIM_HZ * 5),
   };
 }
 
@@ -153,6 +167,10 @@ export function tickAI(state: GameState, ai: AIController): void {
 
   const woodDemand = estimateWoodDemand(state, ai, myBarracks, myLumberMill, farmCount, towerCount, mySoldiers.length);
   keepGathering(state, myWorkers, woodDemand);
+  const defenseThreat = assessBaseThreat(state, ai, myTH, myWorkers);
+  if (defenseThreat.active) {
+    recallDefenders(state, myTH, mySoldiers, defenseThreat, ai.baseDefenseRadius);
+  }
 
   switch (ai.phase) {
     // ── Economy: build workforce, first farm, first barracks ─────────────────
@@ -201,18 +219,25 @@ export function tickAI(state: GameState, ai: AIController): void {
         const soldierCount = mySoldiers.filter(u => u.kind === rc.soldier).length;
         const rangedCount  = mySoldiers.filter(u => u.kind === rc.ranged).length;
         const heavyCount   = mySoldiers.filter(u => u.kind === rc.heavy).length;
-        const targetRangedCount = Math.max(1, Math.floor((soldierCount + heavyCount) * ai.preferredRangedRatio));
+        const totalArmy = soldierCount + rangedCount + heavyCount;
+        const mixPlan = getArmyMixPlan(ai, totalArmy);
+        const targetRangedCount = Math.max(0, Math.floor((totalArmy + 1) * mixPlan.rangedRatio));
+        const targetHeavyCount = Math.min(ai.preferredHeavyCap, Math.max(0, Math.floor((totalArmy + 1) * mixPlan.heavyRatio)));
+
         const heavyCost    = getResolvedCost(rc.heavy, state.races[1]);
         const rangedCost   = getResolvedCost(rc.ranged, state.races[1]);
         const soldierCost  = getResolvedCost(rc.soldier, state.races[1]);
-        const wantHeavy    = heavyCount < ai.preferredHeavyCap && soldierCount >= (ai.difficulty === 'hard' ? 2 : 3) &&
-                             state.gold[1] >= heavyCost.gold && state.wood[1] >= heavyCost.wood;
-        const wantRanged   = !wantHeavy && rangedCount < targetRangedCount &&
-                             state.gold[1] >= rangedCost.gold && state.wood[1] >= rangedCost.wood;
+        const canHeavy     = state.gold[1] >= heavyCost.gold && state.wood[1] >= heavyCost.wood;
+        const canRanged    = state.gold[1] >= rangedCost.gold && state.wood[1] >= rangedCost.wood;
         const canSoldier   = state.gold[1] >= soldierCost.gold && state.wood[1] >= soldierCost.wood;
+
+        const needFrontline = soldierCount < mixPlan.minFrontline;
+        const wantHeavy    = !needFrontline && heavyCount < targetHeavyCount && soldierCount >= mixPlan.minFrontline && canHeavy;
+        const wantRanged   = !wantHeavy && !needFrontline && rangedCount < targetRangedCount && soldierCount >= Math.max(1, mixPlan.minFrontline - 1) && canRanged;
         const nextUnit = wantHeavy ? rc.heavy : wantRanged ? rc.ranged : rc.soldier;
+        const canTrainNext = wantHeavy ? canHeavy : wantRanged ? canRanged : canSoldier;
         const barracksBusy = myBarracks.cmd?.type === 'train';
-        if (!barracksBusy && (wantHeavy || wantRanged || canSoldier)) issueTrainCommand(state, myBarracks, nextUnit);
+        if (!barracksBusy && canTrainNext) issueTrainCommand(state, myBarracks, nextUnit);
       }
       if (!buildingFarm && state.popCap[1] - state.pop[1] <= 2 && farmCount < ai.maxFarms) {
         const w = freeWorker(myWorkers);
@@ -225,7 +250,7 @@ export function tickAI(state: GameState, ai: AIController): void {
       if (!buildingTower && towerCount < ai.maxTowers && myBarracks && myLumberMill && mySoldiers.length >= ai.towerMinArmy && state.gold[1] >= towerCost.gold && state.wood[1] >= towerCost.wood) {
         const w = freeWorker(myWorkers);
         if (w) {
-          const pos = findBuildSpot(state, myTH, 'tower');
+          const pos = findTowerBuildSpot(state, myTH, 1);
           if (pos) issueBuildCommand(state, w, 'tower', pos, state.tick);
         }
       }
@@ -276,6 +301,23 @@ export function tickAI(state: GameState, ai: AIController): void {
       break;
     }
   }
+}
+
+function getArmyMixPlan(ai: AIController, totalArmy: number): ArmyMixPlan {
+  if (ai.difficulty === 'easy') {
+    if (totalArmy < 6) return { rangedRatio: 0, heavyRatio: 0, minFrontline: 4 };
+    if (totalArmy < 11) return { rangedRatio: 0.2, heavyRatio: 0.1, minFrontline: 4 };
+    return { rangedRatio: 0.28, heavyRatio: 0.18, minFrontline: 5 };
+  }
+  if (ai.difficulty === 'hard') {
+    if (totalArmy < 4) return { rangedRatio: 0.2, heavyRatio: 0.05, minFrontline: 2 };
+    if (totalArmy < 8) return { rangedRatio: 0.45, heavyRatio: 0.25, minFrontline: 2 };
+    return { rangedRatio: 0.55, heavyRatio: 0.33, minFrontline: 3 };
+  }
+
+  if (totalArmy < 5) return { rangedRatio: 0.1, heavyRatio: 0, minFrontline: 3 };
+  if (totalArmy < 10) return { rangedRatio: 0.33, heavyRatio: 0.18, minFrontline: 3 };
+  return { rangedRatio: 0.42, heavyRatio: 0.25, minFrontline: 4 };
 }
 
 function doctrineKind(choice: AIController['doctrineChoice']): LumberUpgradeKind {
@@ -445,6 +487,78 @@ function findLumberMillSpot(state: GameState, anchor: Entity): Vec2 | null {
   return best ?? findBuildSpot(state, anchor, 'lumbermill');
 }
 
+type DefenseThreatInfo = {
+  active: boolean;
+  severe: boolean;
+  targets: Entity[];
+  defendPoint: Vec2;
+};
+
+function assessBaseThreat(state: GameState, ai: AIController, myTownHall: Entity, myWorkers: Entity[]): DefenseThreatInfo {
+  const recentWindowStart = state.tick - ai.defenseRecallWindowTicks;
+  const nearbyEnemyUnits = state.entities.filter(e =>
+    isOwnedByOpposingPlayer(e, 1) &&
+    isUnitKind(e.kind) &&
+    Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y) <= ai.baseDefenseRadius,
+  );
+  const townHallUnderAttack = (myTownHall.underAttackTick ?? -Infinity) >= recentWindowStart;
+  const attackedWorkers = myWorkers.filter(w => (w.underAttackTick ?? -Infinity) >= recentWindowStart);
+
+  const targets = nearbyEnemyUnits.length > 0
+    ? nearbyEnemyUnits
+    : townHallUnderAttack || attackedWorkers.length > 0
+      ? state.entities.filter(e =>
+        isOwnedByOpposingPlayer(e, 1) &&
+        isUnitKind(e.kind) &&
+        Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y) <= ai.baseDefenseRadius + 4,
+      )
+      : [];
+
+  const severe = townHallUnderAttack || targets.length >= 4 || attackedWorkers.length >= 2;
+  const workerFocus = attackedWorkers[0]?.pos;
+  const targetFocus = targets[0]?.pos;
+  return {
+    active: targets.length > 0 || townHallUnderAttack || attackedWorkers.length > 0,
+    severe,
+    targets,
+    defendPoint: workerFocus ?? targetFocus ?? { x: myTownHall.pos.x + 1, y: myTownHall.pos.y + myTownHall.tileH },
+  };
+}
+
+function recallDefenders(state: GameState, myTownHall: Entity, mySoldiers: Entity[], threat: DefenseThreatInfo, defenseRadius: number): void {
+  if (mySoldiers.length === 0) return;
+
+  const desiredFraction = threat.severe ? 1 : 0.55;
+  const desiredCount = Math.max(1, Math.ceil(mySoldiers.length * desiredFraction));
+  const sortedByBaseDistance = [...mySoldiers]
+    .sort((a, b) => Math.hypot(a.pos.x - myTownHall.pos.x, a.pos.y - myTownHall.pos.y) - Math.hypot(b.pos.x - myTownHall.pos.x, b.pos.y - myTownHall.pos.y));
+
+  for (const unit of sortedByBaseDistance.slice(0, desiredCount)) {
+    const target = nearestThreat(unit, threat.targets);
+    if (target && Math.hypot(unit.pos.x - target.pos.x, unit.pos.y - target.pos.y) <= defenseRadius + 2) {
+      issueAttackCommand(unit, target.id, state.tick, state);
+      continue;
+    }
+
+    if (!moveGoalNear(unit, threat.defendPoint.x, threat.defendPoint.y)) {
+      issueMoveCommand(state, unit, threat.defendPoint.x, threat.defendPoint.y);
+    }
+  }
+}
+
+function nearestThreat(unit: Entity, threats: Entity[]): Entity | null {
+  let best: Entity | null = null;
+  let bestD = Infinity;
+  for (const t of threats) {
+    const d = Math.hypot(unit.pos.x - t.pos.x, unit.pos.y - t.pos.y);
+    if (d < bestD || (d === bestD && best && t.id < best.id)) {
+      best = t;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
 function estimateWoodDemand(state: GameState, ai: AIController, myBarracks: Entity | undefined, myLumberMill: Entity | undefined, farmCount: number, towerCount: number, soldierCount: number): number {
   let demand = 0;
   const wood = state.wood[1];
@@ -476,6 +590,60 @@ function findBuildSpot(state: GameState, anchor: Entity, kind: EntityKind): Vec2
     }
   }
   return null;
+}
+
+function findTowerBuildSpot(state: GameState, myTownHall: Entity, owner: 0 | 1): Vec2 | null {
+  const candidates: Vec2[] = [];
+  const seen = new Set<string>();
+  const push = (x: number, y: number) => {
+    const key = `${x},${y}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidates.push({ x, y });
+  };
+
+  const enemyTownHall = state.entities.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
+  if (enemyTownHall) {
+    const dirX = Math.sign(enemyTownHall.pos.x - myTownHall.pos.x);
+    const dirY = Math.sign(enemyTownHall.pos.y - myTownHall.pos.y);
+    const sideX = dirY;
+    const sideY = -dirX;
+    for (const d of [4, 6, 8]) {
+      const cx = myTownHall.pos.x + dirX * d;
+      const cy = myTownHall.pos.y + dirY * d;
+      push(cx, cy);
+      push(cx + sideX, cy + sideY);
+      push(cx - sideX, cy - sideY);
+    }
+  }
+
+  const nearestMine = state.entities
+    .filter(e => e.kind === 'goldmine' && (e.goldReserve ?? 0) > 0)
+    .sort((a, b) => Math.hypot(a.pos.x - myTownHall.pos.x, a.pos.y - myTownHall.pos.y) - Math.hypot(b.pos.x - myTownHall.pos.x, b.pos.y - myTownHall.pos.y))[0];
+  if (nearestMine) {
+    push(nearestMine.pos.x - 1, nearestMine.pos.y - 1);
+    push(nearestMine.pos.x + nearestMine.tileW, nearestMine.pos.y - 1);
+    push(nearestMine.pos.x - 1, nearestMine.pos.y + nearestMine.tileH);
+    push(nearestMine.pos.x + nearestMine.tileW, nearestMine.pos.y + nearestMine.tileH);
+  }
+
+  const lumberMill = state.entities.find(e => e.owner === owner && e.kind === 'lumbermill');
+  if (lumberMill) {
+    push(lumberMill.pos.x - 2, lumberMill.pos.y);
+    push(lumberMill.pos.x + lumberMill.tileW + 1, lumberMill.pos.y);
+    push(lumberMill.pos.x, lumberMill.pos.y + lumberMill.tileH + 1);
+  }
+
+  push(myTownHall.pos.x - 2, myTownHall.pos.y + 1);
+  push(myTownHall.pos.x + myTownHall.tileW + 1, myTownHall.pos.y + 1);
+  push(myTownHall.pos.x + 1, myTownHall.pos.y - 2);
+  push(myTownHall.pos.x + 1, myTownHall.pos.y + myTownHall.tileH + 1);
+
+  for (const candidate of candidates) {
+    if (isValidPlacement(state, 'tower', candidate.x, candidate.y)) return candidate;
+  }
+
+  return findBuildSpot(state, myTownHall, 'tower');
 }
 
 function nearestPlayerEntity(state: GameState, unit: Entity, maxDistance = Infinity): Entity | null {
