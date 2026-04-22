@@ -615,6 +615,11 @@ export function issueBuildCommand(
       logBuildDebug(`reject owner=${worker.owner} worker=${worker.id} building=${building} reason=missing-barracks`);
       return false;
     }
+    const hasLumberMill = state.entities.some(e => e.owner === worker.owner && e.kind === 'lumbermill');
+    if (!hasLumberMill) {
+      logBuildDebug(`reject owner=${worker.owner} worker=${worker.id} building=${building} reason=missing-lumbermill`);
+      return false;
+    }
   }
 
   const stats = {

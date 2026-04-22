@@ -1,7 +1,8 @@
-import type { AIDifficulty, Entity, EntityKind, GameState, Vec2 } from '../types';
-import { SIM_HZ, isOwnedByOpposingPlayer, isUnitKind } from '../types';
+import type { AIDifficulty, Entity, EntityKind, GameState, LumberUpgradeKind, Vec2 } from '../types';
+import { MAP_H, MAP_W, SIM_HZ, isOwnedByOpposingPlayer, isUnitKind } from '../types';
 import { RACES } from '../data/races';
-import { getResolvedCost } from '../balance/resolver';
+import { RACE_BALANCE_PROFILES } from '../balance/races';
+import { getResolvedCost, getResolvedTileSize } from '../balance/resolver';
 import { DOCTRINE_COST } from '../balance/doctrines';
 import { tryStartLumberUpgrade } from './upgrades';
 import {
@@ -45,7 +46,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
   if (difficulty === 'easy') {
     return {
       phase: 'economy',
-      attackWaveSize: 8,
+      attackWaveSize: 99,
       difficulty,
       reactionDelayTicks: Math.round(SIM_HZ * 1.4),
       nextDecisionTick: 0,
@@ -58,7 +59,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       preferredHeavyCap: 1,
       assaultRetargetMine: false,
       towerMinArmy: 6,
-      fallbackWaveThreshold: 2,
+      fallbackWaveThreshold: 4,
       expansionMineMinArmy: 7,
       expansionMineReserveMin: 900,
       attackRetargetRadius: 7,
@@ -69,12 +70,12 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
   if (difficulty === 'hard') {
     return {
       phase: 'economy',
-      attackWaveSize: 5,
+      attackWaveSize: 9,
       difficulty,
       reactionDelayTicks: Math.round(SIM_HZ * 0.55),
       nextDecisionTick: 0,
       maxFarms: 4,
-      maxTowers: 3,
+      maxTowers: 4,
       workerTarget: 5,
       openingPlan: 'pressure',
       openingChoiceDelayTicks: Math.round(SIM_HZ * 4),
@@ -82,7 +83,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       preferredHeavyCap: 3,
       assaultRetargetMine: true,
       towerMinArmy: 4,
-      fallbackWaveThreshold: 4,
+      fallbackWaveThreshold: 8,
       expansionMineMinArmy: 3,
       expansionMineReserveMin: 500,
       attackRetargetRadius: 4,
@@ -92,7 +93,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
   }
   return {
     phase: 'economy',
-    attackWaveSize: 6,
+    attackWaveSize: 7,
     difficulty,
     reactionDelayTicks: SIM_HZ,
     nextDecisionTick: 0,
@@ -105,7 +106,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
     preferredHeavyCap: 2,
     assaultRetargetMine: true,
     towerMinArmy: 5,
-    fallbackWaveThreshold: 3,
+    fallbackWaveThreshold: 6,
     expansionMineMinArmy: 5,
     expansionMineReserveMin: 700,
     attackRetargetRadius: 6,
@@ -185,22 +186,15 @@ export function tickAI(state: GameState, ai: AIController): void {
         if (state.gold[1] >= lumberCost.gold && state.wood[1] >= lumberCost.wood) {
           const w = freeWorker(myWorkers);
           if (w) {
-            const pos = findBuildSpot(state, myTH, 'lumbermill');
+            const pos = findLumberMillSpot(state, myTH);
             if (pos) issueBuildCommand(state, w, 'lumbermill', pos, state.tick);
           }
         }
       }
 
-      if (myLumberMill && !state.upgrades[1].doctrine && state.gold[1] >= DOCTRINE_COST.gold && state.wood[1] >= DOCTRINE_COST.wood) {
-        tryStartLumberUpgrade(
-          state,
-          1,
-          ai.doctrineChoice === 'fieldTempo'
-            ? 'doctrineFieldTempo'
-            : ai.doctrineChoice === 'lineHold'
-              ? 'doctrineLineHold'
-              : 'doctrineLongReach',
-        );
+      if (myLumberMill) {
+        const nextUpgrade = pickNextUpgrade(state, ai);
+        if (nextUpgrade) tryStartLumberUpgrade(state, 1, nextUpgrade);
       }
 
       if (myBarracks) {
@@ -228,7 +222,7 @@ export function tickAI(state: GameState, ai: AIController): void {
         }
       }
       const towerCost = getResolvedCost('tower', state.races[1]);
-      if (!buildingTower && towerCount < ai.maxTowers && myBarracks && mySoldiers.length >= ai.towerMinArmy && state.gold[1] >= towerCost.gold && state.wood[1] >= towerCost.wood) {
+      if (!buildingTower && towerCount < ai.maxTowers && myBarracks && myLumberMill && mySoldiers.length >= ai.towerMinArmy && state.gold[1] >= towerCost.gold && state.wood[1] >= towerCost.wood) {
         const w = freeWorker(myWorkers);
         if (w) {
           const pos = findBuildSpot(state, myTH, 'tower');
@@ -250,9 +244,11 @@ export function tickAI(state: GameState, ai: AIController): void {
       for (const s of mySoldiers) {
         if (s.cmd && s.cmd.type !== 'move') continue;
 
-        const nearest = s.kind === rc.ranged
-          ? (nearestPlayerUnit(state, s, ai.attackRetargetRadius) ?? nearestPlayerEntity(state, s, ai.attackRetargetRadius))
-          : nearestPlayerEntity(state, s, ai.attackRetargetRadius);
+        const nearest = ai.difficulty === 'easy'
+          ? nearestPlayerUnit(state, s, ai.attackRetargetRadius)
+          : s.kind === rc.ranged
+            ? (nearestPlayerUnit(state, s, ai.attackRetargetRadius) ?? nearestPlayerEntity(state, s, ai.attackRetargetRadius))
+            : nearestPlayerEntity(state, s, ai.attackRetargetRadius);
 
         if (nearest) {
           issueAttackCommand(s, nearest.id, state.tick, state);
@@ -264,7 +260,7 @@ export function tickAI(state: GameState, ai: AIController): void {
           const tx = expansionMine.pos.x;
           const ty = expansionMine.pos.y - 1;
           if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
-        } else if (opposingPlayerTH) {
+        } else if (opposingPlayerTH && ai.difficulty !== 'easy') {
           const tx = opposingPlayerTH.pos.x + 1;
           const ty = opposingPlayerTH.pos.y + 2;
           if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
@@ -282,6 +278,63 @@ export function tickAI(state: GameState, ai: AIController): void {
   }
 }
 
+function doctrineKind(choice: AIController['doctrineChoice']): LumberUpgradeKind {
+  return choice === 'fieldTempo'
+    ? 'doctrineFieldTempo'
+    : choice === 'lineHold'
+      ? 'doctrineLineHold'
+      : 'doctrineLongReach';
+}
+
+function pickNextUpgrade(state: GameState, ai: AIController): LumberUpgradeKind | null {
+  const upgrades = state.upgrades[1];
+  if (upgrades.pendingLumberUpgrade) return null;
+
+  if (!upgrades.doctrine && state.gold[1] >= DOCTRINE_COST.gold && state.wood[1] >= DOCTRINE_COST.wood) {
+    return doctrineKind(ai.doctrineChoice);
+  }
+
+  const raceUpgrades = RACE_BALANCE_PROFILES[state.races[1]].upgrades;
+  const ladder: Array<{ kind: LumberUpgradeKind; current: number; max: number; gold: number; wood: number; slot: number }> = [
+    {
+      kind: 'meleeAttack',
+      current: upgrades.meleeAttackLevel,
+      max: raceUpgrades.meleeAttack.maxLevel,
+      gold: raceUpgrades.meleeAttack.cost.gold,
+      wood: raceUpgrades.meleeAttack.cost.wood,
+      slot: 0,
+    },
+    {
+      kind: 'armor',
+      current: upgrades.armorLevel,
+      max: raceUpgrades.armor.maxLevel,
+      gold: raceUpgrades.armor.cost.gold,
+      wood: raceUpgrades.armor.cost.wood,
+      slot: 1,
+    },
+    {
+      kind: 'buildingHp',
+      current: upgrades.buildingHpLevel,
+      max: raceUpgrades.buildingHp.maxLevel,
+      gold: raceUpgrades.buildingHp.cost.gold,
+      wood: raceUpgrades.buildingHp.cost.wood,
+      slot: 2,
+    },
+  ];
+
+  const maxTier = Math.max(...ladder.map(entry => entry.max));
+  for (let tier = 1; tier <= maxTier; tier++) {
+    for (const entry of ladder) {
+      if (entry.current >= tier || entry.max < tier) continue;
+      if (ai.difficulty === 'medium' && ((tier - 1) * ladder.length + entry.slot) % 2 === 1) continue;
+      if (state.gold[1] < entry.gold || state.wood[1] < entry.wood) continue;
+      return entry.kind;
+    }
+  }
+
+  return null;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function keepGathering(state: GameState, workers: Entity[], desiredWoodWorkers: number): void {
@@ -296,8 +349,8 @@ function keepGathering(state: GameState, workers: Entity[], desiredWoodWorkers: 
         const mine = state.entities.find(e => e.id === gatherCmd.targetId);
         if (mine && (mine.goldReserve ?? 0) > 0 && woodAssignmentsNeeded <= 0) continue;
       } else {
-        const tx = gatherCmd.targetId % 64;
-        const ty = Math.floor(gatherCmd.targetId / 64);
+        const tx = gatherCmd.targetId % MAP_W;
+        const ty = Math.floor(gatherCmd.targetId / MAP_W);
         const tile = state.tiles[ty]?.[tx];
         if (tile?.kind === 'tree' && (tile.woodReserve ?? 0) > 0) {
           continue;
@@ -344,11 +397,52 @@ function nearestTree(state: GameState, unit: Entity): number | null {
       const d = Math.hypot(tx - unit.pos.x, ty - unit.pos.y);
       if (d < bestD) {
         bestD = d;
-        bestId = ty * 64 + tx;
+        bestId = ty * MAP_W + tx;
       }
     }
   }
   return bestId;
+}
+
+function footprintNearestTreeDistance(state: GameState, tx: number, ty: number, tileW: number, tileH: number): number {
+  let best = Infinity;
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      const tile = state.tiles[y]?.[x];
+      if (tile?.kind !== 'tree' || (tile.woodReserve ?? 0) <= 0) continue;
+      const nx = Math.max(tx, Math.min(x, tx + tileW - 1));
+      const ny = Math.max(ty, Math.min(y, ty + tileH - 1));
+      const d = Math.max(Math.abs(x - nx), Math.abs(y - ny));
+      if (d < best) best = d;
+    }
+  }
+  return best;
+}
+
+function findLumberMillSpot(state: GameState, anchor: Entity): Vec2 | null {
+  let best: Vec2 | null = null;
+  let bestScore = Infinity;
+  const { tileW, tileH } = getResolvedTileSize('lumbermill');
+
+  for (let r = 2; r <= 12; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        const tx = anchor.pos.x + dx;
+        const ty = anchor.pos.y + dy;
+        if (!isValidPlacement(state, 'lumbermill', tx, ty)) continue;
+        const treeDist = footprintNearestTreeDistance(state, tx, ty, tileW, tileH);
+        const anchorDist = Math.max(Math.abs(dx), Math.abs(dy));
+        const score = treeDist * 100 + anchorDist;
+        if (!best || score < bestScore) {
+          best = { x: tx, y: ty };
+          bestScore = score;
+        }
+      }
+    }
+  }
+
+  return best ?? findBuildSpot(state, anchor, 'lumbermill');
 }
 
 function estimateWoodDemand(state: GameState, ai: AIController, myBarracks: Entity | undefined, myLumberMill: Entity | undefined, farmCount: number, towerCount: number, soldierCount: number): number {
