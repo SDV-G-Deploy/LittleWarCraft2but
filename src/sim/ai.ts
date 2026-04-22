@@ -1,7 +1,7 @@
 import type { AIDifficulty, Entity, EntityKind, GameState, Vec2 } from '../types';
-import { SIM_HZ, isOwnedByOpposingPlayer, isUnitKind } from '../types';
+import { MAP_H, MAP_W, SIM_HZ, isOwnedByOpposingPlayer, isUnitKind } from '../types';
 import { RACES } from '../data/races';
-import { getResolvedCost } from '../balance/resolver';
+import { getResolvedCost, getResolvedTileSize } from '../balance/resolver';
 import { DOCTRINE_COST } from '../balance/doctrines';
 import { tryStartLumberUpgrade } from './upgrades';
 import {
@@ -185,7 +185,7 @@ export function tickAI(state: GameState, ai: AIController): void {
         if (state.gold[1] >= lumberCost.gold && state.wood[1] >= lumberCost.wood) {
           const w = freeWorker(myWorkers);
           if (w) {
-            const pos = findBuildSpot(state, myTH, 'lumbermill');
+            const pos = findLumberMillSpot(state, myTH);
             if (pos) issueBuildCommand(state, w, 'lumbermill', pos, state.tick);
           }
         }
@@ -228,7 +228,7 @@ export function tickAI(state: GameState, ai: AIController): void {
         }
       }
       const towerCost = getResolvedCost('tower', state.races[1]);
-      if (!buildingTower && towerCount < ai.maxTowers && myBarracks && mySoldiers.length >= ai.towerMinArmy && state.gold[1] >= towerCost.gold && state.wood[1] >= towerCost.wood) {
+      if (!buildingTower && towerCount < ai.maxTowers && myBarracks && myLumberMill && mySoldiers.length >= ai.towerMinArmy && state.gold[1] >= towerCost.gold && state.wood[1] >= towerCost.wood) {
         const w = freeWorker(myWorkers);
         if (w) {
           const pos = findBuildSpot(state, myTH, 'tower');
@@ -296,8 +296,8 @@ function keepGathering(state: GameState, workers: Entity[], desiredWoodWorkers: 
         const mine = state.entities.find(e => e.id === gatherCmd.targetId);
         if (mine && (mine.goldReserve ?? 0) > 0 && woodAssignmentsNeeded <= 0) continue;
       } else {
-        const tx = gatherCmd.targetId % 64;
-        const ty = Math.floor(gatherCmd.targetId / 64);
+        const tx = gatherCmd.targetId % MAP_W;
+        const ty = Math.floor(gatherCmd.targetId / MAP_W);
         const tile = state.tiles[ty]?.[tx];
         if (tile?.kind === 'tree' && (tile.woodReserve ?? 0) > 0) {
           continue;
@@ -344,11 +344,52 @@ function nearestTree(state: GameState, unit: Entity): number | null {
       const d = Math.hypot(tx - unit.pos.x, ty - unit.pos.y);
       if (d < bestD) {
         bestD = d;
-        bestId = ty * 64 + tx;
+        bestId = ty * MAP_W + tx;
       }
     }
   }
   return bestId;
+}
+
+function footprintNearestTreeDistance(state: GameState, tx: number, ty: number, tileW: number, tileH: number): number {
+  let best = Infinity;
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      const tile = state.tiles[y]?.[x];
+      if (tile?.kind !== 'tree' || (tile.woodReserve ?? 0) <= 0) continue;
+      const nx = Math.max(tx, Math.min(x, tx + tileW - 1));
+      const ny = Math.max(ty, Math.min(y, ty + tileH - 1));
+      const d = Math.max(Math.abs(x - nx), Math.abs(y - ny));
+      if (d < best) best = d;
+    }
+  }
+  return best;
+}
+
+function findLumberMillSpot(state: GameState, anchor: Entity): Vec2 | null {
+  let best: Vec2 | null = null;
+  let bestScore = Infinity;
+  const { tileW, tileH } = getResolvedTileSize('lumbermill');
+
+  for (let r = 2; r <= 12; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        const tx = anchor.pos.x + dx;
+        const ty = anchor.pos.y + dy;
+        if (!isValidPlacement(state, 'lumbermill', tx, ty)) continue;
+        const treeDist = footprintNearestTreeDistance(state, tx, ty, tileW, tileH);
+        const anchorDist = Math.max(Math.abs(dx), Math.abs(dy));
+        const score = treeDist * 100 + anchorDist;
+        if (!best || score < bestScore) {
+          best = { x: tx, y: ty };
+          bestScore = score;
+        }
+      }
+    }
+  }
+
+  return best ?? findBuildSpot(state, anchor, 'lumbermill');
 }
 
 function estimateWoodDemand(state: GameState, ai: AIController, myBarracks: Entity | undefined, myLumberMill: Entity | undefined, farmCount: number, towerCount: number, soldierCount: number): number {
