@@ -11,6 +11,14 @@ import { MAP_CATALOG, buildMapById } from './data/maps';
 import { createSession } from './net/session';
 import type { NetSession, NetMode } from './net/session';
 import { getLanguage, setLanguage, t, type Language } from './i18n';
+import { MENU_TOKENS } from './menu.tokens';
+import {
+  clampMapScroll,
+  getMapScrollRange,
+  getResponsiveMapGridLayout,
+  getResponsiveRaceLayout,
+  getStickyMapHeaderLayout,
+} from './menu.layout';
 
 // ─── State machine ────────────────────────────────────────────────────────────
 
@@ -32,14 +40,14 @@ interface MenuState {
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
 
-const BG_TOP    = '#0a0c14';
-const BG_BOT    = '#12181f';
-const GOLD      = '#e8c84a';
-const GOLD_DIM  = '#a08830';
-const WHITE     = '#f0ead8';
-const GREY      = '#6a7080';
-const PANEL_BG  = 'rgba(255,255,255,0.04)';
-const PANEL_BD  = 'rgba(255,255,255,0.10)';
+const BG_TOP = MENU_TOKENS.colors.bgTop;
+const BG_BOT = MENU_TOKENS.colors.bgBot;
+const GOLD = MENU_TOKENS.colors.gold;
+const GOLD_DIM = MENU_TOKENS.colors.goldDim;
+const WHITE = MENU_TOKENS.colors.text;
+const GREY = MENU_TOKENS.colors.textDim;
+const PANEL_BG = MENU_TOKENS.colors.panelBg;
+const PANEL_BD = MENU_TOKENS.colors.panelStroke;
 
 // ─── Button type ──────────────────────────────────────────────────────────────
 
@@ -147,11 +155,13 @@ export function runMenu(
 
   let buttons: MenuButton[] = [];
   let running = true;
+  let mapScrollY = 0;
 
   // ── Resize ─────────────────────────────────────────────────────────────────
   function resize(): void {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
+    mapScrollY = clampMapScroll(mapScrollY, getMapScrollRange(canvas.width, canvas.height, MAP_CATALOG.length));
   }
   resize();
   window.addEventListener('resize', resize);
@@ -257,6 +267,7 @@ export function runMenu(
   const origRemove = () => {
     canvas.removeEventListener('click', onClick);
     canvas.removeEventListener('mousemove', onMouseMove);
+    canvas.removeEventListener('wheel', onWheel);
     window.removeEventListener('resize', resize);
     window.removeEventListener('keydown', onKeyDown);
   };
@@ -297,7 +308,7 @@ export function runMenu(
 
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.font = 'bold 56px serif';
+    ctx.font = MENU_TOKENS.font.title;
     ctx.fillText(t('game_title'), cx + 3, y + 3);
 
     // Gold gradient fill
@@ -309,7 +320,7 @@ export function runMenu(
     ctx.fillText(t('game_title'), cx, y);
 
     ctx.fillStyle = GREY;
-    ctx.font = '16px monospace';
+    ctx.font = MENU_TOKENS.font.subtitle;
     ctx.fillText(t('game_subtitle'), cx, y + 28);
   }
 
@@ -326,7 +337,7 @@ export function runMenu(
 
     ctx.textAlign = 'center';
     ctx.fillStyle = hovered ? accent : WHITE;
-    ctx.font = `bold 15px monospace`;
+    ctx.font = MENU_TOKENS.font.button;
     ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + btn.h / 2 + 5);
   }
 
@@ -339,6 +350,15 @@ export function runMenu(
     mouseY = e.clientY - r.top;
   };
   canvas.addEventListener('mousemove', onMouseMove);
+
+  const onWheel = (e: WheelEvent) => {
+    if (ms.screen !== 'map') return;
+    const range = getMapScrollRange(canvas.width, canvas.height, MAP_CATALOG.length);
+    if (range.min === range.max) return;
+    mapScrollY = clampMapScroll(mapScrollY - e.deltaY, range);
+    e.preventDefault();
+  };
+  canvas.addEventListener('wheel', onWheel, { passive: false });
 
   function isHovered(btn: MenuButton): boolean {
     return mouseX >= btn.x && mouseX <= btn.x + btn.w &&
@@ -362,7 +382,7 @@ export function runMenu(
       ctx.strokeRect(x + 0.5, y + 0.5, 45, 27);
       ctx.textAlign = 'center';
       ctx.fillStyle = selected ? GOLD : WHITE;
-      ctx.font = 'bold 12px monospace';
+      ctx.font = MENU_TOKENS.font.buttonSm;
       ctx.fillText(item.label, x + 23, y + 18);
       newBtns.push({ x, y, w: 46, h: 28, label: item.label, action: item.action });
     }
@@ -473,19 +493,15 @@ export function runMenu(
   // ─── Screen: Race Select ───────────────────────────────────────────────────
   function drawRaceSelect(): void {
     const cx = canvas.width  / 2;
-    const cy = canvas.height / 2;
+    const raceLayout = getResponsiveRaceLayout(canvas.width, canvas.height);
 
     ctx.textAlign = 'center';
     ctx.fillStyle = GOLD;
-    ctx.font      = 'bold 28px serif';
-    ctx.fillText(t('choose_race'), cx, cy - 150);
+    ctx.font      = MENU_TOKENS.font.h1;
+    ctx.fillText(t('choose_race'), cx, Math.max(80, raceLayout.cardY - 26));
 
-    const cardW  = 240;
-    const cardH  = 280;
-    const gap    = 40;
-    const leftX  = cx - gap / 2 - cardW;
-    const rightX = cx + gap / 2;
-    const cardY  = cy - 120;
+    const cardW = raceLayout.cardW;
+    const cardH = raceLayout.cardH;
 
     const races: Race[] = ['human', 'orc'];
     const actions       = ['race_human', 'race_orc'];
@@ -494,7 +510,12 @@ export function runMenu(
     for (let i = 0; i < 2; i++) {
       const rc     = RACES[races[i]];
       const raceName = races[i] === 'human' ? t('race_humans') : t('race_orcs');
-      const cardX  = i === 0 ? leftX : rightX;
+      const cardX = raceLayout.cols === 1
+        ? raceLayout.startX
+        : raceLayout.startX + i * (cardW + raceLayout.gap);
+      const cardY = raceLayout.cols === 1
+        ? raceLayout.cardY + i * (cardH + raceLayout.rowGap)
+        : raceLayout.cardY;
       const action = actions[i];
       const accent = rc.accentColor;
 
@@ -580,20 +601,23 @@ export function runMenu(
 
   // ─── Screen: Map Select ────────────────────────────────────────────────────
   function drawMapSelect(): void {
+    const scrollRange = getMapScrollRange(canvas.width, canvas.height, MAP_CATALOG.length);
+    mapScrollY = clampMapScroll(mapScrollY, scrollRange);
     const cx = canvas.width  / 2;
-    const cy = canvas.height / 2;
     const rc = RACES[ms.playerRace];
+    const header = getStickyMapHeaderLayout(canvas.height);
+    const mapLayout = getResponsiveMapGridLayout(canvas.width, canvas.height, MAP_CATALOG.length, mapScrollY);
     const mapRaceName = ms.playerRace === 'human' ? t('race_humans') : t('race_orcs');
     const mapTagline = ms.playerRace === 'human' ? t('tagline_humans') : t('tagline_orcs');
 
     ctx.textAlign = 'center';
     ctx.fillStyle = rc.accentColor;
     ctx.font      = `bold 13px monospace`;
-    ctx.fillText(t('playing_as', { name: mapRaceName, tagline: mapTagline }), cx, cy - 168);
+    ctx.fillText(t('playing_as', { name: mapRaceName, tagline: mapTagline }), cx, header.subtitleY);
 
     ctx.fillStyle = GOLD;
-    ctx.font      = 'bold 28px serif';
-    ctx.fillText(t('choose_map'), cx, cy - 142);
+    ctx.font      = MENU_TOKENS.font.h1;
+    ctx.fillText(t('choose_map'), cx, header.titleY);
 
     const newBtns: MenuButton[] = [];
     const difficultyDefs: Array<{ value: AIDifficulty; label: string; accent: string }> = [
@@ -604,9 +628,9 @@ export function runMenu(
 
     ctx.fillStyle = GREY;
     ctx.font = '11px monospace';
-    ctx.fillText(t('choose_ai_difficulty'), cx, cy - 120);
+    ctx.fillText(t('choose_ai_difficulty'), cx, header.difficultyLabelY);
 
-    const diffBtnY = cy - 106;
+    const diffBtnY = header.diffButtonsY;
     const diffBtnW = 116;
     const diffGap = 12;
     const diffRowW = difficultyDefs.length * diffBtnW + (difficultyDefs.length - 1) * diffGap;
@@ -630,22 +654,14 @@ export function runMenu(
 
     const maps = MAP_CATALOG.map((m) => ({ ...m, action: `map_${m.id}` }));
 
-    const cardW = 220;
-    const cardH = 260;
-    const cols = 3;
-    const gapX = 18;
-    const gapY = 16;
-    const gridW = cols * cardW + (cols - 1) * gapX;
-    const startX = cx - Math.floor(gridW / 2);
-    const cardY0 = cy - 66;
-    const thumbH = 120;
+    const { cardW, cardH, cols, gapX, gapY, startX, firstRowY, thumbH } = mapLayout;
 
     for (let i = 0; i < maps.length; i++) {
       const m      = maps[i];
       const col = i % cols;
       const row = Math.floor(i / cols);
       const cardX  = startX + col * (cardW + gapX);
-      const cardY  = cardY0 + row * (cardH + gapY);
+      const cardY  = firstRowY + row * (cardH + gapY);
       const hov    = mouseX >= cardX && mouseX <= cardX + cardW &&
                      mouseY >= cardY  && mouseY <= cardY + cardH;
 
@@ -722,6 +738,13 @@ export function runMenu(
     };
     newBtns.push(backBtn);
     drawButton(backBtn, isHovered(backBtn));
+
+    if (scrollRange.min !== scrollRange.max) {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = GREY;
+      ctx.font = '10px monospace';
+      ctx.fillText(t('menu_scroll_more'), canvas.width - 14, canvas.height - 14);
+    }
 
     buttons = newBtns;
   }
