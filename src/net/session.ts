@@ -1,21 +1,16 @@
 /**
  * session.ts
  * PeerJS wrapper with input-buffering and a one-shot config handshake.
- *
- * Handshake (runs once, before any game ticks):
- *   Host sends { type:'config', race, mapId } immediately on channel open.
- *   Guest fires onConfig(cfg), menu updates its state, then calls startOnlineGame().
- *   This ensures both sides build GameState with the same races[] array.
- *
- * Game ticks (mini-lockstep):
- *   push(cmd)          – buffer a local command for scheduling
- *   exchange(tick)     – schedule local cmds for (tick + delay), send packet,
- *                        and return both sides' cmds when tick is ready
  */
 
 import Peer, { DataConnection } from 'peerjs';
-import type { NetCmd, TickPacket } from './netcmd';
-import type { Race, MapId, EntityKind } from '../types';
+import type { Race } from '../types';
+import {
+  createSessionCore,
+  type SessionConfig,
+  type NetMode,
+  type NetSession,
+} from './session-core';
 
 interface RuntimePeerConfig {
   host: string;
@@ -23,8 +18,6 @@ interface RuntimePeerConfig {
   path: string;
   secure: boolean;
 }
-
-export type NetMode = 'public' | 'selfhost';
 
 interface RuntimeNetConfig {
   peer: RuntimePeerConfig;
@@ -62,9 +55,7 @@ function defaultPeerHost(): string {
 }
 
 function defaultPeerSecure(): boolean {
-  if (typeof window !== 'undefined') {
-    return window.location.protocol === 'https:';
-  }
+  if (typeof window !== 'undefined') return window.location.protocol === 'https:';
   return true;
 }
 
@@ -81,16 +72,8 @@ function parseIceServers(raw: string | undefined): RTCIceServer[] | null {
 
 function getPublicNetConfig(): RuntimeNetConfig {
   return {
-    peer: {
-      host: '0.peerjs.com',
-      port: 443,
-      path: '/',
-      secure: true,
-    },
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-    ],
+    peer: { host: '0.peerjs.com', port: 443, path: '/', secure: true },
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }],
   };
 }
 
@@ -104,10 +87,7 @@ function getSelfHostedNetConfig(): RuntimeNetConfig {
     { urls: 'stun:stun1.l.google.com:19302' },
   ];
 
-  return {
-    peer: { host, port, path, secure },
-    iceServers,
-  };
+  return { peer: { host, port, path, secure }, iceServers };
 }
 
 function getRuntimePeerConfig(mode: NetMode): RuntimeNetConfig {
@@ -137,651 +117,90 @@ async function fetchRuntimeIceServers(): Promise<RTCIceServer[] | null> {
   }
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export type SessionStatus =
-  | 'init'          // PeerJS opening
-  | 'waiting'       // host: waiting for guest to connect
-  | 'connecting'    // guest: dialling host
-  | 'ready'         // data channel open, game can start
-  | 'disconnected'  // peer left
-  | 'error';
-
-/** Full config agreed by both sides before the game starts. */
-export interface SessionConfig {
-  race:      Race;   // host's race  → races[0]
-  guestRace: Race;   // guest's race → races[1]
-  mapId:     MapId;
-}
-
-export interface SessionStats {
-  waitingStallTicks: number;
-  remoteAnnouncedUpToTick: number;
-  remoteContiguousUpToTick: number;
-  currentDelayTicks: number;
-  outboundPendingTicks: number;
-  queuedRemoteTicks: number;
-  queuedLocalTicks: number;
-  lastPacketAgeMs: number | null;
-  lastInboundSummary: string | null;
-  rtcIceConnectionState: RTCIceConnectionState | null;
-  rtcConnectionState: RTCPeerConnectionState | null;
-  rtcIceGatheringState: RTCIceGatheringState | null;
-  netDebugSummary: string;
-}
-
-export interface NetSession {
-  role:    'host' | 'guest';
-  code:    string;          // room code = host's PeerJS ID
-  status:  SessionStatus;
-  statusMsg: string;
-  netMode: NetMode;
-
-  onStatusChange?: () => void;
-  /** Fired on BOTH sides once the full config is established.
-   *  Host: fires after receiving guest's hello message.
-   *  Guest: fires after receiving host's config reply. */
-  onConfig?: (cfg: SessionConfig) => void;
-
-  push(cmd: NetCmd): void;
-  exchange(tick: number): TickExchange;
-  getStats(): SessionStats;
-  destroy(): void;
-}
-
-export interface TickExchange {
-  ready: boolean;
-  local: NetCmd[];
-  remote: NetCmd[];
-}
-
-interface FriendlyError {
-  userMessage: string;
-  debugCode: string;
-}
-
-// ─── Internal message types ───────────────────────────────────────────────────
-
-type WireMessage =
-  | { type: 'hello';  race: string }                                     // guest → host
-  | { type: 'config'; race: string; guestRace: string; mapId: number }   // host → guest
-  | TickPacket & { type?: undefined };  // tick packets have no 'type' field
-
-const VALID_RACES = new Set<Race>(['human', 'orc']);
-const VALID_MAP_IDS = new Set<MapId>([1, 2, 3, 4, 5, 6]);
-const VALID_BUILDINGS = new Set<EntityKind>(['townhall', 'barracks', 'lumbermill', 'farm', 'wall', 'tower']);
-const VALID_TRAIN_UNITS = new Set<EntityKind>(['worker', 'footman', 'archer', 'knight', 'peon', 'grunt', 'troll', 'ogreFighter']);
-const VALID_OPENING_PLANS = new Set(['eco', 'tempo', 'pressure'] as const);
-const VALID_UPGRADES = new Set<Extract<NetCmd, { k: 'upgrade' }>['upgrade']>([
-  'meleeAttack',
-  'armor',
-  'buildingHp',
-  'doctrineFieldTempo',
-  'doctrineLineHold',
-  'doctrineLongReach',
-]);
-
-const MAX_PACKET_BYTES = 16 * 1024;
-const MAX_CMDS_PER_PACKET = 128;
-const MAX_LOCAL_CMDS_PER_TICK = 128;
-const MAX_QUEUED_REMOTE_TICKS = 128;
-const MAX_QUEUED_REMOTE_CMDS = 1024;
-const EXECUTION_DELAY_TICKS = 3;
-const REMOTE_STALE_TICK_LIMIT = 64;
-const INBOUND_RATE_WINDOW_MS = 1000;
-const MAX_INBOUND_PACKETS_PER_WINDOW = 120;
-// Allow temporary browser timer throttling/background-tab jitter without false lockstep drops.
-const MAX_WAITING_STALL_TICKS = 600;
-const ACCEPT_LOG_INTERVAL_TICKS = 40;
-
-function summarizeCmdKinds(cmds: NetCmd[]): string {
-  if (cmds.length === 0) return 'none';
-  const counts = new Map<string, number>();
-  for (const cmd of cmds) {
-    counts.set(cmd.k, (counts.get(cmd.k) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([kind, count]) => `${kind}:${count}`)
-    .join(',');
-}
-
-function summarizeBuildCmd(cmd: Extract<NetCmd, { k: 'build' }>): string {
-  return `worker=${cmd.workerId} building=${cmd.building} at=${cmd.tx},${cmd.ty}`;
-}
-
-function logBuildCmds(scope: string, cmds: NetCmd[]): void {
-  const builds = cmds.filter((cmd): cmd is Extract<NetCmd, { k: 'build' }> => cmd.k === 'build');
-  if (builds.length === 0) return;
-  console.info(`[net:build] ${scope} ${builds.map(summarizeBuildCmd).join(' | ')}`);
-}
-
-function isInt(v: unknown): v is number {
-  return typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v);
-}
-
-function isRace(v: unknown): v is Race {
-  return typeof v === 'string' && VALID_RACES.has(v as Race);
-}
-
-function isMapId(v: unknown): v is MapId {
-  return isInt(v) && VALID_MAP_IDS.has(v as MapId);
-}
-
-function isIdArray(v: unknown): v is number[] {
-  return Array.isArray(v) && v.length <= 128 && v.every(isInt);
-}
-
-type NetCmdByKind<K extends NetCmd['k']> = Extract<NetCmd, { k: K }>;
-
-const NET_CMD_VALIDATORS: { [K in NetCmd['k']]: (cmd: NetCmdByKind<K>) => boolean } = {
-  move: (cmd) => isIdArray(cmd.ids) && isInt(cmd.tx) && isInt(cmd.ty) && typeof cmd.atk === 'boolean',
-  attack: (cmd) => isIdArray(cmd.ids) && isInt(cmd.targetId),
-  gather: (cmd) => isIdArray(cmd.ids) && isInt(cmd.mineId),
-  train: (cmd) => isInt(cmd.buildingId) && VALID_TRAIN_UNITS.has(cmd.unit),
-  build: (cmd) => isInt(cmd.workerId) && VALID_BUILDINGS.has(cmd.building) && isInt(cmd.tx) && isInt(cmd.ty),
-  stop: (cmd) => isIdArray(cmd.ids),
-  set_plan: (cmd) => isInt(cmd.buildingId) && VALID_OPENING_PLANS.has(cmd.plan),
-  rally: (cmd) => isInt(cmd.buildingId) && isInt(cmd.tx) && isInt(cmd.ty) && (cmd.plan === undefined || VALID_OPENING_PLANS.has(cmd.plan)),
-  demolish: (cmd) => isInt(cmd.buildingId),
-  resume: (cmd) => isInt(cmd.workerId) && isInt(cmd.siteId),
-  upgrade: (cmd) => isInt(cmd.buildingId) && VALID_UPGRADES.has(cmd.upgrade),
-};
-
-function isNetCmd(v: unknown): v is NetCmd {
-  if (!v || typeof v !== 'object') return false;
-  const cmd = v as { k?: unknown };
-  if (typeof cmd.k !== 'string') return false;
-  if (!(cmd.k in NET_CMD_VALIDATORS)) return false;
-  const validator = NET_CMD_VALIDATORS[cmd.k as NetCmd['k']] as (cmd: NetCmd) => boolean;
-  return validator(v as NetCmd);
-}
-
-function parseTickPacket(v: unknown): TickPacket | null {
-  if (!v || typeof v !== 'object') return null;
-  const pkt = v as Partial<TickPacket>;
-  if (!isInt(pkt.tick) || pkt.tick < 0 || !Array.isArray(pkt.cmds) || pkt.cmds.length > MAX_CMDS_PER_PACKET) return null;
-  if (!pkt.cmds.every(isNetCmd)) return null;
-  return { tick: pkt.tick, cmds: pkt.cmds };
-}
-
-function parseConfig(v: unknown): SessionConfig | null {
-  if (!v || typeof v !== 'object') return null;
-  const cfg = v as Partial<SessionConfig>;
-  if (!isRace(cfg.race) || !isRace(cfg.guestRace) || !isMapId(cfg.mapId)) return null;
-  return { race: cfg.race, guestRace: cfg.guestRace, mapId: cfg.mapId };
-}
-
-// ─── Factory ──────────────────────────────────────────────────────────────────
+export type { SessionStatus, SessionConfig, SessionStats, TickExchange, NetMode, NetSession } from './session-core';
 
 export async function createSession(
-  role:         'host' | 'guest',
-  hostCode?:    string,                           // required when role === 'guest'
-  hostConfig?:  Pick<SessionConfig, 'race' | 'mapId'>,  // required when role === 'host'
-  guestRace?:   Race,                           // required when role === 'guest'
-  netMode:      NetMode = 'selfhost',
+  role: 'host' | 'guest',
+  hostCode?: string,
+  hostConfig?: Pick<SessionConfig, 'race' | 'mapId'>,
+  guestRace?: Race,
+  netMode: NetMode = 'selfhost',
 ): Promise<NetSession> {
-
-  const safeHostConfig = hostConfig && isRace(hostConfig.race) && isMapId(hostConfig.mapId)
-    ? hostConfig
-    : undefined;
-  const safeGuestRace: Race = isRace(guestRace) ? guestRace : 'human';
-
-  let conn: DataConnection | null = null;
-  let localBuf: NetCmd[] = [];
-  const localQueue = new Map<number, NetCmd[]>();
-  const remoteQueue = new Map<number, NetCmd[]>();
-  const remoteReceivedTicks = new Set<number>();
-  const outboundPending = new Map<number, NetCmd[]>();
-
-  let queuedRemoteCmdCount = 0;
-  let queuedLocalCmdCount = 0;
-  let remoteAnnouncedUpToTick = -1;
-  let remoteContiguousUpToTick = EXECUTION_DELAY_TICKS - 1;
-  let waitingStallTicks = 0;
-  let inboundWindowStartedAt = Date.now();
-  let inboundPacketsInWindow = 0;
-  let lastPacketReceivedAt: number | null = null;
-  let lastInboundSummary: string | null = null;
-  let lastAcceptedTickLogged = -1;
-  let rtcIceConnectionState: RTCIceConnectionState | null = null;
-  let rtcConnectionState: RTCPeerConnectionState | null = null;
-  let rtcIceGatheringState: RTCIceGatheringState | null = null;
-
-  function getNetDebugSummary(): string {
-    const ice = rtcIceConnectionState ?? '-';
-    const connState = rtcConnectionState ?? '-';
-    const gather = rtcIceGatheringState ?? '-';
-    const age = lastPacketReceivedAt === null ? 'pkt=none' : `pkt=${Math.max(0, Date.now() - lastPacketReceivedAt)}ms`;
-    return `ice=${ice} pc=${connState} gather=${gather} ${age}`;
-  }
-
-  function classifyError(message: string, source: 'peer' | 'conn' | 'lockstep'): FriendlyError {
-    const text = message.toLowerCase();
-    if (source === 'lockstep' || text.includes('lockstep timeout')) {
-      return {
-        userMessage: 'Connection timed out waiting for peer data (possible UDP/TURN path issue).',
-        debugCode: 'LOCKSTEP_TIMEOUT',
-      };
-    }
-    if (text.includes('network') || text.includes('failed to fetch') || text.includes('disconnected')) {
-      return {
-        userMessage: 'Signaling/network path failed (check backend reachability and origin policy).',
-        debugCode: 'SIGNALING_NETWORK',
-      };
-    }
-    if (text.includes('ice') || text.includes('webrtc') || text.includes('turn') || text.includes('stun')) {
-      return {
-        userMessage: 'WebRTC ICE negotiation failed (relay/TCP/TLS route may be blocked).',
-        debugCode: 'ICE_NEGOTIATION',
-      };
-    }
-    if (text.includes('peer-unavailable')) {
-      return {
-        userMessage: 'Room not found or host offline.',
-        debugCode: 'PEER_UNAVAILABLE',
-      };
-    }
-    return {
-      userMessage: source === 'peer'
-        ? 'Peer signaling failed.'
-        : source === 'conn'
-          ? 'Peer data channel failed.'
-          : 'Online connection failed.',
-      debugCode: 'UNKNOWN',
-    };
-  }
-
-  function failConnection(reason: string): void {
-    const friendly = classifyError(reason, 'lockstep');
-    session.status = 'error';
-    session.statusMsg = `${friendly.userMessage} [${friendly.debugCode}]`;
-    console.warn(`[net:fail] ${reason} | ${getNetDebugSummary()}`);
-    session.onStatusChange?.();
-    conn?.close();
-  }
-
-  function enforceInboundRateLimit(): boolean {
-    const now = Date.now();
-    if (now - inboundWindowStartedAt >= INBOUND_RATE_WINDOW_MS) {
-      inboundWindowStartedAt = now;
-      inboundPacketsInWindow = 0;
-    }
-    inboundPacketsInWindow++;
-    return inboundPacketsInWindow <= MAX_INBOUND_PACKETS_PER_WINDOW;
-  }
-
-  function dropStaleRemoteTicks(currentTick: number): void {
-    const oldestAllowedTick = currentTick - REMOTE_STALE_TICK_LIMIT;
-    for (const queuedTick of remoteReceivedTicks) {
-      if (queuedTick < oldestAllowedTick) remoteReceivedTicks.delete(queuedTick);
-    }
-    for (const [queuedTick, cmds] of remoteQueue) {
-      if (queuedTick < oldestAllowedTick) {
-        queuedRemoteCmdCount -= cmds.length;
-        remoteQueue.delete(queuedTick);
-      }
-    }
-  }
-
-  function dropStaleLocalTicks(currentTick: number): void {
-    const oldestAllowedTick = currentTick - REMOTE_STALE_TICK_LIMIT;
-    for (const [queuedTick, cmds] of localQueue) {
-      if (queuedTick < oldestAllowedTick) {
-        queuedLocalCmdCount -= cmds.length;
-        localQueue.delete(queuedTick);
-      }
-    }
-  }
-
-  function summarizeInbound(summary: string, log: 'none' | 'info' | 'warn' = 'none'): void {
-    lastInboundSummary = summary;
-    if (log === 'info') console.info(`[net:in] ${summary}`);
-    else if (log === 'warn') console.warn(`[net:in] ${summary}`);
-  }
-
-  function enqueueRemotePacket(pkt: TickPacket): void {
-    remoteAnnouncedUpToTick = Math.max(remoteAnnouncedUpToTick, pkt.tick);
-    remoteReceivedTicks.add(pkt.tick);
-
-    while (remoteReceivedTicks.has(remoteContiguousUpToTick + 1)) {
-      remoteReceivedTicks.delete(remoteContiguousUpToTick + 1);
-      remoteContiguousUpToTick++;
-    }
-
-    if (pkt.cmds.length === 0) return;
-
-    const prev = remoteQueue.get(pkt.tick);
-    if (prev) {
-      queuedRemoteCmdCount -= prev.length;
-      remoteQueue.delete(pkt.tick);
-    }
-
-    remoteQueue.set(pkt.tick, [...pkt.cmds]);
-    queuedRemoteCmdCount += pkt.cmds.length;
-
-    while (remoteQueue.size > MAX_QUEUED_REMOTE_TICKS || queuedRemoteCmdCount > MAX_QUEUED_REMOTE_CMDS) {
-      const oldestTick = Math.min(...remoteQueue.keys());
-      const dropped = remoteQueue.get(oldestTick);
-      if (!dropped) break;
-      queuedRemoteCmdCount -= dropped.length;
-      remoteQueue.delete(oldestTick);
-    }
-  }
-
-  function enqueueLocalForTick(tick: number, cmds: NetCmd[]): void {
-    if (cmds.length === 0) return;
-    const prev = localQueue.get(tick);
-    if (prev) {
-      prev.push(...cmds);
-    } else {
-      localQueue.set(tick, [...cmds]);
-    }
-    queuedLocalCmdCount += cmds.length;
-
-    while (localQueue.size > MAX_QUEUED_REMOTE_TICKS || queuedLocalCmdCount > MAX_QUEUED_REMOTE_CMDS) {
-      const oldestTick = Math.min(...localQueue.keys());
-      const dropped = localQueue.get(oldestTick);
-      if (!dropped) break;
-      queuedLocalCmdCount -= dropped.length;
-      localQueue.delete(oldestTick);
-    }
-  }
-
-  function queueOutboundPacket(tick: number, cmds: NetCmd[]): void {
-    const prev = outboundPending.get(tick);
-    if (!prev) {
-      outboundPending.set(tick, [...cmds]);
-      logBuildCmds(`queue tick=${tick}`, cmds);
-      return;
-    }
-    if (cmds.length === 0) return;
-    prev.push(...cmds);
-    logBuildCmds(`merge tick=${tick}`, cmds);
-  }
-
-  function flushOutboundPackets(): void {
-    if (!conn?.open || outboundPending.size === 0) return;
-    const ticks = [...outboundPending.keys()].sort((a, b) => a - b);
-    for (const pendingTick of ticks) {
-      const cmds = outboundPending.get(pendingTick);
-      if (!cmds) continue;
-      console.info(`[net:out] tick=${pendingTick} cmds=${cmds.length} kinds=${summarizeCmdKinds(cmds)}`);
-      logBuildCmds(`send tick=${pendingTick}`, cmds);
-      conn.send({ tick: pendingTick, cmds } satisfies TickPacket);
-      outboundPending.delete(pendingTick);
-    }
-  }
-
-  const session: NetSession = {
-    role,
-    code:      role === 'guest' ? (hostCode ?? '') : '',
-    status:    'init',
-    statusMsg: 'Initialising…',
-    netMode,
-
-    push(cmd) {
-      if (localBuf.length < MAX_LOCAL_CMDS_PER_TICK) {
-        localBuf.push(cmd);
-        if (cmd.k === 'build') {
-          console.info(`[net:build] local-buffer ${summarizeBuildCmd(cmd)}`);
-        }
-      }
-    },
-
-    exchange(tick) {
-      const scheduledTick = tick + EXECUTION_DELAY_TICKS;
-      const toSend = localBuf;
-      localBuf = [];
-      if (toSend.length > 0) {
-        console.info(`[net:exchange] now=${tick} scheduled=${scheduledTick} cmds=${toSend.length} kinds=${summarizeCmdKinds(toSend)}`);
-        logBuildCmds(`exchange now=${tick} scheduled=${scheduledTick}`, toSend);
-      }
-      enqueueLocalForTick(scheduledTick, toSend);
-
-      // Send every sim tick so remote can advance lockstep even on empty-input ticks.
-      // If game starts before DataConnection.open fully settles, queue and flush once open.
-      queueOutboundPacket(scheduledTick, toSend);
-      flushOutboundPackets();
-
-      dropStaleRemoteTicks(tick);
-      dropStaleLocalTicks(tick);
-
-      if (tick > remoteContiguousUpToTick) {
-        waitingStallTicks++;
-        if (waitingStallTicks > MAX_WAITING_STALL_TICKS) {
-          failConnection(`Connection closed: lockstep timeout waiting for peer tick=${tick} contiguous=${remoteContiguousUpToTick} announced=${remoteAnnouncedUpToTick}`);
-        }
-        return { ready: false, local: [], remote: [] };
-      }
-
-      waitingStallTicks = 0;
-
-      const local = localQueue.get(tick) ?? [];
-      if (local.length > 0) {
-        queuedLocalCmdCount -= local.length;
-        localQueue.delete(tick);
-        logBuildCmds(`apply-local tick=${tick}`, local);
-      }
-
-      const remote = remoteQueue.get(tick) ?? [];
-      if (remote.length > 0) {
-        queuedRemoteCmdCount -= remote.length;
-        remoteQueue.delete(tick);
-        logBuildCmds(`apply-remote tick=${tick}`, remote);
-      }
-
-      return { ready: true, local, remote };
-    },
-
-    getStats() {
-      return {
-        waitingStallTicks,
-        remoteAnnouncedUpToTick,
-        remoteContiguousUpToTick,
-        currentDelayTicks: EXECUTION_DELAY_TICKS,
-        outboundPendingTicks: outboundPending.size,
-        queuedRemoteTicks: remoteQueue.size,
-        queuedLocalTicks: localQueue.size,
-        lastPacketAgeMs: lastPacketReceivedAt === null ? null : Math.max(0, Date.now() - lastPacketReceivedAt),
-        lastInboundSummary,
-        rtcIceConnectionState,
-        rtcConnectionState,
-        rtcIceGatheringState,
-        netDebugSummary: getNetDebugSummary(),
-      };
-    },
-
-    destroy() {
-      conn?.close();
-      peer.destroy();
-    },
-  };
-
-  // ── PeerJS setup ─────────────────────────────────────────────────────────────
   const runtimeNet = getRuntimePeerConfig(netMode);
   const runtimeIceServers = netMode === 'selfhost' ? await fetchRuntimeIceServers() : null;
   const peer = new Peer({
-    host:   runtimeNet.peer.host,
-    port:   runtimeNet.peer.port,
-    path:   runtimeNet.peer.path,
+    host: runtimeNet.peer.host,
+    port: runtimeNet.peer.port,
+    path: runtimeNet.peer.path,
     secure: runtimeNet.peer.secure,
-    debug:  1,
-    config: {
-      iceServers: runtimeIceServers ?? runtimeNet.iceServers,
-    },
+    debug: 1,
+    config: { iceServers: runtimeIceServers ?? runtimeNet.iceServers },
+  });
+
+  const core = createSessionCore({
+    role,
+    hostCode,
+    hostConfig,
+    guestRace,
+    netMode,
+    destroyPeer: () => peer.destroy(),
   });
 
   function setupConn(c: DataConnection) {
-    conn = c;
+    core.attachTransport({
+      send: (msg) => c.send(msg),
+      close: () => c.close(),
+      isOpen: () => !!c.open,
+    });
 
     const pc = (c as DataConnection & { peerConnection?: RTCPeerConnection }).peerConnection;
     if (pc) {
-      rtcIceConnectionState = pc.iceConnectionState;
-      rtcConnectionState = pc.connectionState;
-      rtcIceGatheringState = pc.iceGatheringState;
-      console.info(`[net:rtc] setup ${getNetDebugSummary()}`);
+      core.updateRtcState({
+        iceConnectionState: pc.iceConnectionState,
+        connectionState: pc.connectionState,
+        iceGatheringState: pc.iceGatheringState,
+      });
+      console.info(`[net:rtc] setup ${core.session.getStats().netDebugSummary}`);
       pc.addEventListener('iceconnectionstatechange', () => {
-        rtcIceConnectionState = pc.iceConnectionState;
-        console.info(`[net:rtc] iceConnectionState=${rtcIceConnectionState} ${getNetDebugSummary()}`);
+        core.updateRtcState({ iceConnectionState: pc.iceConnectionState });
+        console.info(`[net:rtc] iceConnectionState=${pc.iceConnectionState} ${core.session.getStats().netDebugSummary}`);
       });
       pc.addEventListener('connectionstatechange', () => {
-        rtcConnectionState = pc.connectionState;
-        console.info(`[net:rtc] connectionState=${rtcConnectionState} ${getNetDebugSummary()}`);
+        core.updateRtcState({ connectionState: pc.connectionState });
+        console.info(`[net:rtc] connectionState=${pc.connectionState} ${core.session.getStats().netDebugSummary}`);
       });
       pc.addEventListener('icegatheringstatechange', () => {
-        rtcIceGatheringState = pc.iceGatheringState;
-        console.info(`[net:rtc] iceGatheringState=${rtcIceGatheringState} ${getNetDebugSummary()}`);
+        core.updateRtcState({ iceGatheringState: pc.iceGatheringState });
+        console.info(`[net:rtc] iceGatheringState=${pc.iceGatheringState} ${core.session.getStats().netDebugSummary}`);
       });
       pc.addEventListener('icecandidateerror', (ev) => {
         console.warn(`[net:rtc] icecandidateerror url=${ev.url ?? '?'} code=${ev.errorCode} text=${ev.errorText ?? ''}`);
       });
     }
 
-    c.on('open', () => {
-      flushOutboundPackets();
-      if (role === 'guest') {
-        // Guest announces its chosen race first; host replies with full config
-        c.send({ type: 'hello', race: safeGuestRace } satisfies WireMessage);
-        session.statusMsg = 'Connected! Sending race…';
-      } else {
-        session.statusMsg = 'Guest connected!';
-      }
-      session.status = 'ready';
-      session.onStatusChange?.();
-    });
-
-    c.on('data', (raw) => {
-      if (!enforceInboundRateLimit()) {
-        summarizeInbound(`reject tick=? reason=rate-limit`, 'warn');
-        failConnection('Connection closed: inbound packet flood');
-        return;
-      }
-
-      let approxSize = 0;
-      try {
-        approxSize = JSON.stringify(raw).length;
-      } catch {
-        summarizeInbound('reject tick=? reason=malformed-payload', 'warn');
-        failConnection('Connection closed: malformed inbound payload');
-        return;
-      }
-      if (approxSize > MAX_PACKET_BYTES) {
-        summarizeInbound(`reject tick=? reason=packet-too-large bytes=${approxSize}`, 'warn');
-        failConnection('Connection closed: inbound packet too large');
-        return;
-      }
-
-      lastPacketReceivedAt = Date.now();
-      const msg = raw as WireMessage;
-
-      // Host receives guest's race → replies with full config → both start
-      if (msg.type === 'hello' && role === 'host') {
-        if (!safeHostConfig || !isRace(msg.race)) {
-          summarizeInbound('reject tick=? type=hello reason=invalid-race', 'warn');
-          session.status = 'error';
-          session.statusMsg = 'Invalid multiplayer hello/config';
-          session.onStatusChange?.();
-          c.close();
-          return;
-        }
-        summarizeInbound(`accept tick=? type=hello guestRace=${msg.race}`, 'info');
-        const fullCfg: SessionConfig = {
-          race:      safeHostConfig.race,
-          guestRace: msg.race,
-          mapId:     safeHostConfig.mapId,
-        };
-        c.send({ type: 'config', ...fullCfg } satisfies WireMessage);
-        session.onConfig?.(fullCfg);
-        return;
-      }
-
-      // Guest receives full config from host
-      if (msg.type === 'config' && role === 'guest') {
-        const cfg = parseConfig(msg);
-        if (!cfg) {
-          summarizeInbound('reject tick=? type=config reason=invalid-config', 'warn');
-          session.status = 'error';
-          session.statusMsg = 'Invalid multiplayer config from host';
-          session.onStatusChange?.();
-          c.close();
-          return;
-        }
-        summarizeInbound(`accept tick=? type=config map=${cfg.mapId} races=${cfg.race}/${cfg.guestRace}`, 'info');
-        session.onConfig?.(cfg);
-        return;
-      }
-
-      // Tick packet — only queue if there are actual commands
-      const pkt = parseTickPacket(msg);
-      if (pkt) {
-        const summary = `accept tick=${pkt.tick} cmds=${pkt.cmds.length}`;
-        if (pkt.tick !== lastAcceptedTickLogged && (pkt.tick % ACCEPT_LOG_INTERVAL_TICKS === 0 || pkt.cmds.length > 0)) {
-          summarizeInbound(summary, 'info');
-          lastAcceptedTickLogged = pkt.tick;
-        } else {
-          summarizeInbound(summary);
-        }
-        if (pkt.cmds.length > 0) {
-          console.info(`[net:in] tick=${pkt.tick} cmds=${pkt.cmds.length} kinds=${summarizeCmdKinds(pkt.cmds)}`);
-          logBuildCmds(`recv tick=${pkt.tick}`, pkt.cmds);
-        }
-        enqueueRemotePacket(pkt);
-        return;
-      }
-
-      summarizeInbound('reject tick=? reason=unknown-payload-shape', 'warn');
-    });
-
-    c.on('close', () => {
-      // Preserve explicit local error state (e.g. our own lockstep timeout) instead of
-      // overwriting it as an opponent disconnect.
-      if (session.status === 'error') {
-        session.onStatusChange?.();
-        return;
-      }
-      session.status    = 'disconnected';
-      session.statusMsg = 'Opponent disconnected';
-      session.onStatusChange?.();
-    });
-
-    c.on('error', (err) => {
-      const rawMessage = (err as Error).message;
-      const friendly = classifyError(rawMessage, 'conn');
-      session.status    = 'error';
-      session.statusMsg = `${friendly.userMessage} [${friendly.debugCode}]`;
-      console.warn(`[net:conn-error] ${rawMessage} | ${getNetDebugSummary()}`);
-      session.onStatusChange?.();
-    });
+    c.on('open', () => core.onConnOpen());
+    c.on('data', (raw) => core.onConnData(raw));
+    c.on('close', () => core.onConnClose());
+    c.on('error', (err) => core.onConnError((err as Error).message));
   }
 
   peer.on('open', (id) => {
     if (role === 'host') {
-      session.code      = id;
-      session.status    = 'waiting';
-      session.statusMsg = `Room code: ${id}`;
-      session.onStatusChange?.();
-
+      core.session.code = id;
+      core.session.status = 'waiting';
+      core.session.statusMsg = `Room code: ${id}`;
+      core.session.onStatusChange?.();
       peer.on('connection', (c) => setupConn(c));
     } else {
-      // Guest: session.code is already the host's code
-      session.status    = 'connecting';
-      session.statusMsg = 'Connecting to host…';
-      session.onStatusChange?.();
-
+      core.session.status = 'connecting';
+      core.session.statusMsg = 'Connecting to host…';
+      core.session.onStatusChange?.();
       const c = peer.connect(hostCode!, { reliable: true, serialization: 'json' });
       setupConn(c);
     }
   });
 
-  peer.on('error', (err) => {
-    const rawMessage = (err as Error).message;
-    const friendly = classifyError(rawMessage, 'peer');
-    session.status    = 'error';
-    session.statusMsg = `${friendly.userMessage} [${friendly.debugCode}]`;
-    console.warn(`[net:peer-error] ${rawMessage} | ${getNetDebugSummary()}`);
-    session.onStatusChange?.();
-  });
+  peer.on('error', (err) => core.onPeerError((err as Error).message));
 
-  return session;
+  return core.session;
 }
