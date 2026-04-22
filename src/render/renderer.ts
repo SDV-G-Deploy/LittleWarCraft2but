@@ -335,14 +335,27 @@ function drawCorpses(
 function entityVisible(state: GameState, e: Entity, myOwner: 0 | 1): boolean {
   // Player's own entities (not goldmines) are always visible
   if (e.owner === myOwner && e.kind !== 'goldmine') return true;
-  const cx    = Math.min(MAP_W - 1, Math.max(0, e.pos.x + Math.floor(e.tileW / 2)));
-  const cy    = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
-  const fog   = state.fog[cy][cx];
+
   const enemy = isOpposingPlayerOwner(e.owner, myOwner);
+  let anyVisible = false;
+  let anyExplored = false;
+
+  for (let dy = 0; dy < e.tileH; dy++) {
+    for (let dx = 0; dx < e.tileW; dx++) {
+      const tx = Math.min(MAP_W - 1, Math.max(0, e.pos.x + dx));
+      const ty = Math.min(MAP_H - 1, Math.max(0, e.pos.y + dy));
+      const fog = state.fog[ty][tx];
+      if (fog === 'visible') anyVisible = true;
+      if (fog !== 'unseen') anyExplored = true;
+      if (anyVisible && anyExplored) break;
+    }
+    if (anyVisible && anyExplored) break;
+  }
+
   // Enemy units only visible in actively-visible cells
-  if (enemy && isUnitKind(e.kind)) return fog === 'visible';
-  // Everything else (buildings, mines) visible once explored
-  return fog !== 'unseen';
+  if (enemy && isUnitKind(e.kind)) return anyVisible;
+  // Everything else (buildings, mines, neutral blockers) visible once any tile is explored
+  return anyExplored;
 }
 
 function drawEntities(

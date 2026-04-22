@@ -25,10 +25,10 @@ export function buildMap06(): MapData {
   fill(map, 38, 26, 4, 12, T);
 
   // Carve entry gates (slightly wider for less binary hold/lock gameplay).
-  fill(map, 29, 22, 6, 4, G);
-  fill(map, 29, 38, 6, 4, G);
-  fill(map, 22, 29, 4, 6, G);
-  fill(map, 38, 29, 4, 6, G);
+  fill(map, 28, 22, 8, 4, G);
+  fill(map, 28, 38, 8, 4, G);
+  fill(map, 22, 28, 4, 8, G);
+  fill(map, 38, 28, 4, 8, G);
 
   fill(map, 27, 27, 2, 2, R);
   fill(map, 35, 35, 2, 2, R);
@@ -61,10 +61,14 @@ export function buildMap06(): MapData {
     ],
     goldMineReserves: [1600, 1600, 1400, 1400, 2400, 2400],
     blockers: [
-      { x: 29, y: 22, tileW: 6, tileH: 4 },
-      { x: 29, y: 38, tileW: 6, tileH: 4 },
-      { x: 22, y: 29, tileW: 4, tileH: 6 },
-      { x: 38, y: 29, tileW: 4, tileH: 6 },
+      { x: 28, y: 22, tileW: 3, tileH: 4 },
+      { x: 33, y: 22, tileW: 3, tileH: 4 },
+      { x: 28, y: 38, tileW: 3, tileH: 4 },
+      { x: 33, y: 38, tileW: 3, tileH: 4 },
+      { x: 22, y: 28, tileW: 4, tileH: 3 },
+      { x: 22, y: 33, tileW: 4, tileH: 3 },
+      { x: 38, y: 28, tileW: 4, tileH: 3 },
+      { x: 38, y: 33, tileW: 4, tileH: 3 },
     ],
     name: 'Crown Pit',
     description: 'Rich center ring creates a hard contest point.\nWatch posts, entries, and mine risk shape pit control.',
