@@ -578,6 +578,10 @@ export function startGame(
     }
     // Online mini-lockstep: advance only when this tick is ready on both sides.
     if (net) {
+      if (net.status === 'error' && gameResult === 'playing') {
+        gameResult = 'lose';
+        return;
+      }
       if (net.status === 'disconnected' && gameResult === 'playing') {
         gameResult = 'win';
         return;
@@ -585,7 +589,9 @@ export function startGame(
 
       const exchange = net.exchange(state.tick);
       if (!exchange.ready) {
-        if (net.status === 'disconnected' && gameResult === 'playing') {
+        if (net.status === 'error' && gameResult === 'playing') {
+          gameResult = 'lose';
+        } else if (net.status === 'disconnected' && gameResult === 'playing') {
           gameResult = 'win';
         }
         return;
@@ -648,9 +654,10 @@ export function startGame(
     checkWinLose();
     profiler.sampleState(state);
 
-    // Online: also check if opponent disconnected
-    if (net && net.status === 'disconnected' && gameResult === 'playing') {
-      gameResult = 'win'; // opponent left
+    // Online: terminal net states
+    if (net && gameResult === 'playing') {
+      if (net.status === 'error') gameResult = 'lose';
+      else if (net.status === 'disconnected') gameResult = 'win'; // opponent left
     }
   }
 

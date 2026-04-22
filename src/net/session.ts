@@ -226,7 +226,8 @@ const EXECUTION_DELAY_TICKS = 3;
 const REMOTE_STALE_TICK_LIMIT = 64;
 const INBOUND_RATE_WINDOW_MS = 1000;
 const MAX_INBOUND_PACKETS_PER_WINDOW = 120;
-const MAX_WAITING_STALL_TICKS = 180;
+// Allow temporary browser timer throttling/background-tab jitter without false lockstep drops.
+const MAX_WAITING_STALL_TICKS = 600;
 const ACCEPT_LOG_INTERVAL_TICKS = 40;
 
 function isInt(v: unknown): v is number {
@@ -661,6 +662,12 @@ export async function createSession(
     });
 
     c.on('close', () => {
+      // Preserve explicit local error state (e.g. our own lockstep timeout) instead of
+      // overwriting it as an opponent disconnect.
+      if (session.status === 'error') {
+        session.onStatusChange?.();
+        return;
+      }
       session.status    = 'disconnected';
       session.statusMsg = 'Opponent disconnected';
       session.onStatusChange?.();
