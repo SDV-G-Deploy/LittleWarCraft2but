@@ -106,3 +106,65 @@ Best next step before more movement code changes:
 - only then decide whether a dedicated choke/congestion pass is needed
 
 That keeps future work evidence-driven instead of speculative.
+
+
+## RTS movement design guardrails (added after external best-practice review)
+
+These principles refine the movement refactor plan without changing its core direction.
+
+### 1. Unify stepping, not all command semantics
+The target is one shared movement step core, not one mega-command system.
+Keep move / chase / gather / build domain state machines separate.
+Unify only the path-step execution layer.
+
+### 2. Prioritize readability and predictability over cleverness
+For LW2B, good RTS movement should mean:
+- consistent outcomes
+- low surprise
+- fewer stuck cases
+- understandable congestion behavior
+not maximum physical realism or overly smart crowd simulation.
+
+### 3. Keep global pathing and local avoidance separate
+Preserve the split between:
+- path planning / target selection
+- local step execution / occupancy / reservation / sidestep / repath
+This should remain explicit in code ownership.
+
+### 4. Use one movement core with policy profiles
+The shared step layer should support policy-level variation for:
+- move
+- chase
+- gather approach
+- build approach
+Differences should come from explicit policy flags or small strategy inputs, not separate ad hoc movement implementations.
+
+### 5. Treat arrival / stop behavior as a first-class concern
+Movement quality is not only route-taking. It also includes:
+- how units stop near goals
+- whether late arrivals push arrived units
+- whether traffic around goals forms ugly tails or waves
+Do not solve this in the current pass unless necessary, but keep the API and tests compatible with future arrival-behavior refinement.
+
+### 6. Do not introduce advanced crowd systems prematurely
+Do not add ORCA-style systems, complex boids layers, or deep crowd simulation unless the unified simpler system clearly hits real gameplay limits.
+Current preference:
+- deterministic heuristics
+- cheap local avoidance
+- stable tie-breaking
+- testable behavior
+
+### 7. Protect determinism above all during refactor
+Avoid changes that implicitly alter:
+- stable processing order
+- tie-break behavior
+- cadence timing anchors
+- lockstep-visible command semantics
+
+### 8. Judge success by RTS feel, not algorithm prestige
+Success criteria for the refactor:
+- fewer contradictory movement rules
+- less duplication
+- fewer obvious stuck/reject edge cases
+- same or better determinism confidence
+- better player control feel
