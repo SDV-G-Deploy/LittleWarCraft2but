@@ -306,6 +306,7 @@ export async function createSession(
   const localQueue = new Map<number, NetCmd[]>();
   const remoteQueue = new Map<number, NetCmd[]>();
   const remoteReceivedTicks = new Set<number>();
+  const outboundPending = new Map<number, NetCmd[]>();
 
   let queuedRemoteCmdCount = 0;
   let queuedLocalCmdCount = 0;
@@ -461,6 +462,28 @@ export async function createSession(
     }
   }
 
+  function queueOutboundPacket(tick: number, cmds: NetCmd[]): void {
+    const prev = outboundPending.get(tick);
+    if (!prev) {
+      outboundPending.set(tick, [...cmds]);
+      return;
+    }
+    if (prev.length === 0 && cmds.length > 0) {
+      outboundPending.set(tick, [...cmds]);
+    }
+  }
+
+  function flushOutboundPackets(): void {
+    if (!conn?.open || outboundPending.size === 0) return;
+    const ticks = [...outboundPending.keys()].sort((a, b) => a - b);
+    for (const pendingTick of ticks) {
+      const cmds = outboundPending.get(pendingTick);
+      if (!cmds) continue;
+      conn.send({ tick: pendingTick, cmds } satisfies TickPacket);
+      outboundPending.delete(pendingTick);
+    }
+  }
+
   const session: NetSession = {
     role,
     code:      role === 'guest' ? (hostCode ?? '') : '',
@@ -479,9 +502,9 @@ export async function createSession(
       enqueueLocalForTick(scheduledTick, toSend);
 
       // Send every sim tick so remote can advance lockstep even on empty-input ticks.
-      if (conn?.open) {
-        conn.send({ tick: scheduledTick, cmds: toSend } satisfies TickPacket);
-      }
+      // If game starts before DataConnection.open fully settles, queue and flush once open.
+      queueOutboundPacket(scheduledTick, toSend);
+      flushOutboundPackets();
 
       dropStaleRemoteTicks(tick);
       dropStaleLocalTicks(tick);
@@ -572,6 +595,7 @@ export async function createSession(
     }
 
     c.on('open', () => {
+      flushOutboundPackets();
       if (role === 'guest') {
         // Guest announces its chosen race first; host replies with full config
         c.send({ type: 'hello', race: safeGuestRace } satisfies WireMessage);
