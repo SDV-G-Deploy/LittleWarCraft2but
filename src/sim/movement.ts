@@ -11,7 +11,44 @@ function replacePath(path: Vec2[], nextPath: Vec2[]): void {
   path.splice(0, path.length, ...nextPath);
 }
 
+function tileKey(x: number, y: number): number {
+  return y * MAP_W + x;
+}
+
+type MovementResolutionContext = {
+  tick: number;
+  reservations: Map<number, number>;
+};
+
+let movementResolutionContext: MovementResolutionContext | null = null;
+
+export function beginMovementResolutionTick(tick: number): void {
+  movementResolutionContext = { tick, reservations: new Map() };
+}
+
+export function endMovementResolutionTick(): void {
+  movementResolutionContext = null;
+}
+
+function isTileReservedByOtherUnit(entity: Entity, tx: number, ty: number): boolean {
+  const context = movementResolutionContext;
+  if (!context) return false;
+  const reservedBy = context.reservations.get(tileKey(tx, ty));
+  return typeof reservedBy === 'number' && reservedBy !== entity.id;
+}
+
+function tryReserveTile(entity: Entity, tx: number, ty: number): boolean {
+  const context = movementResolutionContext;
+  if (!context) return true;
+  const key = tileKey(tx, ty);
+  const reservedBy = context.reservations.get(key);
+  if (typeof reservedBy === 'number' && reservedBy !== entity.id) return false;
+  context.reservations.set(key, entity.id);
+  return true;
+}
+
 export function isTileOccupiedByOtherUnit(state: GameState, entity: Entity, tx: number, ty: number): boolean {
+  if (isTileReservedByOtherUnit(entity, tx, ty)) return true;
   return state.entities.some(other =>
     other.id !== entity.id &&
     isUnitKind(other.kind) &&
@@ -57,6 +94,7 @@ export function tryAdvancePathWithAvoidance(
 
   const next = path[0]!;
   if (!isTileOccupiedByOtherUnit(state, entity, next.x, next.y)) {
+    if (!tryReserveTile(entity, next.x, next.y)) return 'blocked';
     path.shift();
     entity.pos.x = next.x;
     entity.pos.y = next.y;
@@ -72,6 +110,8 @@ export function tryAdvancePathWithAvoidance(
   const sidestep = findDeterministicSidestep(state, entity, next, goal);
   if (!sidestep) return 'blocked';
 
+  if (!tryReserveTile(entity, sidestep.x, sidestep.y)) return 'blocked';
+
   entity.pos.x = sidestep.x;
   entity.pos.y = sidestep.y;
 
@@ -83,4 +123,3 @@ export function tryAdvancePathWithAvoidance(
   }
   return 'sidestep';
 }
-

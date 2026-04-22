@@ -7,7 +7,7 @@ import { processGather, processTrain, processBuild } from './economy';
 import { getEntity, isTileBlockedByEntity } from './entities';
 import { profiler } from './profiler';
 import { getResolvedRange, getResolvedSpeed } from '../balance/resolver';
-import { tryAdvancePathWithAvoidance } from './movement';
+import { beginMovementResolutionTick, endMovementResolutionTick, tryAdvancePathWithAvoidance } from './movement';
 
 type TargetPredicate = (target: Entity) => boolean;
 
@@ -251,10 +251,15 @@ export function autoAttackPass(state: GameState): void {
 
 export function processCommandPass(state: GameState): void {
   const stableIds = state.entities.map(e => e.id).sort((a, b) => a - b);
-  for (const id of stableIds) {
-    const entity = getEntity(state, id);
-    if (!entity) continue;
-    processCommand(state, entity);
+  beginMovementResolutionTick(state.tick);
+  try {
+    for (const id of stableIds) {
+      const entity = getEntity(state, id);
+      if (!entity) continue;
+      processCommand(state, entity);
+    }
+  } finally {
+    endMovementResolutionTick();
   }
 }
 
