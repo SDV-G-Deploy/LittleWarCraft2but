@@ -44,6 +44,12 @@ export interface AIController {
   defenseRecallWindowTicks: number;
 }
 
+type ArmyMixPlan = {
+  rangedRatio: number;
+  heavyRatio: number;
+  minFrontline: number;
+};
+
 export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
   if (difficulty === 'easy') {
     return {
@@ -213,18 +219,25 @@ export function tickAI(state: GameState, ai: AIController): void {
         const soldierCount = mySoldiers.filter(u => u.kind === rc.soldier).length;
         const rangedCount  = mySoldiers.filter(u => u.kind === rc.ranged).length;
         const heavyCount   = mySoldiers.filter(u => u.kind === rc.heavy).length;
-        const targetRangedCount = Math.max(1, Math.floor((soldierCount + heavyCount) * ai.preferredRangedRatio));
+        const totalArmy = soldierCount + rangedCount + heavyCount;
+        const mixPlan = getArmyMixPlan(ai, totalArmy);
+        const targetRangedCount = Math.max(0, Math.floor((totalArmy + 1) * mixPlan.rangedRatio));
+        const targetHeavyCount = Math.min(ai.preferredHeavyCap, Math.max(0, Math.floor((totalArmy + 1) * mixPlan.heavyRatio)));
+
         const heavyCost    = getResolvedCost(rc.heavy, state.races[1]);
         const rangedCost   = getResolvedCost(rc.ranged, state.races[1]);
         const soldierCost  = getResolvedCost(rc.soldier, state.races[1]);
-        const wantHeavy    = heavyCount < ai.preferredHeavyCap && soldierCount >= (ai.difficulty === 'hard' ? 2 : 3) &&
-                             state.gold[1] >= heavyCost.gold && state.wood[1] >= heavyCost.wood;
-        const wantRanged   = !wantHeavy && rangedCount < targetRangedCount &&
-                             state.gold[1] >= rangedCost.gold && state.wood[1] >= rangedCost.wood;
+        const canHeavy     = state.gold[1] >= heavyCost.gold && state.wood[1] >= heavyCost.wood;
+        const canRanged    = state.gold[1] >= rangedCost.gold && state.wood[1] >= rangedCost.wood;
         const canSoldier   = state.gold[1] >= soldierCost.gold && state.wood[1] >= soldierCost.wood;
+
+        const needFrontline = soldierCount < mixPlan.minFrontline;
+        const wantHeavy    = !needFrontline && heavyCount < targetHeavyCount && soldierCount >= mixPlan.minFrontline && canHeavy;
+        const wantRanged   = !wantHeavy && !needFrontline && rangedCount < targetRangedCount && soldierCount >= Math.max(1, mixPlan.minFrontline - 1) && canRanged;
         const nextUnit = wantHeavy ? rc.heavy : wantRanged ? rc.ranged : rc.soldier;
+        const canTrainNext = wantHeavy ? canHeavy : wantRanged ? canRanged : canSoldier;
         const barracksBusy = myBarracks.cmd?.type === 'train';
-        if (!barracksBusy && (wantHeavy || wantRanged || canSoldier)) issueTrainCommand(state, myBarracks, nextUnit);
+        if (!barracksBusy && canTrainNext) issueTrainCommand(state, myBarracks, nextUnit);
       }
       if (!buildingFarm && state.popCap[1] - state.pop[1] <= 2 && farmCount < ai.maxFarms) {
         const w = freeWorker(myWorkers);
@@ -288,6 +301,23 @@ export function tickAI(state: GameState, ai: AIController): void {
       break;
     }
   }
+}
+
+function getArmyMixPlan(ai: AIController, totalArmy: number): ArmyMixPlan {
+  if (ai.difficulty === 'easy') {
+    if (totalArmy < 6) return { rangedRatio: 0, heavyRatio: 0, minFrontline: 4 };
+    if (totalArmy < 11) return { rangedRatio: 0.2, heavyRatio: 0.1, minFrontline: 4 };
+    return { rangedRatio: 0.28, heavyRatio: 0.18, minFrontline: 5 };
+  }
+  if (ai.difficulty === 'hard') {
+    if (totalArmy < 4) return { rangedRatio: 0.2, heavyRatio: 0.05, minFrontline: 2 };
+    if (totalArmy < 8) return { rangedRatio: 0.45, heavyRatio: 0.25, minFrontline: 2 };
+    return { rangedRatio: 0.55, heavyRatio: 0.33, minFrontline: 3 };
+  }
+
+  if (totalArmy < 5) return { rangedRatio: 0.1, heavyRatio: 0, minFrontline: 3 };
+  if (totalArmy < 10) return { rangedRatio: 0.33, heavyRatio: 0.18, minFrontline: 3 };
+  return { rangedRatio: 0.42, heavyRatio: 0.25, minFrontline: 4 };
 }
 
 function doctrineKind(choice: AIController['doctrineChoice']): LumberUpgradeKind {
