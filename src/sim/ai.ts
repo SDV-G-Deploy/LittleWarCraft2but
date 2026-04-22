@@ -1,6 +1,7 @@
-import type { AIDifficulty, Entity, EntityKind, GameState, Vec2 } from '../types';
+import type { AIDifficulty, Entity, EntityKind, GameState, LumberUpgradeKind, Vec2 } from '../types';
 import { MAP_H, MAP_W, SIM_HZ, isOwnedByOpposingPlayer, isUnitKind } from '../types';
 import { RACES } from '../data/races';
+import { RACE_BALANCE_PROFILES } from '../balance/races';
 import { getResolvedCost, getResolvedTileSize } from '../balance/resolver';
 import { DOCTRINE_COST } from '../balance/doctrines';
 import { tryStartLumberUpgrade } from './upgrades';
@@ -45,7 +46,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
   if (difficulty === 'easy') {
     return {
       phase: 'economy',
-      attackWaveSize: 8,
+      attackWaveSize: 99,
       difficulty,
       reactionDelayTicks: Math.round(SIM_HZ * 1.4),
       nextDecisionTick: 0,
@@ -58,7 +59,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       preferredHeavyCap: 1,
       assaultRetargetMine: false,
       towerMinArmy: 6,
-      fallbackWaveThreshold: 2,
+      fallbackWaveThreshold: 4,
       expansionMineMinArmy: 7,
       expansionMineReserveMin: 900,
       attackRetargetRadius: 7,
@@ -69,12 +70,12 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
   if (difficulty === 'hard') {
     return {
       phase: 'economy',
-      attackWaveSize: 5,
+      attackWaveSize: 9,
       difficulty,
       reactionDelayTicks: Math.round(SIM_HZ * 0.55),
       nextDecisionTick: 0,
       maxFarms: 4,
-      maxTowers: 3,
+      maxTowers: 4,
       workerTarget: 5,
       openingPlan: 'pressure',
       openingChoiceDelayTicks: Math.round(SIM_HZ * 4),
@@ -82,7 +83,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
       preferredHeavyCap: 3,
       assaultRetargetMine: true,
       towerMinArmy: 4,
-      fallbackWaveThreshold: 4,
+      fallbackWaveThreshold: 8,
       expansionMineMinArmy: 3,
       expansionMineReserveMin: 500,
       attackRetargetRadius: 4,
@@ -92,7 +93,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
   }
   return {
     phase: 'economy',
-    attackWaveSize: 6,
+    attackWaveSize: 7,
     difficulty,
     reactionDelayTicks: SIM_HZ,
     nextDecisionTick: 0,
@@ -105,7 +106,7 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
     preferredHeavyCap: 2,
     assaultRetargetMine: true,
     towerMinArmy: 5,
-    fallbackWaveThreshold: 3,
+    fallbackWaveThreshold: 6,
     expansionMineMinArmy: 5,
     expansionMineReserveMin: 700,
     attackRetargetRadius: 6,
@@ -191,16 +192,9 @@ export function tickAI(state: GameState, ai: AIController): void {
         }
       }
 
-      if (myLumberMill && !state.upgrades[1].doctrine && state.gold[1] >= DOCTRINE_COST.gold && state.wood[1] >= DOCTRINE_COST.wood) {
-        tryStartLumberUpgrade(
-          state,
-          1,
-          ai.doctrineChoice === 'fieldTempo'
-            ? 'doctrineFieldTempo'
-            : ai.doctrineChoice === 'lineHold'
-              ? 'doctrineLineHold'
-              : 'doctrineLongReach',
-        );
+      if (myLumberMill) {
+        const nextUpgrade = pickNextUpgrade(state, ai);
+        if (nextUpgrade) tryStartLumberUpgrade(state, 1, nextUpgrade);
       }
 
       if (myBarracks) {
@@ -250,9 +244,11 @@ export function tickAI(state: GameState, ai: AIController): void {
       for (const s of mySoldiers) {
         if (s.cmd && s.cmd.type !== 'move') continue;
 
-        const nearest = s.kind === rc.ranged
-          ? (nearestPlayerUnit(state, s, ai.attackRetargetRadius) ?? nearestPlayerEntity(state, s, ai.attackRetargetRadius))
-          : nearestPlayerEntity(state, s, ai.attackRetargetRadius);
+        const nearest = ai.difficulty === 'easy'
+          ? nearestPlayerUnit(state, s, ai.attackRetargetRadius)
+          : s.kind === rc.ranged
+            ? (nearestPlayerUnit(state, s, ai.attackRetargetRadius) ?? nearestPlayerEntity(state, s, ai.attackRetargetRadius))
+            : nearestPlayerEntity(state, s, ai.attackRetargetRadius);
 
         if (nearest) {
           issueAttackCommand(s, nearest.id, state.tick, state);
@@ -264,7 +260,7 @@ export function tickAI(state: GameState, ai: AIController): void {
           const tx = expansionMine.pos.x;
           const ty = expansionMine.pos.y - 1;
           if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
-        } else if (opposingPlayerTH) {
+        } else if (opposingPlayerTH && ai.difficulty !== 'easy') {
           const tx = opposingPlayerTH.pos.x + 1;
           const ty = opposingPlayerTH.pos.y + 2;
           if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
@@ -280,6 +276,63 @@ export function tickAI(state: GameState, ai: AIController): void {
       break;
     }
   }
+}
+
+function doctrineKind(choice: AIController['doctrineChoice']): LumberUpgradeKind {
+  return choice === 'fieldTempo'
+    ? 'doctrineFieldTempo'
+    : choice === 'lineHold'
+      ? 'doctrineLineHold'
+      : 'doctrineLongReach';
+}
+
+function pickNextUpgrade(state: GameState, ai: AIController): LumberUpgradeKind | null {
+  const upgrades = state.upgrades[1];
+  if (upgrades.pendingLumberUpgrade) return null;
+
+  if (!upgrades.doctrine && state.gold[1] >= DOCTRINE_COST.gold && state.wood[1] >= DOCTRINE_COST.wood) {
+    return doctrineKind(ai.doctrineChoice);
+  }
+
+  const raceUpgrades = RACE_BALANCE_PROFILES[state.races[1]].upgrades;
+  const ladder: Array<{ kind: LumberUpgradeKind; current: number; max: number; gold: number; wood: number; slot: number }> = [
+    {
+      kind: 'meleeAttack',
+      current: upgrades.meleeAttackLevel,
+      max: raceUpgrades.meleeAttack.maxLevel,
+      gold: raceUpgrades.meleeAttack.cost.gold,
+      wood: raceUpgrades.meleeAttack.cost.wood,
+      slot: 0,
+    },
+    {
+      kind: 'armor',
+      current: upgrades.armorLevel,
+      max: raceUpgrades.armor.maxLevel,
+      gold: raceUpgrades.armor.cost.gold,
+      wood: raceUpgrades.armor.cost.wood,
+      slot: 1,
+    },
+    {
+      kind: 'buildingHp',
+      current: upgrades.buildingHpLevel,
+      max: raceUpgrades.buildingHp.maxLevel,
+      gold: raceUpgrades.buildingHp.cost.gold,
+      wood: raceUpgrades.buildingHp.cost.wood,
+      slot: 2,
+    },
+  ];
+
+  const maxTier = Math.max(...ladder.map(entry => entry.max));
+  for (let tier = 1; tier <= maxTier; tier++) {
+    for (const entry of ladder) {
+      if (entry.current >= tier || entry.max < tier) continue;
+      if (ai.difficulty === 'medium' && ((tier - 1) * ladder.length + entry.slot) % 2 === 1) continue;
+      if (state.gold[1] < entry.gold || state.wood[1] < entry.wood) continue;
+      return entry.kind;
+    }
+  }
+
+  return null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
