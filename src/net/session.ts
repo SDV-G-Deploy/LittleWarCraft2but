@@ -157,7 +157,11 @@ export interface SessionConfig {
 export interface SessionStats {
   waitingStallTicks: number;
   remoteAnnouncedUpToTick: number;
+  remoteContiguousUpToTick: number;
   currentDelayTicks: number;
+  outboundPendingTicks: number;
+  queuedRemoteTicks: number;
+  queuedLocalTicks: number;
   lastPacketAgeMs: number | null;
   lastInboundSummary: string | null;
   rtcIceConnectionState: RTCIceConnectionState | null;
@@ -538,7 +542,11 @@ export async function createSession(
       return {
         waitingStallTicks,
         remoteAnnouncedUpToTick,
+        remoteContiguousUpToTick,
         currentDelayTicks: EXECUTION_DELAY_TICKS,
+        outboundPendingTicks: outboundPending.size,
+        queuedRemoteTicks: remoteQueue.size,
+        queuedLocalTicks: localQueue.size,
         lastPacketAgeMs: lastPacketReceivedAt === null ? null : Math.max(0, Date.now() - lastPacketReceivedAt),
         lastInboundSummary,
         rtcIceConnectionState,
