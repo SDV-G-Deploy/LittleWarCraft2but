@@ -472,9 +472,8 @@ export async function createSession(
       outboundPending.set(tick, [...cmds]);
       return;
     }
-    if (prev.length === 0 && cmds.length > 0) {
-      outboundPending.set(tick, [...cmds]);
-    }
+    if (cmds.length === 0) return;
+    prev.push(...cmds);
   }
 
   function flushOutboundPackets(): void {
