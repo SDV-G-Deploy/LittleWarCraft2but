@@ -83,13 +83,41 @@ export function findDeterministicSidestep(state: GameState, entity: Entity, bloc
 
 export type StepAvoidanceResult = 'no-path' | 'moved' | 'repathed' | 'sidestep' | 'blocked';
 
-export function tryAdvancePathWithAvoidance(
-  state: GameState,
-  entity: Entity,
-  path: Vec2[],
-  goal: Vec2,
-  tryRepath?: () => Vec2[] | null,
-): StepAvoidanceResult {
+export type MovementStepPolicy = {
+  allowRepath: boolean;
+  allowSidestep: boolean;
+  clearPathOnSidestepRepathFailure: boolean;
+};
+
+export const MOVE_STEP_POLICY: MovementStepPolicy = {
+  allowRepath: true,
+  allowSidestep: true,
+  clearPathOnSidestepRepathFailure: true,
+};
+
+export const CHASE_STEP_POLICY: MovementStepPolicy = {
+  allowRepath: true,
+  allowSidestep: true,
+  clearPathOnSidestepRepathFailure: true,
+};
+
+type AdvanceMovementStepArgs = {
+  state: GameState;
+  entity: Entity;
+  path: Vec2[];
+  goal: Vec2;
+  policy: MovementStepPolicy;
+  tryRepath?: () => Vec2[] | null;
+};
+
+/**
+ * Shared movement-step core. Domain systems (move/chase/gather/build travel)
+ * can keep their own state machines while delegating per-step execution here.
+ */
+export function advanceMovementStepCore(args: AdvanceMovementStepArgs): StepAvoidanceResult {
+  const { state, entity, path, goal, policy, tryRepath } = args;
+  const canRepath = policy.allowRepath ? tryRepath : undefined;
+
   if (path.length === 0) return 'no-path';
 
   const next = path[0]!;
@@ -101,11 +129,13 @@ export function tryAdvancePathWithAvoidance(
     return 'moved';
   }
 
-  const repath = tryRepath?.();
+  const repath = canRepath?.();
   if (repath && repath.length > 0) {
     replacePath(path, repath);
     return 'repathed';
   }
+
+  if (!policy.allowSidestep) return 'blocked';
 
   const sidestep = findDeterministicSidestep(state, entity, next, goal);
   if (!sidestep) return 'blocked';
@@ -115,11 +145,28 @@ export function tryAdvancePathWithAvoidance(
   entity.pos.x = sidestep.x;
   entity.pos.y = sidestep.y;
 
-  const repathAfterSidestep = tryRepath?.();
+  const repathAfterSidestep = canRepath?.();
   if (repathAfterSidestep && repathAfterSidestep.length > 0) {
     replacePath(path, repathAfterSidestep);
-  } else {
+  } else if (policy.clearPathOnSidestepRepathFailure) {
     path.splice(0, path.length);
   }
   return 'sidestep';
+}
+
+export function tryAdvancePathWithAvoidance(
+  state: GameState,
+  entity: Entity,
+  path: Vec2[],
+  goal: Vec2,
+  tryRepath?: () => Vec2[] | null,
+): StepAvoidanceResult {
+  return advanceMovementStepCore({
+    state,
+    entity,
+    path,
+    goal,
+    policy: MOVE_STEP_POLICY,
+    tryRepath,
+  });
 }

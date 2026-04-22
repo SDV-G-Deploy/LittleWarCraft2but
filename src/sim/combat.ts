@@ -7,7 +7,7 @@ import { resolveAttackBonus } from '../balance/modifiers';
 import { getDoctrineArmorBonus, getDoctrineRangeBonus } from '../balance/doctrines';
 import { killEntity } from './entities';
 import { findPath } from './pathfinding';
-import { tryAdvancePathWithAvoidance } from './movement';
+import { CHASE_STEP_POLICY, advanceMovementStepCore } from './movement';
 
 // ─── Issue ────────────────────────────────────────────────────────────────────
 
@@ -276,7 +276,14 @@ export function processAttack(state: GameState, entity: Entity): void {
         x: Math.max(target.pos.x, Math.min(entity.pos.x, target.pos.x + target.tileW - 1)),
         y: Math.max(target.pos.y, Math.min(entity.pos.y, target.pos.y + target.tileH - 1)),
       };
-      const stepResult = tryAdvancePathWithAvoidance(state, entity, cmd.chasePath, chaseGoal, tryRepath);
+      const stepResult = advanceMovementStepCore({
+        state,
+        entity,
+        path: cmd.chasePath,
+        goal: chaseGoal,
+        policy: CHASE_STEP_POLICY,
+        tryRepath,
+      });
 
       if (stepResult === 'moved' || stepResult === 'sidestep') {
         cmd.chaseStepTick = state.tick;
