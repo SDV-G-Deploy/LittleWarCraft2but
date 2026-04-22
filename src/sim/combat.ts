@@ -8,6 +8,15 @@ import { getDoctrineArmorBonus, getDoctrineRangeBonus } from '../balance/doctrin
 import { killEntity } from './entities';
 import { findPath } from './pathfinding';
 
+function isTileOccupiedByOtherUnit(state: GameState, entity: Entity, tx: number, ty: number): boolean {
+  return state.entities.some(other =>
+    other.id !== entity.id &&
+    isUnitKind(other.kind) &&
+    other.pos.x === tx &&
+    other.pos.y === ty,
+  );
+}
+
 // ─── Issue ────────────────────────────────────────────────────────────────────
 
 export function issueAttackCommand(entity: Entity, targetId: number, currentTick: number, state?: GameState): boolean {
@@ -263,7 +272,12 @@ export function processAttack(state: GameState, entity: Entity): void {
     }
 
     if (cmd.chasePath.length > 0) {
-      const next = cmd.chasePath.shift()!;
+      const next = cmd.chasePath[0]!;
+      if (isTileOccupiedByOtherUnit(state, entity, next.x, next.y)) {
+        cmd.chasePath = [];
+        return;
+      }
+      cmd.chasePath.shift();
       entity.pos.x = next.x;
       entity.pos.y = next.y;
       cmd.chaseStepTick = state.tick;
