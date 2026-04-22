@@ -1,8 +1,17 @@
 # LW2B guest build offline audit (2026-04-22)
 
+## Status update
+
+This note is now historical support documentation.
+
+The previously active live bug where the remote guest could not build has since been fixed in project reality.
+This audit remains useful as a record of what was ruled out during narrowing, but it should no longer be treated as the current top-priority problem.
+
+The active open multiplayer/product problem is now Russia-facing accessibility and backend reachability, not guest build parity.
+
 ## Purpose
 
-This note captures what can already be concluded about the narrowed **remote guest cannot build** bug without live multiplayer testing.
+This note captures what could be concluded about the narrowed **remote guest cannot build** bug without live multiplayer testing.
 
 It covers:
 - static code audit
@@ -117,9 +126,13 @@ If live testing still is not available, the next best analytical step would be:
 
 ## Current recommendation
 
-Do not revert the current diagnosis back to "infra" or to a broad startup failure.
+Treat this note as closed-loop evidence for a bug that has already been fixed.
 
-Current best framing remains:
-- broad online path is much healthier than earlier tests implied
-- owner-1 build is not statically broken in the obvious code paths
-- the active issue is likely a runtime divergence affecting guest build acceptance in real multiplayer conditions
+What still matters from it:
+- broad online path was already healthier than first tests implied
+- owner-1 build was not statically broken in the obvious code paths
+- the bug was likely runtime-specific rather than a simple hardcoded host-only path
+
+Current project framing should now shift to:
+- gameplay/runtime guest build issue resolved
+- active open risk moved to Russia-facing reachability, signaling, TURN/WebRTC path quality, and fallback transport/product strategy

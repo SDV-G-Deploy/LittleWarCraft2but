@@ -150,20 +150,21 @@ If needed, restore from that snapshot before this migration pass.
 
 ## Gameplay/runtime debugging update after newer live tests
 
-Newer live tests changed the interpretation of the runtime problem:
+Newer live tests changed the interpretation of the runtime problem.
+
+What is now established:
 - the new UI and server flow complete successfully
 - connection can stabilize after some time
 - the match can begin
 - on one laptop with two browser windows, fullscreen / background-window behavior can distort the result because only the foreground game may remain truly active
 - when both windows remain effectively active and visible, online play progresses much further
 - host gameplay works
-- remote guest can move and gather
-- remote guest still cannot build
+- remote guest gameplay path, including building, is now considered fixed in project reality
 
-This is important because it narrows the current active bug.
-The runtime path is no longer best described as a total SERVER-mode startup failure.
-The strongest remaining gameplay/runtime issue is now:
-- **remote non-host build actions still fail**
+This is important because it removes the previously narrowed guest-build bug from the active blocker list.
+The runtime path is no longer best described as either a total SERVER-mode startup failure or a remaining guest-build acceptance failure.
+The strongest remaining online/product issue is now:
+- **accessibility and reachability from Russia-facing networks**
 
 ## Updated engineering interpretation
 
@@ -171,27 +172,26 @@ What now looks proven enough:
 - Helsinki realtime infra is operational enough for real match start
 - TURN/TLS on floating `443` is not the main blocker anymore
 - at least part of the earlier "dead controls" diagnosis was polluted by browser visibility / scheduling artifacts from one-laptop testing
+- the previously narrowed guest-build bug has since been fixed in live project state
 
-What now looks most likely:
-- the earlier startup/readiness-gate work likely improved the broad online path
-- the current highest-value bug is narrower and probably lives in the remote guest build-command path
-- likely failure layers are now command-specific, such as:
-  - guest build emit path
-  - build packet queueing / delivery
-  - owner-1 command application
-  - placement validation divergence between peers
-  - construction-site spawn / worker-state validation mismatch
+What now looks most relevant:
+- the broad gameplay/runtime path is healthier than earlier tests suggested
+- the highest-value remaining problem is no longer an in-match command acceptance bug
+- the main open risk has shifted outward to regional accessibility, signaling reachability, WebRTC/TURN path reliability, and product fallback strategy for Russia-facing users
 
 ## Best current next engineering step
 
-Do not prioritize more infra work first.
-The best next step is:
-1. reproduce the issue on two truly active peers if possible
-2. add narrow build-command-specific diagnostics
-3. identify whether guest build fails at emit, send, receive, apply, validate, or construction spawn
+Do not spend the next cycle re-debugging the already-fixed guest-build path.
 
-Companion note added for this narrowed bug:
-- `docs/LW2B_REMOTE_GUEST_BUILD_DEBUG_CHECKLIST_2026-04-22.md`
+The best next step is now:
+1. treat Russia-facing accessibility as the primary open product problem
+2. separate frontend reachability, signaling reachability, TURN/WebRTC establishment, and transport fallback as distinct layers
+3. validate the new ws-relay path as a practical fallback for hard networks
+4. keep collecting exact failure wording from Russia-side tests before changing infra again
+
+Related companion notes:
+- `docs/LW2B_WS_RELAY_FALLBACK_MINI_DESIGN_2026-04-22.md`
+- `docs/LW2B_WS_RELAY_FALLBACK_IMPLEMENTATION_DRAFT_2026-04-22.md`
 
 ## Remaining recommended checks after this milestone
 
@@ -200,7 +200,7 @@ Companion note added for this narrowed bug:
 - decide whether old `5349` should remain as fallback or be retired later
 - decide whether cert-copy refresh should be documented/manual or later automated on certificate renewal
 - after infra stabilizes, verify repo local-vs-push sync so operational docs stay aligned with reality
-- continue gameplay/runtime debugging with focus on remote guest build failure rather than broad startup failure framing
+- continue online-access debugging with focus on Russia-facing frontend reachability, signaling/TURN/WebRTC reliability, and fallback transport validation rather than the already-fixed guest build issue
 
 ## New network accessibility hypothesis after Russia reachability signal
 
@@ -452,4 +452,4 @@ When resuming `ПРОЕКТ LW2B`, remember:
   - `/root/lw2b-net-snapshots/20260422T093107Z`
 - broad network bring-up is much healthier than the earlier failing tests implied
 - current active gameplay/runtime bug is narrowed to remote guest build behavior after successful online match start
-- if the user mentions Hetzner Helsinki, `rts.kislota.today`, floating IP, TURN, PeerJS, nginx, Russia accessibility, or guest build failure, this document is one of the first places to resume from
+- if the user mentions Hetzner Helsinki, `rts.kislota.today`, floating IP, TURN, PeerJS, nginx, Russia accessibility, or ws-relay fallback, this document is one of the first places to resume from

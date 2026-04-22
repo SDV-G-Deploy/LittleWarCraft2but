@@ -1,0 +1,66 @@
+# LW2B project status (2026-04-22)
+
+## Canonical short status
+
+LW2B has moved past the earlier narrow remote-guest-build blocker.
+That issue is now considered fixed in live project reality.
+
+The main open project problem is now **Russia-facing online accessibility**.
+This should be treated as a layered reachability/product problem, not as a single gameplay bug.
+
+## What is currently true
+
+### Gameplay / simulation / local project state
+- the project has a stronger structural base now: doctrine, invariants, balance-system hardening, AI difficulty passes, and recent movement/pathing work all exist in repo docs/code
+- guest build parity is no longer the active blocker
+- the broad online path is healthier than earlier failing tests first suggested
+
+### Live realtime infra
+- Helsinki realtime host is live and documented
+- `rts.kislota.today` serves the realtime stack
+- `nginx`, `peerjs`, `coturn`, and `ice-api` are live
+- floating IP and TURN/TLS on `443` are configured and documented
+
+### Active product/network risk
+The current open problem is best split into separate layers:
+1. frontend reachability from Russia-facing networks
+2. signaling reachability to the self-hosted backend
+3. TURN / WebRTC establishment quality on those networks
+4. whether fallback transport should become a product feature instead of relying on pure PeerJS/WebRTC success
+
+## Current repo-level signals
+
+### Docs now relevant for resume
+- `docs/LW2B_PROJECT_DEVELOPMENT_PLAN_2026-04-22.md`
+- `docs/LW2B_GAMEPLAY_DOCTRINE_AND_CROSS_LAYER_INVARIANTS.md`
+- `docs/LW2B_HELSINKI_REALTIME_STATUS_2026-04-22.md`
+- `docs/planning/NEXT_MULTIPLAYER_TESTS.md`
+- `docs/LW2B_WS_RELAY_FALLBACK_MINI_DESIGN_2026-04-22.md`
+- `docs/LW2B_WS_RELAY_FALLBACK_IMPLEMENTATION_DRAFT_2026-04-22.md`
+
+### Current code-level direction visible in repo
+Recent branch-head commits indicate active transport/fallback work already exists:
+- `b037a29` `refactor(net): extract session core from peerjs transport`
+- `6e24933` `refactor(net): extract peerjs transport module and transport types`
+- `46fe475` `net: add manual ws-relay transport path and selector`
+
+The repo therefore already reflects a practical fallback-transport direction, not only a speculative design note.
+
+## Recommended active framing
+
+Do not frame LW2B as blocked by guest build anymore.
+Do not frame it as a broad infra collapse either.
+
+The best current framing is:
+- gameplay-side critical blocker reduced
+- infra baseline exists and works enough for real matches
+- open problem is regional accessibility / transport reliability for Russia-facing users
+- ws-relay fallback is now part of the meaningful active solution space
+
+## Best next actions
+
+1. Validate Russia-facing behavior using the current repo state, including ws-relay mode where appropriate
+2. Keep frontend accessibility separate from realtime transport diagnosis
+3. Capture exact PeerJS / ICE / relay failure wording from Russia-side tests
+4. Update product guidance so hard-network users can choose the better transport path intentionally
+5. Keep docs and brief aligned with this framing
