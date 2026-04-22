@@ -60,6 +60,8 @@ function findNearbyMoveGoal(state: GameState, entity: Entity, tx: number, ty: nu
 
   let best: { goal: Vec2; path: Vec2[] } | null = null;
   let bestScore = Infinity;
+  let bestZeroPath: { goal: Vec2; path: Vec2[] } | null = null;
+  let bestZeroPathScore = Infinity;
   const maxTrials = Math.min(MOVE_GOAL_PATH_TRIALS, candidates.length);
   for (let i = 0; i < maxTrials; i++) {
     const c = candidates[i]!;
@@ -68,7 +70,11 @@ function findNearbyMoveGoal(state: GameState, entity: Entity, tx: number, ty: nu
     const goalDist = Math.max(Math.abs(clamped.x - c.x), Math.abs(clamped.y - c.y));
     const score = goalDist * 1000 + path.length;
     if (path.length === 0 && entity.pos.x === c.x && entity.pos.y === c.y) {
-      return { goal: c, path };
+      if (score < bestZeroPathScore) {
+        bestZeroPath = { goal: c, path };
+        bestZeroPathScore = score;
+      }
+      continue;
     }
     if (!best || score < bestScore) {
       best = { goal: c, path };
@@ -82,10 +88,19 @@ function findNearbyMoveGoal(state: GameState, entity: Entity, tx: number, ty: nu
     const c = candidates[i]!;
     const path = findPath(state, entity.pos.x, entity.pos.y, c.x, c.y);
     if (!path) continue;
+    if (path.length === 0 && entity.pos.x === c.x && entity.pos.y === c.y) {
+      const goalDist = Math.max(Math.abs(clamped.x - c.x), Math.abs(clamped.y - c.y));
+      const score = goalDist * 1000 + path.length;
+      if (score < bestZeroPathScore) {
+        bestZeroPath = { goal: c, path };
+        bestZeroPathScore = score;
+      }
+      continue;
+    }
     return { goal: c, path };
   }
 
-  return best;
+  return best ?? bestZeroPath;
 }
 
 export function issueMoveCommand(
@@ -96,6 +111,10 @@ export function issueMoveCommand(
   attackMove = false,
 ): boolean {
   const requestedGoal = clampGoalToMap(tx, ty);
+  if (requestedGoal.x === entity.pos.x && requestedGoal.y === entity.pos.y) {
+    entity.cmd = null;
+    return true;
+  }
   if (entity.cmd?.type === 'move' &&
       entity.cmd.attackMove === attackMove &&
       goalsNear(entity.cmd.goal, requestedGoal) &&
@@ -104,7 +123,10 @@ export function issueMoveCommand(
   }
 
   const movePlan = findNearbyMoveGoal(state, entity, tx, ty);
-  if (!movePlan || movePlan.path.length === 0) return false;
+  if (!movePlan) return false;
+  if (movePlan.path.length === 0) {
+    return false;
+  }
 
   entity.cmd = {
     type: 'move',

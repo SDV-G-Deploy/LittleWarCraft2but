@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "npx tsx src/sim/determinism.test.ts && npx tsx src/sim/build-net-debug.test.ts",
+    "test": "npx tsx src/sim/determinism.test.ts && npx tsx src/sim/build-net-debug.test.ts && npx tsx src/sim/move-command.test.ts",
     "test:determinism": "npx tsx src/sim/determinism.test.ts",
     "test:build-net": "npx tsx src/sim/build-net-debug.test.ts",
     "preview": "vite preview",

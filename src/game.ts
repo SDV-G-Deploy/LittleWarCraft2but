@@ -137,8 +137,10 @@ export function startGame(
     if (net && !onlineInputUnlocked) return;
 
     if (cmd.k === 'move') {
-      pushMarker('move', cmd.tx, cmd.ty);
-      if (cmd.ids.length === 1) pushMarker('moveExact', cmd.tx, cmd.ty);
+      if (net) {
+        pushMarker('move', cmd.tx, cmd.ty);
+        if (cmd.ids.length === 1) pushMarker('moveExact', cmd.tx, cmd.ty);
+      }
     }
     else if (cmd.k === 'attack') {
       const target = state.entityById?.get(cmd.targetId);
@@ -467,16 +469,24 @@ export function startGame(
             return e && isUnitKind(e.kind) && e.owner === myOwner;
           });
           if (moverIds.length) {
+            const moveCmd: NetCmd = { k: 'move', ids: moverIds, tx, ty, atk: attackMoveHeld };
             const hadOrdersBefore = moverIds.some(id => {
               const e = state.entities.find(en => en.id === id);
               return !!e?.cmd;
             });
-            emit({ k: 'move', ids: moverIds, tx, ty, atk: attackMoveHeld });
+            if (net) {
+              emit(moveCmd);
+            } else {
+              applyNetCmds(state, [moveCmd], myOwner);
+            }
             const anyAccepted = moverIds.some(id => {
               const e = state.entities.find(en => en.id === id);
               return e?.cmd?.type === 'move';
             });
-            if (!net && !anyAccepted && !hadOrdersBefore) {
+            if (anyAccepted) {
+              pushMarker('move', tx, ty);
+              if (moverIds.length === 1) pushMarker('moveExact', tx, ty);
+            } else if (!hadOrdersBefore) {
               showMoveRejectedMarker(tx, ty);
             }
           }
