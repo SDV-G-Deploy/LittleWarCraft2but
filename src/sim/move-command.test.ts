@@ -85,12 +85,53 @@ function testAllyBlockAheadUsesShortWaitThenDetour(): void {
   assert.equal(mover.pos.y, 22, 'unit should recover from allied front-block and reach long goal y');
 }
 
+function testSameTileContentionUsesDeterministicReservation(): void {
+  const state = makeState();
+  const left = spawnEntity(state, 'footman', 0, { x: 20, y: 20 });
+  const right = spawnEntity(state, 'footman', 0, { x: 22, y: 20 });
+
+  left.cmd = {
+    type: 'move',
+    path: [{ x: 21, y: 20 }],
+    stepTick: 0,
+    attackMove: false,
+    goal: { x: 21, y: 20 },
+    lastPos: { ...left.pos },
+    lastProgressTick: 0,
+    repathCount: 0,
+    blockedAllyStreak: 0,
+    blockedAllyTile: null,
+  };
+  right.cmd = {
+    type: 'move',
+    path: [{ x: 21, y: 20 }],
+    stepTick: 0,
+    attackMove: false,
+    goal: { x: 21, y: 20 },
+    lastPos: { ...right.pos },
+    lastProgressTick: 0,
+    repathCount: 0,
+    blockedAllyStreak: 0,
+    blockedAllyTile: null,
+  };
+
+  for (let i = 0; i < 20; i++) {
+    state.tick++;
+    processCommandPass(state);
+    if (left.pos.x === 21 || right.pos.x === 21) break;
+  }
+
+  assert.deepEqual(left.pos, { x: 21, y: 20 }, 'lower-id unit should deterministically win same-tile reservation');
+  assert.deepEqual(right.pos, { x: 22, y: 20 }, 'losing contender should remain in place this tick');
+}
+
 function run(): void {
   testAdjacentMoveAcceptedAndExecutes();
   testBlockedAdjacentTileRejected();
   testSameTileNoOpAccepted();
   testSidestepDoesNotDropRemainingMoveIntent();
   testAllyBlockAheadUsesShortWaitThenDetour();
+  testSameTileContentionUsesDeterministicReservation();
   console.log('move command tests passed');
 }
 

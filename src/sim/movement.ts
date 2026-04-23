@@ -11,10 +11,42 @@ function replacePath(path: Vec2[], nextPath: Vec2[]): void {
   path.splice(0, path.length, ...nextPath);
 }
 
-export function beginMovementResolutionTick(_tick: number): void {
+type MovementResolutionState = {
+  occupiedByUnitIdAtTickStart: Map<number, number>;
+  reservedMoveDestByTile: Map<number, number>;
+};
+
+let movementResolutionState: MovementResolutionState | null = null;
+
+function tileKey(x: number, y: number): number {
+  return y * MAP_W + x;
+}
+
+function getEntityById(state: GameState, id: number): Entity | null {
+  for (const entity of state.entities) {
+    if (entity.id === id) return entity;
+  }
+  return null;
+}
+
+export function beginMovementResolutionTick(_tick: number, state?: GameState): void {
+  if (!state) {
+    movementResolutionState = null;
+    return;
+  }
+  const occupiedByUnitIdAtTickStart = new Map<number, number>();
+  for (const entity of state.entities) {
+    if (!isUnitKind(entity.kind)) continue;
+    occupiedByUnitIdAtTickStart.set(tileKey(entity.pos.x, entity.pos.y), entity.id);
+  }
+  movementResolutionState = {
+    occupiedByUnitIdAtTickStart,
+    reservedMoveDestByTile: new Map<number, number>(),
+  };
 }
 
 export function endMovementResolutionTick(): void {
+  movementResolutionState = null;
 }
 
 export function isTileOccupiedByOtherUnit(state: GameState, entity: Entity, tx: number, ty: number): boolean {
@@ -54,6 +86,7 @@ export type StepAvoidanceResult = 'no-path' | 'moved' | 'repathed' | 'sidestep' 
 
 export type StepAvoidanceOptions = {
   allowAllyWorkerSwap?: boolean;
+  useMoveReservation?: boolean;
 };
 
 export type AllyBlockPolicyState = {
@@ -73,6 +106,14 @@ function resetAllyBlockPolicy(state: AllyBlockPolicyState): void {
 }
 
 function getOccupyingUnit(state: GameState, entity: Entity, tx: number, ty: number): Entity | null {
+  if (movementResolutionState) {
+    const occupantId = movementResolutionState.occupiedByUnitIdAtTickStart.get(tileKey(tx, ty));
+    if (typeof occupantId === 'number' && occupantId !== entity.id) {
+      return getEntityById(state, occupantId);
+    }
+    return null;
+  }
+
   for (const other of state.entities) {
     if (other.id === entity.id) continue;
     if (!isUnitKind(other.kind)) continue;
@@ -118,6 +159,15 @@ export function tryAdvancePathWithAvoidance(
   const next = path[0]!;
   const occupant = getOccupyingUnit(state, entity, next.x, next.y);
   if (!occupant) {
+    if (options?.useMoveReservation && movementResolutionState) {
+      const nextKey = tileKey(next.x, next.y);
+      const reservedBy = movementResolutionState.reservedMoveDestByTile.get(nextKey);
+      if (typeof reservedBy === 'number' && reservedBy !== entity.id) {
+        return 'blocked';
+      }
+      movementResolutionState.reservedMoveDestByTile.set(nextKey, entity.id);
+    }
+
     resetAllyBlockPolicy(allyBlockPolicy);
     path.shift();
     entity.pos.x = next.x;

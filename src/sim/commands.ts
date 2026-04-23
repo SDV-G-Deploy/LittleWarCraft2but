@@ -280,7 +280,7 @@ export function autoAttackPass(state: GameState): void {
 
 export function processCommandPass(state: GameState): void {
   const stableIds = state.entities.map(e => e.id).sort((a, b) => a - b);
-  beginMovementResolutionTick(state.tick);
+  beginMovementResolutionTick(state.tick, state);
   try {
     for (const id of stableIds) {
       const entity = getEntity(state, id);
@@ -362,6 +362,7 @@ export function processCommand(state: GameState, entity: Entity): void {
         cmd.goal,
         cmd,
         tryRepath,
+        { useMoveReservation: !cmd.attackMove },
       );
 
       if (stepResult === 'repathed') {
