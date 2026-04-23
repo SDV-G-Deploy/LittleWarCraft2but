@@ -11,44 +11,13 @@ function replacePath(path: Vec2[], nextPath: Vec2[]): void {
   path.splice(0, path.length, ...nextPath);
 }
 
-function tileKey(x: number, y: number): number {
-  return y * MAP_W + x;
-}
-
-type MovementResolutionContext = {
-  tick: number;
-  reservations: Map<number, number>;
-};
-
-let movementResolutionContext: MovementResolutionContext | null = null;
-
-export function beginMovementResolutionTick(tick: number): void {
-  movementResolutionContext = { tick, reservations: new Map() };
+export function beginMovementResolutionTick(_tick: number): void {
 }
 
 export function endMovementResolutionTick(): void {
-  movementResolutionContext = null;
-}
-
-function isTileReservedByOtherUnit(entity: Entity, tx: number, ty: number): boolean {
-  const context = movementResolutionContext;
-  if (!context) return false;
-  const reservedBy = context.reservations.get(tileKey(tx, ty));
-  return typeof reservedBy === 'number' && reservedBy !== entity.id;
-}
-
-function tryReserveTile(entity: Entity, tx: number, ty: number): boolean {
-  const context = movementResolutionContext;
-  if (!context) return true;
-  const key = tileKey(tx, ty);
-  const reservedBy = context.reservations.get(key);
-  if (typeof reservedBy === 'number' && reservedBy !== entity.id) return false;
-  context.reservations.set(key, entity.id);
-  return true;
 }
 
 export function isTileOccupiedByOtherUnit(state: GameState, entity: Entity, tx: number, ty: number): boolean {
-  if (isTileReservedByOtherUnit(entity, tx, ty)) return true;
   return state.entities.some(other =>
     other.id !== entity.id &&
     isUnitKind(other.kind) &&
@@ -83,93 +52,6 @@ export function findDeterministicSidestep(state: GameState, entity: Entity, bloc
 
 export type StepAvoidanceResult = 'no-path' | 'moved' | 'repathed' | 'sidestep' | 'blocked';
 
-export type MovementStepPolicy = {
-  allowRepath: boolean;
-  allowSidestep: boolean;
-  clearPathOnSidestepRepathFailure: boolean;
-  preservePathOnReachedGoal: boolean;
-};
-
-export const MOVE_STEP_POLICY: MovementStepPolicy = {
-  allowRepath: true,
-  allowSidestep: true,
-  clearPathOnSidestepRepathFailure: true,
-  preservePathOnReachedGoal: false,
-};
-
-export const CHASE_STEP_POLICY: MovementStepPolicy = {
-  allowRepath: true,
-  allowSidestep: true,
-  clearPathOnSidestepRepathFailure: true,
-  preservePathOnReachedGoal: false,
-};
-
-export const WORKER_TRAVEL_STEP_POLICY: MovementStepPolicy = {
-  allowRepath: true,
-  allowSidestep: true,
-  clearPathOnSidestepRepathFailure: false,
-  preservePathOnReachedGoal: true,
-};
-
-type AdvanceMovementStepArgs = {
-  state: GameState;
-  entity: Entity;
-  path: Vec2[];
-  goal: Vec2;
-  policy: MovementStepPolicy;
-  tryRepath?: () => Vec2[] | null;
-};
-
-/**
- * Shared movement-step core. Domain systems (move/chase/gather/build travel)
- * can keep their own state machines while delegating per-step execution here.
- */
-export function advanceMovementStepCore(args: AdvanceMovementStepArgs): StepAvoidanceResult {
-  const { state, entity, path, goal, policy, tryRepath } = args;
-  const canRepath = policy.allowRepath ? tryRepath : undefined;
-
-  if (path.length === 0) return 'no-path';
-
-  const next = path[0]!;
-  if (entity.pos.x === next.x && entity.pos.y === next.y) {
-    path.shift();
-    if (path.length === 0) return policy.preservePathOnReachedGoal ? 'no-path' : 'moved';
-    return advanceMovementStepCore({ state, entity, path, goal, policy, tryRepath });
-  }
-
-  if (!isTileOccupiedByOtherUnit(state, entity, next.x, next.y)) {
-    if (!tryReserveTile(entity, next.x, next.y)) return 'blocked';
-    path.shift();
-    entity.pos.x = next.x;
-    entity.pos.y = next.y;
-    return 'moved';
-  }
-
-  const repath = canRepath?.();
-  if (repath && repath.length > 0) {
-    replacePath(path, repath);
-    return 'repathed';
-  }
-
-  if (!policy.allowSidestep) return 'blocked';
-
-  const sidestep = findDeterministicSidestep(state, entity, next, goal);
-  if (!sidestep) return 'blocked';
-
-  if (!tryReserveTile(entity, sidestep.x, sidestep.y)) return 'blocked';
-
-  entity.pos.x = sidestep.x;
-  entity.pos.y = sidestep.y;
-
-  const repathAfterSidestep = canRepath?.();
-  if (repathAfterSidestep && repathAfterSidestep.length > 0) {
-    replacePath(path, repathAfterSidestep);
-  } else if (policy.clearPathOnSidestepRepathFailure) {
-    path.splice(0, path.length);
-  }
-  return 'sidestep';
-}
-
 export function tryAdvancePathWithAvoidance(
   state: GameState,
   entity: Entity,
@@ -177,12 +59,34 @@ export function tryAdvancePathWithAvoidance(
   goal: Vec2,
   tryRepath?: () => Vec2[] | null,
 ): StepAvoidanceResult {
-  return advanceMovementStepCore({
-    state,
-    entity,
-    path,
-    goal,
-    policy: MOVE_STEP_POLICY,
-    tryRepath,
-  });
+  if (path.length === 0) return 'no-path';
+
+  const next = path[0]!;
+  if (!isTileOccupiedByOtherUnit(state, entity, next.x, next.y)) {
+    path.shift();
+    entity.pos.x = next.x;
+    entity.pos.y = next.y;
+    return 'moved';
+  }
+
+  const repath = tryRepath?.();
+  if (repath && repath.length > 0) {
+    replacePath(path, repath);
+    return 'repathed';
+  }
+
+  const sidestep = findDeterministicSidestep(state, entity, next, goal);
+  if (!sidestep) return 'blocked';
+
+  entity.pos.x = sidestep.x;
+  entity.pos.y = sidestep.y;
+
+  const repathAfterSidestep = tryRepath?.();
+  if (repathAfterSidestep && repathAfterSidestep.length > 0) {
+    replacePath(path, repathAfterSidestep);
+  } else {
+    path.splice(0, path.length);
+  }
+  return 'sidestep';
 }
+

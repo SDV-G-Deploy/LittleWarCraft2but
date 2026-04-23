@@ -7,7 +7,7 @@ import { processGather, processTrain, processBuild } from './economy';
 import { getEntity, isTileBlockedByEntity } from './entities';
 import { profiler } from './profiler';
 import { getResolvedRange, getResolvedSpeed } from '../balance/resolver';
-import { beginMovementResolutionTick, endMovementResolutionTick, MOVE_STEP_POLICY, advanceMovementStepCore } from './movement';
+import { beginMovementResolutionTick, endMovementResolutionTick, tryAdvancePathWithAvoidance } from './movement';
 
 type TargetPredicate = (target: Entity) => boolean;
 
@@ -348,14 +348,7 @@ export function processCommand(state: GameState, entity: Entity): void {
         return movePlan!.path;
       };
 
-      const stepResult = advanceMovementStepCore({
-        state,
-        entity,
-        path: cmd.path,
-        goal: cmd.goal,
-        policy: MOVE_STEP_POLICY,
-        tryRepath,
-      });
+      const stepResult = tryAdvancePathWithAvoidance(state, entity, cmd.path, cmd.goal, tryRepath);
 
       if (stepResult === 'repathed') {
         if (latestRepathGoal) cmd.goal = latestRepathGoal;
