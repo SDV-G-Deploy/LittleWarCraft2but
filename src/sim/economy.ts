@@ -449,6 +449,42 @@ function findSpawnTile(state: GameState, sx: number, sy: number): Vec2 {
   return { x: sx, y: sy }; // last resort
 }
 
+function isTileOccupiedByUnit(state: GameState, tx: number, ty: number): boolean {
+  return state.entities.some(e => isUnitKind(e.kind) && e.pos.x === tx && e.pos.y === ty);
+}
+
+function pickRallyArrivalTile(state: GameState, preferred: Vec2, unitIdSeed: number): Vec2 {
+  const candidates: Vec2[] = [];
+  const pushUnique = (x: number, y: number): void => {
+    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return;
+    if (candidates.some(c => c.x === x && c.y === y)) return;
+    candidates.push({ x, y });
+  };
+
+  pushUnique(preferred.x, preferred.y);
+  for (let r = 1; r <= 2; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        pushUnique(preferred.x + dx, preferred.y + dy);
+      }
+    }
+  }
+
+  if (candidates.length <= 1) return preferred;
+
+  const start = Math.abs(unitIdSeed) % candidates.length;
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[(start + i) % candidates.length]!;
+    if (!state.tiles[c.y]?.[c.x]?.passable) continue;
+    if (isTileBlockedByEntity(state, c.x, c.y)) continue;
+    if (isTileOccupiedByUnit(state, c.x, c.y)) continue;
+    return c;
+  }
+
+  return preferred;
+}
+
 export function processTrain(state: GameState, building: Entity): void {
   if (!building.cmd || building.cmd.type !== 'train') return;
   const cmd = building.cmd;
@@ -520,7 +556,9 @@ export function processTrain(state: GameState, building: Entity): void {
       : null;
 
   if (moveTarget) {
-    const rp   = moveTarget;
+    const rp = building.rallyPoint
+      ? pickRallyArrivalTile(state, moveTarget, newUnit.id)
+      : moveTarget;
     const path = findPath(state, spawnPos.x, spawnPos.y, rp.x, rp.y);
     if (path && path.length > 0) {
       newUnit.cmd = {
