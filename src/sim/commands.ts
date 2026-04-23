@@ -1,6 +1,8 @@
 import type { GameState, Entity, Vec2 } from '../types';
 import { MAP_W, MAP_H, isUnitKind, isRangedUnit, areHostile, usesRaceProfile } from '../types';
 import { findPath } from './pathfinding';
+import { findFlowFieldPath } from './nav/flow-field';
+import { createFlowFieldCache } from './nav/flow-field-cache';
 import { ticksPerStep } from '../data/units';
 import { processAttack, issueAttackCommand, isTargetAttackableNow } from './combat';
 import { processGather, processTrain, processBuild } from './economy';
@@ -18,6 +20,7 @@ const MOVE_REPATH_LIMIT = 5;
 const MOVE_FALLBACK_RADIUS = 3;
 const MOVE_REPATH_COOLDOWN_TICKS = 8;
 const MOVE_GOAL_PATH_TRIALS = 3;
+const flowFieldCache = createFlowFieldCache();
 
 function clampGoalToMap(tx: number, ty: number): Vec2 {
   return {
@@ -65,7 +68,8 @@ function findNearbyMoveGoal(state: GameState, entity: Entity, tx: number, ty: nu
   const maxTrials = Math.min(MOVE_GOAL_PATH_TRIALS, candidates.length);
   for (let i = 0; i < maxTrials; i++) {
     const c = candidates[i]!;
-    const path = findPath(state, entity.pos.x, entity.pos.y, c.x, c.y);
+    const path = findFlowFieldPath(state, entity.pos.x, entity.pos.y, c.x, c.y, flowFieldCache)
+      ?? findPath(state, entity.pos.x, entity.pos.y, c.x, c.y);
     if (!path) continue;
     const goalDist = Math.max(Math.abs(clamped.x - c.x), Math.abs(clamped.y - c.y));
     const score = goalDist * 1000 + path.length;
@@ -86,7 +90,8 @@ function findNearbyMoveGoal(state: GameState, entity: Entity, tx: number, ty: nu
 
   for (let i = maxTrials; i < candidates.length; i++) {
     const c = candidates[i]!;
-    const path = findPath(state, entity.pos.x, entity.pos.y, c.x, c.y);
+    const path = findFlowFieldPath(state, entity.pos.x, entity.pos.y, c.x, c.y, flowFieldCache)
+      ?? findPath(state, entity.pos.x, entity.pos.y, c.x, c.y);
     if (!path) continue;
     if (path.length === 0 && entity.pos.x === c.x && entity.pos.y === c.y) {
       const goalDist = Math.max(Math.abs(clamped.x - c.x), Math.abs(clamped.y - c.y));

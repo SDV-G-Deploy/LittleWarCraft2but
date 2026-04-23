@@ -4,6 +4,7 @@ interface SimProfiler {
   enabled: boolean;
   now(): number;
   recordFindPath(ms: number, found: boolean, closedCount: number, maxOpenCount: number): void;
+  recordFlowPath(ms: number, found: boolean, cacheHit: boolean): void;
   recordMoveStuck(): void;
   recordMoveRepath(success: boolean): void;
   recordMoveSidestep(success: boolean): void;
@@ -21,6 +22,7 @@ function createNoopProfiler(): SimProfiler {
     enabled: false,
     now,
     recordFindPath: noop,
+    recordFlowPath: noop,
     recordMoveStuck: noop,
     recordMoveRepath: noop,
     recordMoveSidestep: noop,
@@ -72,6 +74,12 @@ function createProfiler(): SimProfiler {
     findPathClosedMax: 0,
     findPathOpenMax: 0,
 
+    flowPathCalls: 0,
+    flowPathNoPath: 0,
+    flowPathMsTotal: 0,
+    flowPathMsMax: 0,
+    flowPathCacheHit: 0,
+
     moveStuck: 0,
     moveRepath: 0,
     moveRepathOk: 0,
@@ -108,6 +116,12 @@ function createProfiler(): SimProfiler {
     s.findPathClosedMax = 0;
     s.findPathOpenMax = 0;
 
+    s.flowPathCalls = 0;
+    s.flowPathNoPath = 0;
+    s.flowPathMsTotal = 0;
+    s.flowPathMsMax = 0;
+    s.flowPathCacheHit = 0;
+
     s.moveStuck = 0;
     s.moveRepath = 0;
     s.moveRepathOk = 0;
@@ -127,6 +141,7 @@ function createProfiler(): SimProfiler {
     const samples = Math.max(1, s.sampleTicks);
     const fpCalls = Math.max(1, s.findPathCalls);
     const aaCalls = Math.max(1, s.autoAttackCalls);
+    const flowCalls = Math.max(1, s.flowPathCalls);
 
     const phaseSummary = Object.keys(s.phaseMsTotal)
       .sort((a, b) => (s.phaseMsTotal[b] ?? 0) - (s.phaseMsTotal[a] ?? 0))
@@ -146,6 +161,7 @@ function createProfiler(): SimProfiler {
       ` gatherPath(avg/max)=${round(s.gatherPathLenTotal / samples)}/${s.gatherPathLenMax}` +
       ` buildPath(avg/max)=${round(s.buildPathLenTotal / samples)}/${s.buildPathLenMax}` +
       ` findPath(calls=${s.findPathCalls},null=${s.findPathNoPath},avg=${round(s.findPathMsTotal / fpCalls)}ms,max=${round(s.findPathMsMax)}ms,closedAvg=${round(s.findPathClosedTotal / fpCalls)},closedMax=${s.findPathClosedMax},openMax=${s.findPathOpenMax})` +
+      ` flowPath(calls=${s.flowPathCalls},null=${s.flowPathNoPath},cacheHit=${s.flowPathCacheHit},avg=${round(s.flowPathMsTotal / flowCalls)}ms,max=${round(s.flowPathMsMax)}ms)` +
       ` move(stuck=${s.moveStuck},repath=${s.moveRepath},repathOk=${s.moveRepathOk},sidestep=${s.moveSidestep},sidestepOk=${s.moveSidestepOk})` +
       ` autoAttack(calls=${s.autoAttackCalls},avg=${round(s.autoAttackMsTotal / aaCalls)}ms,max=${round(s.autoAttackMsMax)}ms)` +
       (phaseSummary ? ` phases(${phaseSummary})` : ''),
@@ -168,6 +184,13 @@ function createProfiler(): SimProfiler {
       s.findPathClosedTotal += closedCount;
       if (closedCount > s.findPathClosedMax) s.findPathClosedMax = closedCount;
       if (maxOpenCount > s.findPathOpenMax) s.findPathOpenMax = maxOpenCount;
+    },
+    recordFlowPath(ms: number, found: boolean, cacheHit: boolean): void {
+      s.flowPathCalls++;
+      if (!found) s.flowPathNoPath++;
+      if (cacheHit) s.flowPathCacheHit++;
+      s.flowPathMsTotal += ms;
+      if (ms > s.flowPathMsMax) s.flowPathMsMax = ms;
     },
     recordMoveStuck(): void {
       s.moveStuck++;
