@@ -134,11 +134,33 @@ function testGatherTrafficDoesNotDeadlockOnOccupiedApproach(): void {
   assert.ok(distinctPositions.size >= 3, 'workers should not collapse into a tiny deadlocked clump while approaching the same tree');
 }
 
+function testBuildAssistWorkersDoNotDeadlockBehindLeadBuilder(): void {
+  const state = makeState();
+  const w1 = spawnEntity(state, 'worker', 0, { x: 18, y: 20 });
+  const w2 = spawnEntity(state, 'worker', 0, { x: 19, y: 20 });
+  const w3 = spawnEntity(state, 'worker', 0, { x: 20, y: 20 });
+  state.wood[0] = 500;
+
+  const issued = issueBuildCommand(state, w1, 'barracks', { x: 24, y: 20 }, state.tick);
+  assert.equal(issued, true, 'lead builder command should be accepted');
+  const site = state.entities.find(e => e.kind === 'construction' && e.owner === 0);
+  assert.ok(site, 'construction site should exist');
+
+  w2.cmd = { type: 'build', building: 'barracks', pos: { x: 24, y: 20 }, phase: 'moving', siteId: site!.id, stepTick: state.tick };
+  w3.cmd = { type: 'build', building: 'barracks', pos: { x: 24, y: 20 }, phase: 'moving', siteId: site!.id, stepTick: state.tick };
+
+  tick(state, 80);
+
+  const advancedNearSite = [w1, w2, w3].filter(worker => worker.pos.x >= 21).length;
+  assert.ok(advancedNearSite >= 3, 'assist workers should keep advancing toward the site instead of deadlocking behind the first builder');
+}
+
 function run(): void {
   testUnreachableBuildSiteDoesNotAutoBuild();
   testUnreachableReturnPathDoesNotInstantDeposit();
   testWorkerTravelIsSoftAndSingleStepDeterministic();
   testGatherTrafficDoesNotDeadlockOnOccupiedApproach();
+  testBuildAssistWorkersDoNotDeadlockBehindLeadBuilder();
   console.log('worker travel tests passed');
 }
 

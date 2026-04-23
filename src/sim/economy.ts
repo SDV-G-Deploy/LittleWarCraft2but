@@ -69,7 +69,9 @@ function nearestDropoff(state: GameState, owner: 0 | 1, px: number, py: number, 
   for (const e of state.entities) {
     const valid = e.owner === owner && (e.kind === 'townhall' || (resourceType === 'wood' && e.kind === 'lumbermill'));
     if (!valid) continue;
-    const d = Math.hypot(e.pos.x - px, e.pos.y - py);
+    const centerX = e.pos.x + Math.floor(e.tileW / 2);
+    const approachY = e.pos.y + e.tileH;
+    const d = Math.hypot(centerX - px, approachY - py);
     if (d < bestD || (d === bestD && best && e.id < best.id)) { bestD = d; best = e; }
   }
   return best;
@@ -162,7 +164,13 @@ function getTreeApproachTiles(state: GameState, tx: number, ty: number): Vec2[] 
       tiles.push({ x, y });
     }
   }
-  tiles.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  tiles.sort((a, b) => {
+    const aBand = a.y < ty ? 0 : a.y > ty ? 2 : 1;
+    const bBand = b.y < ty ? 0 : b.y > ty ? 2 : 1;
+    if (aBand !== bBand) return aBand - bBand;
+    if (a.y !== b.y) return a.y - b.y;
+    return a.x - b.x;
+  });
   return tiles;
 }
 
@@ -730,6 +738,7 @@ export function processBuild(state: GameState, entity: Entity): void {
   const clearBuildState = () => {
     ec._buildPath = undefined;
     ec._buildPathBlockedUntil = undefined;
+    ec._gatherTarget = undefined;
   };
 
   // Construction site must exist — if demolished, abandon this command
@@ -741,12 +750,31 @@ export function processBuild(state: GameState, entity: Entity): void {
   }
 
   if (cmd.phase === 'moving') {
-    // Path to the tile just south of the building footprint (site blocks its own tiles)
+    // Path to any workable perimeter tile around the construction footprint.
     if (!ec._buildPath) {
       const bStats = getResolvedTileSize(cmd.building);
-      const adjX   = cmd.pos.x + Math.floor((bStats.tileW ?? 1) / 2);
-      const adjY   = cmd.pos.y + (bStats.tileH ?? 1);
-      ec._buildPath = findPath(state, entity.pos.x, entity.pos.y, adjX, adjY);
+      let bestPath: Vec2[] | null = null;
+      let bestGoal: Vec2 | null = null;
+      let bestScore = Infinity;
+      for (let y = cmd.pos.y - 1; y <= cmd.pos.y + (bStats.tileH ?? 1); y++) {
+        for (let x = cmd.pos.x - 1; x <= cmd.pos.x + (bStats.tileW ?? 1); x++) {
+          const inside = x >= cmd.pos.x && x < cmd.pos.x + (bStats.tileW ?? 1) && y >= cmd.pos.y && y < cmd.pos.y + (bStats.tileH ?? 1);
+          if (inside) continue;
+          if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
+          if (!state.tiles[y]?.[x]?.passable) continue;
+          const path = findPath(state, entity.pos.x, entity.pos.y, x, y);
+          if (path === null) continue;
+          const score = path.length * 1000 + Math.abs(entity.pos.x - x) + Math.abs(entity.pos.y - y);
+          if (score < bestScore) {
+            bestScore = score;
+            bestPath = path;
+            bestGoal = { x, y };
+            if (path.length === 0) break;
+          }
+        }
+      }
+      ec._gatherTarget = bestGoal ?? undefined;
+      ec._buildPath = bestPath;
       if (ec._buildPath === null) {
         ec._buildPathBlockedUntil = state.tick + SIM_HZ;
         return;
@@ -765,7 +793,7 @@ export function processBuild(state: GameState, entity: Entity): void {
     }
     if (state.tick - cmd.stepTick < tps) return;
     const bStats = getResolvedTileSize(cmd.building);
-    const buildGoal = {
+    const buildGoal = ec._gatherTarget ?? {
       x: cmd.pos.x + Math.floor((bStats.tileW ?? 1) / 2),
       y: cmd.pos.y + (bStats.tileH ?? 1),
     };

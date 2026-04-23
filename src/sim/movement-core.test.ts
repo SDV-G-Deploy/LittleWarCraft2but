@@ -88,6 +88,7 @@ function testCoreCanDisableSidestepForFutureProfiles(): void {
     allowRepath: false,
     allowSidestep: false,
     clearPathOnSidestepRepathFailure: true,
+    preservePathOnReachedGoal: false,
   };
 
   withMovementTick(state, () => {
@@ -105,10 +106,31 @@ function testCoreCanDisableSidestepForFutureProfiles(): void {
   assert.equal(path.length, 2, 'path should stay intact when hard-blocked');
 }
 
+function testCoreConsumesAlreadyReachedFrontStepBeforeContinuing(): void {
+  const state = makeState();
+  const mover = spawnEntity(state, 'worker', 0, { x: 20, y: 20 });
+  const path: Vec2[] = [{ x: 20, y: 20 }, { x: 21, y: 20 }];
+
+  withMovementTick(state, () => {
+    const result = advanceMovementStepCore({
+      state,
+      entity: mover,
+      path,
+      goal: { x: 21, y: 20 },
+      policy: MOVE_STEP_POLICY,
+    });
+    assert.equal(result, 'moved');
+  });
+
+  assert.deepEqual(mover.pos, { x: 21, y: 20 });
+  assert.equal(path.length, 0);
+}
+
 function run(): void {
   testCoreMovesOnOpenTile();
   testCoreKeepsDeterministicReservationOrder();
   testCoreCanDisableSidestepForFutureProfiles();
+  testCoreConsumesAlreadyReachedFrontStepBeforeContinuing();
   console.log('movement core tests passed');
 }
 

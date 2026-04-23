@@ -87,24 +87,28 @@ export type MovementStepPolicy = {
   allowRepath: boolean;
   allowSidestep: boolean;
   clearPathOnSidestepRepathFailure: boolean;
+  preservePathOnReachedGoal: boolean;
 };
 
 export const MOVE_STEP_POLICY: MovementStepPolicy = {
   allowRepath: true,
   allowSidestep: true,
   clearPathOnSidestepRepathFailure: true,
+  preservePathOnReachedGoal: false,
 };
 
 export const CHASE_STEP_POLICY: MovementStepPolicy = {
   allowRepath: true,
   allowSidestep: true,
   clearPathOnSidestepRepathFailure: true,
+  preservePathOnReachedGoal: false,
 };
 
 export const WORKER_TRAVEL_STEP_POLICY: MovementStepPolicy = {
   allowRepath: true,
   allowSidestep: true,
   clearPathOnSidestepRepathFailure: false,
+  preservePathOnReachedGoal: true,
 };
 
 type AdvanceMovementStepArgs = {
@@ -127,6 +131,12 @@ export function advanceMovementStepCore(args: AdvanceMovementStepArgs): StepAvoi
   if (path.length === 0) return 'no-path';
 
   const next = path[0]!;
+  if (entity.pos.x === next.x && entity.pos.y === next.y) {
+    path.shift();
+    if (path.length === 0) return policy.preservePathOnReachedGoal ? 'no-path' : 'moved';
+    return advanceMovementStepCore({ state, entity, path, goal, policy, tryRepath });
+  }
+
   if (!isTileOccupiedByOtherUnit(state, entity, next.x, next.y)) {
     if (!tryReserveTile(entity, next.x, next.y)) return 'blocked';
     path.shift();
