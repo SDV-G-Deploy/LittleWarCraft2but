@@ -48,10 +48,30 @@ function testSameTileNoOpAccepted(): void {
   assert.equal(unit.cmd, null, 'same-tile move should not create a movement path');
 }
 
+function testSidestepDoesNotDropRemainingMoveIntent(): void {
+  const state = makeState();
+  const mover = spawnEntity(state, 'footman', 0, { x: 20, y: 20 });
+  spawnEntity(state, 'footman', 1, { x: 21, y: 20 });
+
+  const issued = issueMoveCommand(state, mover, 24, 20, false);
+  assert.equal(issued, true, 'longer move command should be accepted');
+  assert.equal(mover.cmd?.type, 'move');
+
+  for (let i = 0; i < 10; i++) {
+    state.tick++;
+    processCommandPass(state);
+    if (mover.pos.x !== 20 || mover.pos.y !== 20) break;
+  }
+
+  assert.equal(mover.cmd?.type, 'move', 'sidestep traffic should not cancel the move command');
+  assert.ok((mover.cmd?.path.length ?? 0) > 0, 'remaining path should be preserved after sidestep without immediate repath');
+}
+
 function run(): void {
   testAdjacentMoveAcceptedAndExecutes();
   testBlockedAdjacentTileRejected();
   testSameTileNoOpAccepted();
+  testSidestepDoesNotDropRemainingMoveIntent();
   console.log('move command tests passed');
 }
 

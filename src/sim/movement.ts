@@ -84,8 +84,6 @@ export function tryAdvancePathWithAvoidance(
   const repathAfterSidestep = tryRepath?.();
   if (repathAfterSidestep && repathAfterSidestep.length > 0) {
     replacePath(path, repathAfterSidestep);
-  } else {
-    path.splice(0, path.length);
   }
   return 'sidestep';
 }
