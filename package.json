@@ -5,9 +5,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "npx tsx src/sim/determinism.test.ts && npx tsx src/sim/build-net-debug.test.ts && npx tsx src/sim/move-command.test.ts",
+    "test": "npx tsx src/sim/determinism.test.ts && npx tsx src/sim/build-net-debug.test.ts && npx tsx src/sim/move-command.test.ts && npx tsx src/sim/offline-simulation.test.ts",
     "test:determinism": "npx tsx src/sim/determinism.test.ts",
     "test:build-net": "npx tsx src/sim/build-net-debug.test.ts",
+    "test:offline-simulation": "npx tsx src/sim/offline-simulation.test.ts",
     "preview": "vite preview",
     "balance:report": "npx tsx src/balance/report-cli.ts",
     "balance:sheet": "npx tsx src/balance/balance-sheet-cli.ts"
