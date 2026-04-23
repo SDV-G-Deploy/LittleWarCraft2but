@@ -52,6 +52,20 @@ They are an observer.
 - preservation of existing offline skirmish behavior
 - preservation of existing online mode behavior
 
+### Implementation status as of 2026-04-23
+
+Implemented and already covered by the current lightweight test net:
+
+- targeted owner-lock command test for offline simulation observer semantics
+- targeted both-AIs-tick test for offline simulation runtime behavior
+- long-run smoke test over 2500 ticks to catch freeze / dead-sim / numeric-corruption regressions
+
+Current intentional gaps:
+
+- no brittle UI/e2e coverage for menu clicking or DOM input paths
+- no canvas-level assertion for full-vision rendering
+- no outcome-specific golden test for exact winner/timing
+
 ### Explicitly out of scope for v1
 
 - replay system
@@ -103,6 +117,15 @@ It keeps simulation mode from becoming a one-off hack, but also avoids overengin
 - future additions like pause, speed, HUD overlays, or demo mode remain possible
 
 ## Runtime design
+
+For the current implementation, the testing philosophy is intentionally narrow:
+
+- assert command-layer safety instead of fragile UI event wiring
+- assert sustained sim activity instead of exact battle choreography
+- assert numeric sanity (`NaN` / `Infinity` absence) during long-run progression
+
+This gives a practical regression net for the mode without turning the suite into a slow or flaky pseudo-e2e harness.
+
 
 ### Startup
 
