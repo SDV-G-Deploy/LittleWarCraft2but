@@ -37,6 +37,8 @@ function testMutationSafeProcessPass(): void {
     lastPos: { x: 20, y: 20 },
     lastProgressTick: 0,
     repathCount: 0,
+    blockedAllyStreak: 0,
+    blockedAllyTile: null,
   };
 
   processCommandPass(state);

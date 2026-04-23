@@ -67,11 +67,30 @@ function testSidestepDoesNotDropRemainingMoveIntent(): void {
   assert.ok((mover.cmd?.path.length ?? 0) > 0, 'remaining path should be preserved after sidestep without immediate repath');
 }
 
+function testAllyBlockAheadUsesShortWaitThenDetour(): void {
+  const state = makeState();
+  const mover = spawnEntity(state, 'footman', 0, { x: 20, y: 20 });
+  spawnEntity(state, 'footman', 0, { x: 20, y: 21 });
+
+  const issued = issueMoveCommand(state, mover, 20, 22, false);
+  assert.equal(issued, true, 'move behind allied blocker should still be accepted');
+
+  for (let i = 0; i < 120; i++) {
+    state.tick++;
+    processCommandPass(state);
+    if (mover.pos.x === 20 && mover.pos.y === 22) break;
+  }
+
+  assert.equal(mover.pos.x, 20, 'unit should recover from allied front-block and reach long goal x');
+  assert.equal(mover.pos.y, 22, 'unit should recover from allied front-block and reach long goal y');
+}
+
 function run(): void {
   testAdjacentMoveAcceptedAndExecutes();
   testBlockedAdjacentTileRejected();
   testSameTileNoOpAccepted();
   testSidestepDoesNotDropRemainingMoveIntent();
+  testAllyBlockAheadUsesShortWaitThenDetour();
   console.log('move command tests passed');
 }
 

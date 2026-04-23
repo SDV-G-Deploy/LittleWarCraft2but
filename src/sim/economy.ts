@@ -18,6 +18,7 @@ import {
 import { applyDoctrineTrainTicks } from '../balance/doctrines';
 import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity, setEntityFootprint } from './entities';
 import { findPath } from './pathfinding';
+import { createAllyBlockPolicyState, tryAdvancePathWithAvoidance } from './movement';
 
 // ─── Population ───────────────────────────────────────────────────────────────
 
@@ -61,6 +62,9 @@ export function issueGatherCommand(state: GameState, entity: Entity, targetId: n
   entity.carryGold = 0;
   entity.carryWood = 0;
   (entity as EntityWithCache)._gatherPath = undefined;
+  (entity as EntityWithCache)._gatherTarget = undefined;
+  (entity as EntityWithCache)._gatherReturnTarget = undefined;
+  (entity as EntityWithCache)._gatherAllyBlockPolicy = undefined;
 }
 
 function nearestDropoff(state: GameState, owner: 0 | 1, px: number, py: number, resourceType: 'gold' | 'wood'): Entity | null {
@@ -77,7 +81,11 @@ function nearestDropoff(state: GameState, owner: 0 | 1, px: number, py: number, 
 type EntityWithCache = Entity & {
   _gatherPath?: Vec2[];
   _gatherTarget?: Vec2;
+  _gatherReturnTarget?: Vec2;
+  _gatherAllyBlockPolicy?: ReturnType<typeof createAllyBlockPolicyState>;
   _buildPath?:  Vec2[];
+  _buildApproachTarget?: Vec2;
+  _buildAllyBlockPolicy?: ReturnType<typeof createAllyBlockPolicyState>;
 };
 
 function logBuildDebug(message: string): void {
@@ -215,6 +223,8 @@ export function processGather(state: GameState, entity: Entity): void {
   const clearGatherState = () => {
     ec._gatherPath = undefined;
     ec._gatherTarget = undefined;
+    ec._gatherReturnTarget = undefined;
+    ec._gatherAllyBlockPolicy = undefined;
   };
 
   const lastTargetId = cmd.targetId;
@@ -271,9 +281,20 @@ export function processGather(state: GameState, entity: Entity): void {
         cmd.phase = 'gathering'; cmd.waitTicks = state.tick; ec._gatherTarget = undefined; return;
       }
       if (state.tick - cmd.waitTicks < tps) return;
-      const next = ec._gatherPath.shift()!;
-      entity.pos.x = next.x; entity.pos.y = next.y;
+      if (!ec._gatherAllyBlockPolicy) ec._gatherAllyBlockPolicy = createAllyBlockPolicyState();
+      const stepResult = tryAdvancePathWithAvoidance(
+        state,
+        entity,
+        ec._gatherPath,
+        ec._gatherTarget!,
+        ec._gatherAllyBlockPolicy,
+        () => {
+          if (!ec._gatherTarget) return null;
+          return findPath(state, entity.pos.x, entity.pos.y, ec._gatherTarget.x, ec._gatherTarget.y);
+        },
+      );
       cmd.waitTicks = state.tick;
+      if (stepResult === 'blocked' || stepResult === 'repathed') return;
       if (ec._gatherPath.length === 0) {
         cmd.phase = 'gathering'; cmd.waitTicks = state.tick; ec._gatherPath = undefined; ec._gatherTarget = undefined;
       }
@@ -326,6 +347,7 @@ export function processGather(state: GameState, entity: Entity): void {
       if (ec._gatherPath === undefined) {
         const dropX = dropoff.pos.x + Math.floor(dropoff.tileW / 2);
         const dropY = dropoff.pos.y + dropoff.tileH;
+        ec._gatherReturnTarget = { x: dropX, y: dropY };
         const raw = findPath(state, entity.pos.x, entity.pos.y, dropX, dropY);
         ec._gatherPath = raw ?? [];
       }
@@ -369,9 +391,21 @@ export function processGather(state: GameState, entity: Entity): void {
         return;
       }
       if (state.tick - cmd.waitTicks < tps) return;
-      const next = ec._gatherPath.shift()!;
-      entity.pos.x = next.x; entity.pos.y = next.y;
+      if (!ec._gatherAllyBlockPolicy) ec._gatherAllyBlockPolicy = createAllyBlockPolicyState();
+      const stepResult = tryAdvancePathWithAvoidance(
+        state,
+        entity,
+        ec._gatherPath,
+        ec._gatherReturnTarget ?? { x: dropoff.pos.x + Math.floor(dropoff.tileW / 2), y: dropoff.pos.y + dropoff.tileH },
+        ec._gatherAllyBlockPolicy,
+        () => {
+          const targetPos = ec._gatherReturnTarget;
+          if (!targetPos) return null;
+          return findPath(state, entity.pos.x, entity.pos.y, targetPos.x, targetPos.y);
+        },
+      );
       cmd.waitTicks = state.tick;
+      if (stepResult === 'blocked' || stepResult === 'repathed') return;
       break;
     }
   }
@@ -574,6 +608,8 @@ export function processTrain(state: GameState, building: Entity): void {
         lastPos: { ...spawnPos },
         lastProgressTick: state.tick,
         repathCount: 0,
+        blockedAllyStreak: 0,
+        blockedAllyTile: null,
       };
     }
   }
@@ -700,6 +736,8 @@ export function issueBuildCommand(
     phase: 'moving', stepTick: currentTick,
   };
   (worker as EntityWithCache)._buildPath = undefined;
+  (worker as EntityWithCache)._buildApproachTarget = undefined;
+  (worker as EntityWithCache)._buildAllyBlockPolicy = undefined;
   logBuildDebug(`accepted owner=${worker.owner} worker=${worker.id} site=${site.id} building=${building} at=${pos.x},${pos.y}`);
   return true;
 }
@@ -719,6 +757,8 @@ export function issueResumeBuildCommand(
     stepTick: currentTick,
   };
   (worker as EntityWithCache)._buildPath = undefined;
+  (worker as EntityWithCache)._buildApproachTarget = undefined;
+  (worker as EntityWithCache)._buildAllyBlockPolicy = undefined;
 }
 
 export function processBuild(state: GameState, entity: Entity): void {
@@ -729,6 +769,8 @@ export function processBuild(state: GameState, entity: Entity): void {
 
   const clearBuildState = () => {
     ec._buildPath = undefined;
+    ec._buildApproachTarget = undefined;
+    ec._buildAllyBlockPolicy = undefined;
   };
 
   // Construction site must exist — if demolished, abandon this command
@@ -745,6 +787,7 @@ export function processBuild(state: GameState, entity: Entity): void {
       const bStats = getResolvedTileSize(cmd.building);
       const adjX   = cmd.pos.x + Math.floor((bStats.tileW ?? 1) / 2);
       const adjY   = cmd.pos.y + (bStats.tileH ?? 1);
+      ec._buildApproachTarget = { x: adjX, y: adjY };
       ec._buildPath = findPath(state, entity.pos.x, entity.pos.y, adjX, adjY) ?? [];
     }
     if (ec._buildPath.length === 0) {
@@ -753,9 +796,21 @@ export function processBuild(state: GameState, entity: Entity): void {
       return;
     }
     if (state.tick - cmd.stepTick < tps) return;
-    const next = ec._buildPath.shift()!;
-    entity.pos.x = next.x; entity.pos.y = next.y;
+    if (!ec._buildAllyBlockPolicy) ec._buildAllyBlockPolicy = createAllyBlockPolicyState();
+    const stepResult = tryAdvancePathWithAvoidance(
+      state,
+      entity,
+      ec._buildPath,
+      ec._buildApproachTarget ?? cmd.pos,
+      ec._buildAllyBlockPolicy,
+      () => {
+        const targetPos = ec._buildApproachTarget;
+        if (!targetPos) return null;
+        return findPath(state, entity.pos.x, entity.pos.y, targetPos.x, targetPos.y);
+      },
+    );
     cmd.stepTick = state.tick;
+    if (stepResult === 'blocked' || stepResult === 'repathed') return;
     if (ec._buildPath.length === 0) {
       cmd.phase = 'building';
       clearBuildState();

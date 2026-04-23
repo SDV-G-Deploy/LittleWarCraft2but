@@ -52,25 +52,82 @@ export function findDeterministicSidestep(state: GameState, entity: Entity, bloc
 
 export type StepAvoidanceResult = 'no-path' | 'moved' | 'repathed' | 'sidestep' | 'blocked';
 
+export type AllyBlockPolicyState = {
+  blockedAllyStreak: number;
+  blockedAllyTile: Vec2 | null;
+};
+
+const ALLY_BLOCK_WAIT_STEPS = 2;
+
+export function createAllyBlockPolicyState(): AllyBlockPolicyState {
+  return { blockedAllyStreak: 0, blockedAllyTile: null };
+}
+
+function resetAllyBlockPolicy(state: AllyBlockPolicyState): void {
+  state.blockedAllyStreak = 0;
+  state.blockedAllyTile = null;
+}
+
+function getOccupyingUnit(state: GameState, entity: Entity, tx: number, ty: number): Entity | null {
+  for (const other of state.entities) {
+    if (other.id === entity.id) continue;
+    if (!isUnitKind(other.kind)) continue;
+    if (other.pos.x === tx && other.pos.y === ty) return other;
+  }
+  return null;
+}
+
+function shouldWaitForAllyBlock(policy: AllyBlockPolicyState, blocked: Vec2): boolean {
+  const sameTile = policy.blockedAllyTile?.x === blocked.x && policy.blockedAllyTile?.y === blocked.y;
+  if (sameTile) {
+    policy.blockedAllyStreak++;
+  } else {
+    policy.blockedAllyTile = { x: blocked.x, y: blocked.y };
+    policy.blockedAllyStreak = 1;
+  }
+  return policy.blockedAllyStreak <= ALLY_BLOCK_WAIT_STEPS;
+}
+
 export function tryAdvancePathWithAvoidance(
   state: GameState,
   entity: Entity,
   path: Vec2[],
   goal: Vec2,
-  tryRepath?: () => Vec2[] | null,
+  allyBlockPolicyOrTryRepath?: AllyBlockPolicyState | (() => Vec2[] | null),
+  tryRepathArg?: () => Vec2[] | null,
 ): StepAvoidanceResult {
+  let allyBlockPolicy: AllyBlockPolicyState;
+  let tryRepath: (() => Vec2[] | null) | undefined;
+  if (typeof allyBlockPolicyOrTryRepath === 'function') {
+    allyBlockPolicy = createAllyBlockPolicyState();
+    allyBlockPolicy.blockedAllyStreak = ALLY_BLOCK_WAIT_STEPS;
+    tryRepath = allyBlockPolicyOrTryRepath;
+  } else {
+    allyBlockPolicy = allyBlockPolicyOrTryRepath ?? createAllyBlockPolicyState();
+    if (!allyBlockPolicyOrTryRepath) allyBlockPolicy.blockedAllyStreak = ALLY_BLOCK_WAIT_STEPS;
+    tryRepath = tryRepathArg;
+  }
+
   if (path.length === 0) return 'no-path';
 
   const next = path[0]!;
-  if (!isTileOccupiedByOtherUnit(state, entity, next.x, next.y)) {
+  const occupant = getOccupyingUnit(state, entity, next.x, next.y);
+  if (!occupant) {
+    resetAllyBlockPolicy(allyBlockPolicy);
     path.shift();
     entity.pos.x = next.x;
     entity.pos.y = next.y;
     return 'moved';
   }
 
+  const blockedByAlly = occupant.owner === entity.owner;
+  if (blockedByAlly && shouldWaitForAllyBlock(allyBlockPolicy, next)) {
+    return 'blocked';
+  }
+
   const repath = tryRepath?.();
   if (repath && repath.length > 0) {
+    resetAllyBlockPolicy(allyBlockPolicy);
     replacePath(path, repath);
     return 'repathed';
   }
@@ -85,6 +142,6 @@ export function tryAdvancePathWithAvoidance(
   if (repathAfterSidestep && repathAfterSidestep.length > 0) {
     replacePath(path, repathAfterSidestep);
   }
+  resetAllyBlockPolicy(allyBlockPolicy);
   return 'sidestep';
 }
-

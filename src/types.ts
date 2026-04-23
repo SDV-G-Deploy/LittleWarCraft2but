@@ -145,6 +145,8 @@ export type Command =
       lastPos: Vec2;
       lastProgressTick: number;
       repathCount: number;
+      blockedAllyStreak: number;
+      blockedAllyTile: Vec2 | null;
     }
   | {
       type: 'attack';

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "npx tsx src/sim/determinism.test.ts && npx tsx src/sim/build-net-debug.test.ts && npx tsx src/sim/move-command.test.ts && npx tsx src/sim/combat-congestion.test.ts && npx tsx src/sim/rally-pathing.test.ts && npx tsx src/sim/offline-simulation.test.ts",
+    "test": "npx tsx src/sim/determinism.test.ts && npx tsx src/sim/build-net-debug.test.ts && npx tsx src/sim/move-command.test.ts && npx tsx src/sim/movement-policy.test.ts && npx tsx src/sim/combat-congestion.test.ts && npx tsx src/sim/rally-pathing.test.ts && npx tsx src/sim/offline-simulation.test.ts",
     "test:determinism": "npx tsx src/sim/determinism.test.ts",
     "test:build-net": "npx tsx src/sim/build-net-debug.test.ts",
     "test:combat-congestion": "npx tsx src/sim/combat-congestion.test.ts",

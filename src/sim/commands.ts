@@ -137,6 +137,8 @@ export function issueMoveCommand(
     lastPos: { ...entity.pos },
     lastProgressTick: state.tick,
     repathCount: 0,
+    blockedAllyStreak: 0,
+    blockedAllyTile: null,
   };
 
   return true;
@@ -348,7 +350,14 @@ export function processCommand(state: GameState, entity: Entity): void {
         return movePlan!.path;
       };
 
-      const stepResult = tryAdvancePathWithAvoidance(state, entity, cmd.path, cmd.goal, tryRepath);
+      const stepResult = tryAdvancePathWithAvoidance(
+        state,
+        entity,
+        cmd.path,
+        cmd.goal,
+        cmd,
+        tryRepath,
+      );
 
       if (stepResult === 'repathed') {
         if (latestRepathGoal) cmd.goal = latestRepathGoal;
@@ -371,6 +380,7 @@ export function processCommand(state: GameState, entity: Entity): void {
 
       if (stepResult === 'blocked') {
         profiler.recordMoveSidestep(false);
+        cmd.stepTick = state.tick;
         cmd.lastProgressTick = state.tick;
         cmd.lastPos.x = entity.pos.x;
         cmd.lastPos.y = entity.pos.y;
