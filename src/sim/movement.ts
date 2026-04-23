@@ -86,6 +86,7 @@ export type StepAvoidanceResult = 'no-path' | 'moved' | 'repathed' | 'sidestep' 
 
 export type StepAvoidanceOptions = {
   allowAllyWorkerSwap?: boolean;
+  allowWorkerSwapWithStationaryAlliedCombat?: boolean;
   useMoveReservation?: boolean;
   preferSidestepBeforeRepathOnAllyBlock?: boolean;
 };
@@ -132,6 +133,13 @@ function shouldWaitForAllyBlock(policy: AllyBlockPolicyState, blocked: Vec2): bo
     policy.blockedAllyStreak = 1;
   }
   return policy.blockedAllyStreak <= ALLY_BLOCK_WAIT_STEPS;
+}
+
+function isStationaryForWorkerBypass(occupant: Entity): boolean {
+  if (!occupant.cmd) return true;
+  if (occupant.cmd.type === 'attack') return occupant.cmd.chasePath.length === 0;
+  if (occupant.cmd.type === 'move') return occupant.cmd.path.length === 0;
+  return false;
 }
 
 export function tryAdvancePathWithAvoidance(
@@ -182,6 +190,24 @@ export function tryAdvancePathWithAvoidance(
     && options?.allowAllyWorkerSwap
     && isWorkerKind(entity.kind)
     && isWorkerKind(occupant.kind)
+  ) {
+    const prevX = entity.pos.x;
+    const prevY = entity.pos.y;
+    entity.pos.x = next.x;
+    entity.pos.y = next.y;
+    occupant.pos.x = prevX;
+    occupant.pos.y = prevY;
+    path.shift();
+    resetAllyBlockPolicy(allyBlockPolicy);
+    return 'moved';
+  }
+
+  if (
+    blockedByAlly
+    && options?.allowWorkerSwapWithStationaryAlliedCombat
+    && isWorkerKind(entity.kind)
+    && !isWorkerKind(occupant.kind)
+    && isStationaryForWorkerBypass(occupant)
   ) {
     const prevX = entity.pos.x;
     const prevY = entity.pos.y;

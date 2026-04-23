@@ -94,10 +94,46 @@ function testWorkerPrefersSidestepBeforeRepathWhenBlockedByAlliedCombatUnit(): v
   assert.notDeepEqual(worker.pos, { x: 20, y: 20 }, 'worker should move off origin to break ally-block loop');
 }
 
+function testWorkerBypassSwapDoesNotApplyToMovingAlliedCombatUnit(): void {
+  const state = makeState();
+  const worker = spawnEntity(state, 'worker', 0, { x: 20, y: 20 });
+  const ally = spawnEntity(state, 'footman', 0, { x: 21, y: 20 });
+  ally.cmd = {
+    type: 'move',
+    path: [{ x: 22, y: 20 }],
+    stepTick: 0,
+    attackMove: false,
+    goal: { x: 22, y: 20 },
+    lastPos: { x: 21, y: 20 },
+    lastProgressTick: 0,
+    repathCount: 0,
+    blockedAllyStreak: 0,
+    blockedAllyTile: null,
+  };
+
+  const path = [{ x: 21, y: 20 }, { x: 22, y: 20 }];
+  const policy = createAllyBlockPolicyState();
+
+  const first = tryAdvancePathWithAvoidance(
+    state,
+    worker,
+    path,
+    { x: 22, y: 20 },
+    policy,
+    undefined,
+    { allowWorkerSwapWithStationaryAlliedCombat: true },
+  );
+
+  assert.equal(first, 'blocked', 'worker bypass swap should not displace allied combat units that are already moving');
+  assert.deepEqual(worker.pos, { x: 20, y: 20 });
+  assert.deepEqual(ally.pos, { x: 21, y: 20 });
+}
+
 function run(): void {
   testAllyBlockWaitBudgetThenSidestep();
   testWorkerSwapWhenEconomyFlowOptionEnabled();
   testWorkerPrefersSidestepBeforeRepathWhenBlockedByAlliedCombatUnit();
+  testWorkerBypassSwapDoesNotApplyToMovingAlliedCombatUnit();
   console.log('movement policy tests passed');
 }
 

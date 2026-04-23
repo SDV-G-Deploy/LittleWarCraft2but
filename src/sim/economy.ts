@@ -292,7 +292,11 @@ export function processGather(state: GameState, entity: Entity): void {
           if (!ec._gatherTarget) return null;
           return findPath(state, entity.pos.x, entity.pos.y, ec._gatherTarget.x, ec._gatherTarget.y);
         },
-        { allowAllyWorkerSwap: true, preferSidestepBeforeRepathOnAllyBlock: true },
+        {
+          allowAllyWorkerSwap: true,
+          allowWorkerSwapWithStationaryAlliedCombat: true,
+          preferSidestepBeforeRepathOnAllyBlock: true,
+        },
       );
       cmd.waitTicks = state.tick;
       if (stepResult === 'blocked' || stepResult === 'repathed') return;
@@ -404,7 +408,11 @@ export function processGather(state: GameState, entity: Entity): void {
           if (!targetPos) return null;
           return findPath(state, entity.pos.x, entity.pos.y, targetPos.x, targetPos.y);
         },
-        { allowAllyWorkerSwap: true, preferSidestepBeforeRepathOnAllyBlock: true },
+        {
+          allowAllyWorkerSwap: true,
+          allowWorkerSwapWithStationaryAlliedCombat: true,
+          preferSidestepBeforeRepathOnAllyBlock: true,
+        },
       );
       cmd.waitTicks = state.tick;
       if (stepResult === 'blocked' || stepResult === 'repathed') return;
@@ -810,7 +818,11 @@ export function processBuild(state: GameState, entity: Entity): void {
         if (!targetPos) return null;
         return findPath(state, entity.pos.x, entity.pos.y, targetPos.x, targetPos.y);
       },
-      { allowAllyWorkerSwap: true, preferSidestepBeforeRepathOnAllyBlock: true },
+      {
+        allowAllyWorkerSwap: true,
+        allowWorkerSwapWithStationaryAlliedCombat: true,
+        preferSidestepBeforeRepathOnAllyBlock: true,
+      },
     );
     cmd.stepTick = state.tick;
     if (stepResult === 'blocked' || stepResult === 'repathed') return;

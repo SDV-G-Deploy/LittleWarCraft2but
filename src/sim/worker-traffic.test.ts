@@ -45,8 +45,55 @@ function testReturningWorkerCanSwapThroughAlliedWorkerTraffic(): void {
   assert.deepEqual(blocker.pos, { x: townhall.pos.x + 10, y: townhall.pos.y + 10 }, 'blocking worker should be swapped back to preserve single-tile occupancy');
 }
 
+function testReroutedWorkerCanBypassStationaryAlliedCombatInNarrowBarracksLane(): void {
+  const state = makeState();
+  spawnEntity(state, 'townhall', 0, { x: 10, y: 10 });
+  spawnEntity(state, 'barracks', 0, { x: 17, y: 18 });
+  const mine = spawnEntity(state, 'goldmine', 2, { x: 34, y: 20 });
+  mine.goldReserve = 1000;
+
+  const worker = spawnEntity(state, 'worker', 0, { x: 20, y: 20 });
+  const alliedFrontliner = spawnEntity(state, 'footman', 0, { x: 21, y: 20 });
+  alliedFrontliner.cmd = null;
+
+  // Seal all sidestep tiles around the worker to model a narrow barracks-side lane.
+  spawnEntity(state, 'wall', 0, { x: 19, y: 19 });
+  spawnEntity(state, 'wall', 0, { x: 19, y: 20 });
+  spawnEntity(state, 'wall', 0, { x: 19, y: 21 });
+  spawnEntity(state, 'wall', 0, { x: 20, y: 19 });
+  spawnEntity(state, 'wall', 0, { x: 20, y: 21 });
+  spawnEntity(state, 'wall', 0, { x: 21, y: 19 });
+  spawnEntity(state, 'wall', 0, { x: 21, y: 21 });
+
+  worker.cmd = {
+    type: 'gather',
+    targetId: mine.id,
+    resourceType: 'gold',
+    phase: 'toresource',
+    waitTicks: 0,
+  };
+
+  const workerCache = worker as Entity & {
+    _gatherPath?: { x: number; y: number }[];
+    _gatherTarget?: { x: number; y: number };
+  };
+  workerCache._gatherPath = [
+    { x: alliedFrontliner.pos.x, y: alliedFrontliner.pos.y },
+    { x: alliedFrontliner.pos.x + 1, y: alliedFrontliner.pos.y },
+  ];
+  workerCache._gatherTarget = { x: alliedFrontliner.pos.x + 1, y: alliedFrontliner.pos.y };
+
+  state.tick = 999;
+  processGather(state, worker);
+
+  assert.deepEqual(worker.pos, { x: 21, y: 20 }, 'rerouted worker should pass the allied combat blocker in a narrow lane');
+  assert.deepEqual(alliedFrontliner.pos, { x: 20, y: 20 }, 'stationary allied combat unit should be swapped backward to preserve single-tile occupancy');
+  assert.equal(worker.cmd?.type, 'gather', 'worker should keep gather command after bypassing allied combat block');
+}
+
 function run(): void {
   testReturningWorkerCanSwapThroughAlliedWorkerTraffic();
+  testReroutedWorkerCanBypassStationaryAlliedCombatInNarrowBarracksLane();
   console.log('worker traffic tests passed');
 }
 
