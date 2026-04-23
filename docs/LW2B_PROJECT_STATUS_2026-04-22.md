@@ -14,6 +14,8 @@ This should be treated as a layered reachability/product problem, not as a singl
 - the project has a stronger structural base now: doctrine, invariants, balance-system hardening, AI difficulty passes, and recent movement/pathing work all exist in repo docs/code
 - guest build parity is no longer the active blocker
 - the broad online path is healthier than earlier failing tests first suggested
+- movement work on 2026-04-22 and 2026-04-23 exposed that the more ambitious reservation/shared-core direction was too fragile in live gameplay and has since been rolled back to a simpler baseline
+- current movement state is improved versus the broken refactor, but plain unit traffic is still an active gameplay-quality concern and should be treated as unfinished rather than solved
 
 ### Live realtime infra
 - Helsinki realtime host is live and documented
@@ -44,7 +46,13 @@ Recent branch-head commits indicate active transport/fallback work already exist
 - `6e24933` `refactor(net): extract peerjs transport module and transport types`
 - `46fe475` `net: add manual ws-relay transport path and selector`
 
-The repo therefore already reflects a practical fallback-transport direction, not only a speculative design note.
+Recent gameplay-side movement commits also matter for current context:
+- `407eaf9` `rollback(sim): restore simpler movement baseline`
+- `21a3018` `fix(sim): preserve move path after sidestep`
+
+The repo therefore reflects both:
+- a practical fallback-transport direction on the network side
+- a deliberate retreat to a simpler movement baseline on the gameplay side after live regressions in the more complex movement refactor
 
 ## Recommended active framing
 
@@ -63,4 +71,5 @@ The best current framing is:
 2. Keep frontend accessibility separate from realtime transport diagnosis
 3. Capture exact PeerJS / ICE / relay failure wording from Russia-side tests
 4. Update product guidance so hard-network users can choose the better transport path intentionally
-5. Keep docs and brief aligned with this framing
+5. Treat plain unit traffic / collision behavior as the active gameplay-side movement issue, with future work framed as a narrow `simplified movement v2` pass instead of another broad refactor
+6. Keep docs and brief aligned with this framing

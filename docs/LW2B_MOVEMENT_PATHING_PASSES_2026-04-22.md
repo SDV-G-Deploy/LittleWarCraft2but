@@ -207,3 +207,47 @@ Success criteria for the refactor:
 - Do short manual playtests.
 - Only schedule the next pass if playtesting reveals a concrete new bug, regression, or remaining pain point.
 
+## 2026-04-23 rollback and follow-up hotfix
+
+After broader live testing, the newer movement architecture proved too fragile for real choke / base-entry traffic.
+
+Observed regressions in live play:
+- workers and other units could still collide in narrow flows in ways that felt worse than the older baseline
+- the more complex reservation/shared-core direction introduced deadlock-like behavior and overly brittle local traffic semantics
+- after the rollback to a simpler baseline, a narrower but important bug remained: during plain move traffic, a unit could sidestep around contact and then lose its remaining move intent, stopping early even though it had not reached its destination
+
+### Practical conclusion from the rollback review
+The project moved away from the more ambitious movement refactor direction.
+
+Current preferred direction is now:
+- keep a simpler movement baseline
+- preserve deterministic order and lightweight local avoidance
+- avoid over-unifying worker travel / build traffic / combat movement unless a change proves itself in manual play
+- treat movement intent preservation as more important than clever local traffic behavior
+
+### Live rollback checkpoint
+Commits applied after the failed broader movement direction:
+- `407eaf9` - `rollback(sim): restore simpler movement baseline`
+- `21a3018` - `fix(sim): preserve move path after sidestep`
+
+Main effect of the hotfix in `21a3018`:
+- after a sidestep, if immediate repath does not succeed, the unit no longer drops the rest of its move path
+- this preserves the original move command intent instead of silently cancelling movement after transient contact
+
+### Updated movement lesson
+The key failure of the reverted direction was not only collision handling itself.
+It was allowing local avoidance failure to cancel global movement intent.
+
+For future movement work, preserve these rules:
+- local traffic issues must not silently erase a longer move order
+- global route/goal and local step resolution should stay conceptually separate
+- prefer wait / retry / periodic repath over command loss
+- only reintroduce stronger traffic coordination if it is both deterministic and clearly better in real matches
+
+### Next-pass framing
+If a future `/new` session resumes movement work, the correct framing is:
+- baseline is intentionally simpler again
+- current high-value target is improving plain move traffic in a narrow, test-backed way
+- do not reintroduce full reservation/shared worker-travel complexity by default
+- if needed, pursue a small `simplified movement v2` rather than another broad refactor
+
