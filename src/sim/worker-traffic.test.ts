@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { buildMapById } from '../data/maps';
 import { createWorld } from './world';
 import { spawnEntity } from './entities';
-import { processGather } from './economy';
+import { processGather, issueGatherCommand } from './economy';
+import { processCommandPass } from './commands';
 import type { Entity, GameState } from '../types';
 
 function makeState(): GameState {
@@ -91,9 +92,42 @@ function testReroutedWorkerCanBypassStationaryAlliedCombatInNarrowBarracksLane()
   assert.equal(worker.cmd?.type, 'gather', 'worker should keep gather command after bypassing allied combat block');
 }
 
+function testWorkerSwapDoesNotStackIntoAlreadyOccupiedOriginTile(): void {
+  const state = makeState();
+  const mover = spawnEntity(state, 'worker', 0, { x: 20, y: 20 });
+  const blocker = spawnEntity(state, 'worker', 0, { x: 21, y: 20 });
+  spawnEntity(state, 'worker', 0, { x: 20, y: 20 });
+
+  mover.cmd = {
+    type: 'gather',
+    targetId: 999,
+    resourceType: 'gold',
+    phase: 'toresource',
+    waitTicks: 0,
+  };
+
+  const moverCache = mover as Entity & {
+    _gatherPath?: { x: number; y: number }[];
+    _gatherTarget?: { x: number; y: number };
+  };
+  moverCache._gatherPath = [
+    { x: 21, y: 20 },
+    { x: 22, y: 20 },
+  ];
+  moverCache._gatherTarget = { x: 22, y: 20 };
+
+  state.tick = 999;
+  processGather(state, mover);
+
+  assert.notDeepEqual(mover.pos, { x: 21, y: 20 }, 'worker should not swap into blocker tile if origin tile cannot accept displaced ally');
+  const occupantsAtOrigin = state.entities.filter(e => e.pos.x === 20 && e.pos.y === 20 && e.kind === 'worker');
+  assert.equal(occupantsAtOrigin.length, 2, 'origin tile occupancy should not increase due to permissive swap');
+}
+
 function run(): void {
   testReturningWorkerCanSwapThroughAlliedWorkerTraffic();
   testReroutedWorkerCanBypassStationaryAlliedCombatInNarrowBarracksLane();
+  testWorkerSwapDoesNotStackIntoAlreadyOccupiedOriginTile();
   console.log('worker traffic tests passed');
 }
 

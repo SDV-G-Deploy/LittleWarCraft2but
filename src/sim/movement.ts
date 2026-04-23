@@ -29,6 +29,20 @@ function getEntityById(state: GameState, id: number): Entity | null {
   return null;
 }
 
+function isTileOccupiedByUnitExcluding(state: GameState, tx: number, ty: number, excludedIds: readonly number[]): boolean {
+  if (movementResolutionState) {
+    const occupantId = movementResolutionState.occupiedByUnitIdAtTickStart.get(tileKey(tx, ty));
+    return typeof occupantId === 'number' && !excludedIds.includes(occupantId);
+  }
+
+  return state.entities.some(other =>
+    isUnitKind(other.kind)
+    && other.pos.x === tx
+    && other.pos.y === ty
+    && !excludedIds.includes(other.id),
+  );
+}
+
 export function beginMovementResolutionTick(_tick: number, state?: GameState): void {
   if (!state) {
     movementResolutionState = null;
@@ -50,12 +64,7 @@ export function endMovementResolutionTick(): void {
 }
 
 export function isTileOccupiedByOtherUnit(state: GameState, entity: Entity, tx: number, ty: number): boolean {
-  return state.entities.some(other =>
-    other.id !== entity.id &&
-    isUnitKind(other.kind) &&
-    other.pos.x === tx &&
-    other.pos.y === ty,
-  );
+  return isTileOccupiedByUnitExcluding(state, tx, ty, [entity.id]);
 }
 
 export function findDeterministicSidestep(state: GameState, entity: Entity, blocked: Vec2, goal: Vec2): Vec2 | null {
@@ -193,13 +202,15 @@ export function tryAdvancePathWithAvoidance(
   ) {
     const prevX = entity.pos.x;
     const prevY = entity.pos.y;
-    entity.pos.x = next.x;
-    entity.pos.y = next.y;
-    occupant.pos.x = prevX;
-    occupant.pos.y = prevY;
-    path.shift();
-    resetAllyBlockPolicy(allyBlockPolicy);
-    return 'moved';
+    if (!isTileOccupiedByUnitExcluding(state, prevX, prevY, [entity.id, occupant.id])) {
+      entity.pos.x = next.x;
+      entity.pos.y = next.y;
+      occupant.pos.x = prevX;
+      occupant.pos.y = prevY;
+      path.shift();
+      resetAllyBlockPolicy(allyBlockPolicy);
+      return 'moved';
+    }
   }
 
   if (
@@ -211,13 +222,15 @@ export function tryAdvancePathWithAvoidance(
   ) {
     const prevX = entity.pos.x;
     const prevY = entity.pos.y;
-    entity.pos.x = next.x;
-    entity.pos.y = next.y;
-    occupant.pos.x = prevX;
-    occupant.pos.y = prevY;
-    path.shift();
-    resetAllyBlockPolicy(allyBlockPolicy);
-    return 'moved';
+    if (!isTileOccupiedByUnitExcluding(state, prevX, prevY, [entity.id, occupant.id])) {
+      entity.pos.x = next.x;
+      entity.pos.y = next.y;
+      occupant.pos.x = prevX;
+      occupant.pos.y = prevY;
+      path.shift();
+      resetAllyBlockPolicy(allyBlockPolicy);
+      return 'moved';
+    }
   }
 
   if (blockedByAlly && shouldWaitForAllyBlock(allyBlockPolicy, next)) {

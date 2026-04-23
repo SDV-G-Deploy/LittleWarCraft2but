@@ -18,7 +18,7 @@ import {
 import { applyDoctrineTrainTicks } from '../balance/doctrines';
 import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity, setEntityFootprint } from './entities';
 import { findPath } from './pathfinding';
-import { createAllyBlockPolicyState, tryAdvancePathWithAvoidance } from './movement';
+import { createAllyBlockPolicyState, isTileOccupiedByOtherUnit, tryAdvancePathWithAvoidance } from './movement';
 
 // ─── Population ───────────────────────────────────────────────────────────────
 
@@ -118,6 +118,18 @@ function getMineApproachTiles(state: GameState, mine: Entity): Vec2[] {
   return tiles;
 }
 
+function getWorkerReservedApproachCount(state: GameState, entity: Entity, target: Vec2): number {
+  let count = 0;
+  for (const other of state.entities) {
+    if (other.id === entity.id || other.owner !== entity.owner || !isWorkerKind(other.kind)) continue;
+    const cache = other as EntityWithCache;
+    if (cache._gatherTarget?.x === target.x && cache._gatherTarget?.y === target.y) count++;
+    if (cache._gatherReturnTarget?.x === target.x && cache._gatherReturnTarget?.y === target.y) count++;
+    if (cache._buildApproachTarget?.x === target.x && cache._buildApproachTarget?.y === target.y) count++;
+  }
+  return count;
+}
+
 function bestMineApproach(state: GameState, entity: Entity, mine: Entity): { target: Vec2; path: Vec2[] } | null {
   let best: { target: Vec2; path: Vec2[] } | null = null;
   let bestScore = Infinity;
@@ -125,11 +137,12 @@ function bestMineApproach(state: GameState, entity: Entity, mine: Entity): { tar
   for (const target of getMineApproachTiles(state, mine)) {
     const path = findPath(state, entity.pos.x, entity.pos.y, target.x, target.y);
     if (path === null) continue;
-    const score = path.length * 1000 + Math.abs(entity.pos.x - target.x) + Math.abs(entity.pos.y - target.y);
+    const reservedPenalty = getWorkerReservedApproachCount(state, entity, target) * 200;
+    const score = path.length * 1000 + reservedPenalty + Math.abs(entity.pos.x - target.x) + Math.abs(entity.pos.y - target.y);
     if (!best || score < bestScore) {
       best = { target, path };
       bestScore = score;
-      if (path.length === 0) return best;
+      if (path.length === 0 && reservedPenalty === 0) return best;
     }
   }
 
@@ -204,11 +217,12 @@ function bestTreeApproach(state: GameState, entity: Entity, tx: number, ty: numb
   for (const target of getTreeApproachTiles(state, tx, ty)) {
     const path = findPath(state, entity.pos.x, entity.pos.y, target.x, target.y);
     if (path === null) continue;
-    const score = path.length * 1000 + Math.abs(entity.pos.x - target.x) + Math.abs(entity.pos.y - target.y);
+    const reservedPenalty = getWorkerReservedApproachCount(state, entity, target) * 200;
+    const score = path.length * 1000 + reservedPenalty + Math.abs(entity.pos.x - target.x) + Math.abs(entity.pos.y - target.y);
     if (!best || score < bestScore) {
       best = { target, path };
       bestScore = score;
-      if (path.length === 0) return best;
+      if (path.length === 0 && reservedPenalty === 0) return best;
     }
   }
 
@@ -278,6 +292,16 @@ export function processGather(state: GameState, entity: Entity): void {
         ec._gatherTarget = approach.target;
       }
       if (ec._gatherPath.length === 0) {
+        if (ec._gatherTarget && isTileOccupiedByOtherUnit(state, entity, ec._gatherTarget.x, ec._gatherTarget.y)) {
+          const approach = target.resourceType === 'gold'
+            ? bestMineApproach(state, entity, target.entity)
+            : bestTreeApproach(state, entity, cmd.targetId % MAP_W, Math.floor(cmd.targetId / MAP_W));
+          if (approach) {
+            ec._gatherPath = approach.path;
+            ec._gatherTarget = approach.target;
+            return;
+          }
+        }
         cmd.phase = 'gathering'; cmd.waitTicks = state.tick; ec._gatherTarget = undefined; return;
       }
       if (state.tick - cmd.waitTicks < tps) return;
@@ -350,13 +374,47 @@ export function processGather(state: GameState, entity: Entity): void {
         return;
       }
       if (ec._gatherPath === undefined) {
-        const dropX = dropoff.pos.x + Math.floor(dropoff.tileW / 2);
-        const dropY = dropoff.pos.y + dropoff.tileH;
-        ec._gatherReturnTarget = { x: dropX, y: dropY };
-        const raw = findPath(state, entity.pos.x, entity.pos.y, dropX, dropY);
-        ec._gatherPath = raw ?? [];
+        const dropTargets: Vec2[] = [];
+        for (let y = dropoff.pos.y - 1; y <= dropoff.pos.y + dropoff.tileH; y++) {
+          for (let x = dropoff.pos.x - 1; x <= dropoff.pos.x + dropoff.tileW; x++) {
+            const inside = x >= dropoff.pos.x && x < dropoff.pos.x + dropoff.tileW && y >= dropoff.pos.y && y < dropoff.pos.y + dropoff.tileH;
+            if (inside) continue;
+            if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
+            if (!state.tiles[y]?.[x]?.passable) continue;
+            dropTargets.push({ x, y });
+          }
+        }
+        dropTargets.sort((a, b) => {
+          const da = Math.abs(a.x - entity.pos.x) + Math.abs(a.y - entity.pos.y);
+          const db = Math.abs(b.x - entity.pos.x) + Math.abs(b.y - entity.pos.y);
+          if (da !== db) return da - db;
+          if (a.y !== b.y) return a.y - b.y;
+          return a.x - b.x;
+        });
+
+        let bestReturn: { target: Vec2; path: Vec2[] } | null = null;
+        let bestScore = Infinity;
+        for (const target of dropTargets) {
+          const raw = findPath(state, entity.pos.x, entity.pos.y, target.x, target.y);
+          if (raw === null) continue;
+          const reservedPenalty = getWorkerReservedApproachCount(state, entity, target) * 200;
+          const score = raw.length * 1000 + reservedPenalty + Math.abs(entity.pos.x - target.x) + Math.abs(entity.pos.y - target.y);
+          if (!bestReturn || score < bestScore) {
+            bestReturn = { target, path: raw };
+            bestScore = score;
+            if (raw.length === 0 && reservedPenalty === 0) break;
+          }
+        }
+
+        ec._gatherReturnTarget = bestReturn?.target ?? { x: dropoff.pos.x + Math.floor(dropoff.tileW / 2), y: dropoff.pos.y + dropoff.tileH };
+        ec._gatherPath = bestReturn?.path ?? [];
       }
       if (ec._gatherPath.length === 0) {
+        if (ec._gatherReturnTarget && isTileOccupiedByOtherUnit(state, entity, ec._gatherReturnTarget.x, ec._gatherReturnTarget.y)) {
+          ec._gatherPath = undefined;
+          ec._gatherReturnTarget = undefined;
+          return;
+        }
         const owner = entity.owner as 0 | 1;
         state.gold[owner] += entity.carryGold ?? 0;
         state.wood[owner] += entity.carryWood ?? 0;
@@ -801,6 +859,11 @@ export function processBuild(state: GameState, entity: Entity): void {
       ec._buildPath = findPath(state, entity.pos.x, entity.pos.y, adjX, adjY) ?? [];
     }
     if (ec._buildPath.length === 0) {
+      if (ec._buildApproachTarget && isTileOccupiedByOtherUnit(state, entity, ec._buildApproachTarget.x, ec._buildApproachTarget.y)) {
+        ec._buildPath = undefined;
+        ec._buildApproachTarget = undefined;
+        return;
+      }
       cmd.phase = 'building';
       clearBuildState();
       return;
