@@ -3,7 +3,7 @@ import { buildMapById } from '../data/maps';
 import { createWorld } from './world';
 import { spawnEntity } from './entities';
 import { processCommandPass } from './commands';
-import { issueBuildCommand } from './economy';
+import { issueBuildCommand, issueGatherCommand } from './economy';
 import type { GameState } from '../types';
 import { MAP_H } from '../types';
 
@@ -99,10 +99,46 @@ function testWorkerTravelIsSoftAndSingleStepDeterministic(): void {
   assert.ok(blocker, 'keep blocker alive for scenario validity');
 }
 
+function testGatherTrafficDoesNotDeadlockOnOccupiedApproach(): void {
+  const state = makeState();
+  spawnEntity(state, 'townhall', 0, { x: 20, y: 20 });
+  const workers = [
+    spawnEntity(state, 'worker', 0, { x: 18, y: 28 }),
+    spawnEntity(state, 'worker', 0, { x: 19, y: 28 }),
+    spawnEntity(state, 'worker', 0, { x: 20, y: 28 }),
+    spawnEntity(state, 'worker', 0, { x: 21, y: 28 }),
+  ];
+
+  let treeId: number | null = null;
+  for (let y = 0; y < MAP_H && treeId === null; y++) {
+    for (let x = 0; x < 64; x++) {
+      const tile = state.tiles[y]?.[x];
+      if (tile?.kind === 'tree' && (tile.woodReserve ?? 0) > 0) {
+        treeId = y * 64 + x;
+        break;
+      }
+    }
+  }
+  assert.notEqual(treeId, null, 'test needs a valid tree target');
+
+  for (const worker of workers) issueGatherCommand(state, worker, treeId!, state.tick);
+
+  tick(state, 140);
+
+  const returnedOrGathering = workers.some(worker =>
+    worker.cmd?.type === 'gather' && (worker.cmd.phase === 'gathering' || worker.cmd.phase === 'returning'),
+  );
+  assert.equal(returnedOrGathering, true, 'at least one worker should get through the approach traffic and continue the gather loop');
+
+  const distinctPositions = new Set(workers.map(worker => `${worker.pos.x},${worker.pos.y}`));
+  assert.ok(distinctPositions.size >= 3, 'workers should not collapse into a tiny deadlocked clump while approaching the same tree');
+}
+
 function run(): void {
   testUnreachableBuildSiteDoesNotAutoBuild();
   testUnreachableReturnPathDoesNotInstantDeposit();
   testWorkerTravelIsSoftAndSingleStepDeterministic();
+  testGatherTrafficDoesNotDeadlockOnOccupiedApproach();
   console.log('worker travel tests passed');
 }
 

@@ -103,7 +103,7 @@ export const CHASE_STEP_POLICY: MovementStepPolicy = {
 
 export const WORKER_TRAVEL_STEP_POLICY: MovementStepPolicy = {
   allowRepath: true,
-  allowSidestep: false,
+  allowSidestep: true,
   clearPathOnSidestepRepathFailure: false,
 };
 
