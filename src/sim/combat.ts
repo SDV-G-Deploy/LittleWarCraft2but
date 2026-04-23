@@ -70,6 +70,60 @@ function distBetweenEntities(attacker: Entity, target: Entity): number {
   return chebyshev(nx, ny, mx, my);
 }
 
+function pickChaseGoal(state: GameState, attacker: Entity, target: Entity, range: number): { x: number; y: number } {
+  const minX = Math.max(0, target.pos.x - range);
+  const maxX = Math.min(MAP_W - 1, target.pos.x + target.tileW - 1 + range);
+  const minY = Math.max(0, target.pos.y - range);
+  const maxY = Math.min(MAP_H - 1, target.pos.y + target.tileH - 1 + range);
+
+  let best: { x: number; y: number } | null = null;
+  let bestScore = Infinity;
+
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      if (!state.tiles[y]?.[x]?.passable) continue;
+      if (distToEntity(x, y, target) > range) continue;
+
+      const occupiedByOther = state.entities.some(e =>
+        e.id !== attacker.id &&
+        isUnitKind(e.kind) &&
+        e.pos.x === x &&
+        e.pos.y === y,
+      );
+
+      let friendlyPressure = 0;
+      for (const e of state.entities) {
+        if (e.id === attacker.id || e.owner !== attacker.owner || !isUnitKind(e.kind)) continue;
+        if (Math.max(Math.abs(e.pos.x - x), Math.abs(e.pos.y - y)) > 1) continue;
+        if (e.cmd?.type === 'attack' && e.cmd.targetId === target.id) friendlyPressure += 2;
+        else friendlyPressure += 1;
+      }
+
+      const travelDist = chebyshev(attacker.pos.x, attacker.pos.y, x, y);
+      const edgeDist = distToEntity(x, y, target);
+      const tieSpread = (Math.abs(x * 31 + y * 17 + attacker.id * 13) % 7);
+      const score =
+        (occupiedByOther ? 100000 : 0) +
+        travelDist * 100 +
+        edgeDist * 10 +
+        friendlyPressure * 3 +
+        tieSpread;
+
+      if (!best || score < bestScore) {
+        best = { x, y };
+        bestScore = score;
+      }
+    }
+  }
+
+  if (best) return best;
+
+  return {
+    x: Math.max(target.pos.x, Math.min(attacker.pos.x, target.pos.x + target.tileW - 1)),
+    y: Math.max(target.pos.y, Math.min(attacker.pos.y, target.pos.y + target.tileH - 1)),
+  };
+}
+
 export function isTargetAttackableNow(state: GameState, attacker: Entity, target: Entity): boolean {
   const race = usesRaceProfile(attacker.owner) ? state.races[attacker.owner] : null;
   const resolved = resolveEntityStats(attacker.kind, race);
@@ -254,31 +308,28 @@ export function processAttack(state: GameState, entity: Entity): void {
     const tps = ticksPerStep(entity.kind, usesRaceProfile(entity.owner) ? state.races[entity.owner] : null);
     if (state.tick - cmd.chaseStepTick < tps) return;
 
+    const owner = entity.owner as 0 | 1;
+    const range = attackerStats.range + (usesRaceProfile(entity.owner) ? getDoctrineRangeBonus(state, owner, entity.kind) : 0);
+
     if (cmd.chasePath.length === 0 || state.tick - cmd.chasePathTick >= SIM_HZ) {
-      // Path toward nearest edge of target footprint (not just top-left corner)
-      const nearX = Math.max(target.pos.x, Math.min(entity.pos.x, target.pos.x + target.tileW - 1));
-      const nearY = Math.max(target.pos.y, Math.min(entity.pos.y, target.pos.y + target.tileH - 1));
-      const path  = findPath(state, entity.pos.x, entity.pos.y, nearX, nearY);
+      const chaseGoal = pickChaseGoal(state, entity, target, range);
+      const path  = findPath(state, entity.pos.x, entity.pos.y, chaseGoal.x, chaseGoal.y);
       cmd.chasePath     = path ?? [];
       cmd.chasePathTick = state.tick;
     }
 
     if (cmd.chasePath.length > 0) {
       const tryRepath = (): { x: number; y: number }[] | null => {
-        const nearX = Math.max(target.pos.x, Math.min(entity.pos.x, target.pos.x + target.tileW - 1));
-        const nearY = Math.max(target.pos.y, Math.min(entity.pos.y, target.pos.y + target.tileH - 1));
-        const path = findPath(state, entity.pos.x, entity.pos.y, nearX, nearY);
+        const chaseGoal = pickChaseGoal(state, entity, target, range);
+        const path = findPath(state, entity.pos.x, entity.pos.y, chaseGoal.x, chaseGoal.y);
         cmd.chasePathTick = state.tick;
         return path;
       };
 
-      const chaseGoal = {
-        x: Math.max(target.pos.x, Math.min(entity.pos.x, target.pos.x + target.tileW - 1)),
-        y: Math.max(target.pos.y, Math.min(entity.pos.y, target.pos.y + target.tileH - 1)),
-      };
+      const chaseGoal = pickChaseGoal(state, entity, target, range);
       const stepResult = tryAdvancePathWithAvoidance(state, entity, cmd.chasePath, chaseGoal, tryRepath);
 
-      if (stepResult === 'moved' || stepResult === 'sidestep') {
+      if (stepResult === 'moved' || stepResult === 'sidestep' || stepResult === 'repathed' || stepResult === 'blocked') {
         cmd.chaseStepTick = state.tick;
       }
     }
