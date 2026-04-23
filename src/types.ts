@@ -56,6 +56,12 @@ export interface Vec2 {
 
 export type Race = 'human' | 'orc';
 export type AIDifficulty = 'easy' | 'medium' | 'hard';
+export type GameMode = 'offline_skirmish' | 'offline_simulation' | 'online_pvp';
+
+export interface SimulationSideConfig {
+  race: Race;
+  aiDifficulty: AIDifficulty;
+}
 
 // ─── Entities ─────────────────────────────────────────────────────────────────
 

@@ -4,7 +4,7 @@
  * Calls back into the game with the chosen GameOptions.
  */
 
-import type { Race, MapId, Tile, AIDifficulty } from './types';
+import type { Race, MapId, Tile, AIDifficulty, GameMode, SimulationSideConfig } from './types';
 import type { GameOptions } from './game';
 import { RACES } from './data/races';
 import { MAP_CATALOG, buildMapById } from './data/maps';
@@ -22,13 +22,15 @@ import {
 
 // ─── State machine ────────────────────────────────────────────────────────────
 
-type MenuScreen = 'title' | 'howtoplay' | 'race' | 'map' | 'online';
+type MenuScreen = 'title' | 'howtoplay' | 'race' | 'map' | 'online' | 'simulation';
 
 interface MenuState {
   screen:      MenuScreen;
+  mode:        GameMode;
   playerRace:  Race;
   mapId:       MapId;
   aiDifficulty: AIDifficulty;
+  simSides:    [SimulationSideConfig, SimulationSideConfig];
   language:    Language;
   // Online lobby
   netRole?:    'host' | 'guest';
@@ -131,9 +133,14 @@ export function runMenu(
 
   const ms: MenuState = {
     screen:     'title',
+    mode:       'offline_skirmish',
     playerRace: 'human',
     mapId:      1,
     aiDifficulty: 'medium',
+    simSides:   [
+      { race: 'human', aiDifficulty: 'medium' },
+      { race: 'orc', aiDifficulty: 'medium' },
+    ],
     language:   getLanguage(),
     joinCode:   '',
     guestRace:  'orc',
@@ -192,13 +199,15 @@ export function runMenu(
   // ── Action handler ─────────────────────────────────────────────────────────
   async function handleAction(action: string): Promise<void> {
     switch (action) {
-      case 'new_game':    ms.screen = 'race';     break;
+      case 'new_game':    ms.mode = 'offline_skirmish'; ms.screen = 'race';     break;
+      case 'simulation':  ms.mode = 'offline_simulation'; ms.screen = 'simulation'; break;
       case 'online':      ms.screen = 'online';   break;
       case 'how_to_play': ms.screen = 'howtoplay';break;
       case 'back_title':  ms.screen = 'title'; ms.netSession?.destroy(); ms.netSession = undefined; break;
       case 'lang_en':     ms.language = 'en'; setLanguage('en'); break;
       case 'lang_ru':     ms.language = 'ru'; setLanguage('ru'); break;
       case 'back_race':   ms.screen = 'race';     break;
+      case 'back_simulation': ms.screen = 'title'; break;
       case 'race_human':  ms.playerRace = 'human'; ms.screen = 'map'; break;
       case 'race_orc':    ms.playerRace = 'orc';   ms.screen = 'map'; break;
       case 'map_1':       ms.mapId = 1; startGame(); break;
@@ -207,6 +216,7 @@ export function runMenu(
       case 'map_4':       ms.mapId = 4; startGame(); break;
       case 'map_5':       ms.mapId = 5; startGame(); break;
       case 'map_6':       ms.mapId = 6; startGame(); break;
+      case 'start_simulation': startSimulationGame(); break;
 
       case 'host_game': {
         ms.netSession?.destroy();
@@ -241,6 +251,14 @@ export function runMenu(
           ms.playerRace = action.slice(9) as Race;
         } else if (action.startsWith('set_join_race_')) {
           ms.guestRace = action.slice(14) as Race;
+        } else if (action.startsWith('set_sim_a_race_')) {
+          ms.simSides[0].race = action.slice(15) as Race;
+        } else if (action.startsWith('set_sim_b_race_')) {
+          ms.simSides[1].race = action.slice(15) as Race;
+        } else if (action.startsWith('set_sim_a_ai_')) {
+          ms.simSides[0].aiDifficulty = action.slice(13) as AIDifficulty;
+        } else if (action.startsWith('set_sim_b_ai_')) {
+          ms.simSides[1].aiDifficulty = action.slice(13) as AIDifficulty;
         } else if (action.startsWith('set_map_')) {
           ms.mapId = parseInt(action.slice(8)) as MapId;
         } else if (action.startsWith('set_ai_')) {
@@ -286,7 +304,22 @@ export function runMenu(
   function startGame(): void {
     running = false;
     origRemove();
-    onStart({ playerRace: ms.playerRace, mapId: ms.mapId, aiDifficulty: ms.aiDifficulty });
+    onStart({ playerRace: ms.playerRace, mapId: ms.mapId, aiDifficulty: ms.aiDifficulty, mode: ms.mode });
+  }
+
+  function startSimulationGame(): void {
+    running = false;
+    origRemove();
+    onStart({
+      playerRace: ms.simSides[0].race,
+      guestRace: ms.simSides[1].race,
+      mapId: ms.mapId,
+      mode: 'offline_simulation',
+      simSides: [
+        { race: ms.simSides[0].race, aiDifficulty: ms.simSides[0].aiDifficulty },
+        { race: ms.simSides[1].race, aiDifficulty: ms.simSides[1].aiDifficulty },
+      ],
+    });
   }
 
   function startOnlineGame(): void {
@@ -417,9 +450,10 @@ export function runMenu(
     ctx.setLineDash([]);
 
     const btns: MenuButton[] = [
-      { x: cx - 100, y: cy - 20,  w: 200, h: 44, label: t('menu_new_game'),    action: 'new_game',    accent: GOLD },
-      { x: cx - 100, y: cy + 36,  w: 200, h: 38, label: t('menu_online'),      action: 'online',      accent: '#44ddaa' },
-      { x: cx - 100, y: cy + 86,  w: 200, h: 34, label: t('menu_how_to_play'), action: 'how_to_play', accent: '#88bbff' },
+      { x: cx - 100, y: cy - 28,  w: 200, h: 40, label: t('menu_new_game'),    action: 'new_game',    accent: GOLD },
+      { x: cx - 100, y: cy + 22,  w: 200, h: 36, label: t('menu_simulation'),  action: 'simulation',  accent: '#d9b84a' },
+      { x: cx - 100, y: cy + 68,  w: 200, h: 36, label: t('menu_online'),      action: 'online',      accent: '#44ddaa' },
+      { x: cx - 100, y: cy + 114, w: 200, h: 32, label: t('menu_how_to_play'), action: 'how_to_play', accent: '#88bbff' },
     ];
 
     drawLanguageToggle(btns);
@@ -711,9 +745,9 @@ export function runMenu(
       ctx.textAlign = 'left';
       ctx.font      = '10px monospace';
       ctx.fillStyle = '#4488ff';
-      ctx.fillText(t('you'), cardX + 8, cardY + thumbH + 20);
+      ctx.fillText(ms.mode === 'offline_simulation' ? t('sim_side_a_legend') : t('you'), cardX + 8, cardY + thumbH + 20);
       ctx.fillStyle = '#cc4422';
-      ctx.fillText(t('enemy'), cardX + 60, cardY + thumbH + 20);
+      ctx.fillText(ms.mode === 'offline_simulation' ? t('sim_side_b_legend') : t('enemy'), cardX + 60, cardY + thumbH + 20);
 
       // Map name
       ctx.textAlign = 'center';
@@ -734,7 +768,7 @@ export function runMenu(
       const selBtn: MenuButton = {
         x: cardX + 20, y: cardY + cardH - 48,
         w: cardW - 40, h: 34,
-        label: t('play_map', { name: m.name.toUpperCase() }),
+        label: ms.mode === 'offline_simulation' ? t('play_map', { name: m.name.toUpperCase() }) : t('play_map', { name: m.name.toUpperCase() }),
         action: m.action,
         accent: GOLD,
       };
@@ -756,6 +790,132 @@ export function runMenu(
       ctx.font = '10px monospace';
       ctx.fillText(t('menu_scroll_more'), canvas.width - 14, canvas.height - 14);
     }
+
+    buttons = newBtns;
+  }
+
+  function drawSimulationScreen(): void {
+    const cx = canvas.width / 2;
+    const top = Math.max(48, Math.round(canvas.height * 0.08));
+    const newBtns: MenuButton[] = [];
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = GOLD;
+    ctx.font = 'bold 28px serif';
+    ctx.fillText(t('menu_simulation'), cx, top);
+
+    ctx.fillStyle = GREY;
+    ctx.font = '12px monospace';
+    ctx.fillText(t('sim_observer_mode'), cx, top + 26);
+
+    const panelY = top + 52;
+    const panelW = Math.min(320, Math.floor(canvas.width * 0.38));
+    const panelH = 180;
+    const gap = 24;
+    const leftX = cx - panelW - gap / 2;
+    const rightX = cx + gap / 2;
+
+    const sidePanels: Array<{ x: number; title: string; sideIndex: 0 | 1; accent: string }> = [
+      { x: leftX, title: t('sim_side_a'), sideIndex: 0, accent: '#4488ff' },
+      { x: rightX, title: t('sim_side_b'), sideIndex: 1, accent: '#cc4422' },
+    ];
+
+    const difficultyDefs: Array<{ value: AIDifficulty; label: string; accent: string }> = [
+      { value: 'easy', label: t('ai_easy'), accent: '#79d98a' },
+      { value: 'medium', label: t('ai_medium'), accent: '#e8c84a' },
+      { value: 'hard', label: t('ai_hard'), accent: '#ff8f66' },
+    ];
+
+    for (const panel of sidePanels) {
+      const side = ms.simSides[panel.sideIndex];
+      ctx.fillStyle = PANEL_BG;
+      ctx.fillRect(panel.x, panelY, panelW, panelH);
+      ctx.strokeStyle = panel.accent;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(panel.x + 0.5, panelY + 0.5, panelW - 1, panelH - 1);
+
+      ctx.fillStyle = panel.accent;
+      ctx.font = 'bold 16px monospace';
+      ctx.fillText(panel.title, panel.x + panelW / 2, panelY + 24);
+
+      ctx.fillStyle = GREY;
+      ctx.font = '11px monospace';
+      ctx.fillText(panel.sideIndex === 0 ? t('sim_side_a_race') : t('sim_side_b_race'), panel.x + panelW / 2, panelY + 48);
+
+      const raceDefs: Race[] = ['human', 'orc'];
+      for (let i = 0; i < raceDefs.length; i++) {
+        const race = raceDefs[i];
+        const rc = RACES[race];
+        const bx = panel.x + 22 + i * 138;
+        const by = panelY + 58;
+        const sel = side.race === race;
+        ctx.fillStyle = sel ? `${rc.accentColor}44` : 'rgba(0,0,0,0.2)';
+        ctx.fillRect(bx, by, 116, 28);
+        ctx.strokeStyle = sel ? rc.accentColor : '#444';
+        ctx.strokeRect(bx + 0.5, by + 0.5, 115, 27);
+        ctx.fillStyle = sel ? rc.accentColor : GREY;
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText(race === 'human' ? t('race_humans') : t('race_orcs'), bx + 58, by + 18);
+        newBtns.push({ x: bx, y: by, w: 116, h: 28, label: race, action: `${panel.sideIndex === 0 ? 'set_sim_a_race_' : 'set_sim_b_race_'}${race}` });
+      }
+
+      ctx.fillStyle = GREY;
+      ctx.font = '11px monospace';
+      ctx.fillText(panel.sideIndex === 0 ? t('sim_side_a_difficulty') : t('sim_side_b_difficulty'), panel.x + panelW / 2, panelY + 112);
+
+      for (let i = 0; i < difficultyDefs.length; i++) {
+        const def = difficultyDefs[i];
+        const bx = panel.x + 14 + i * 98;
+        const by = panelY + 122;
+        const sel = side.aiDifficulty === def.value;
+        ctx.fillStyle = sel ? `${def.accent}33` : 'rgba(0,0,0,0.2)';
+        ctx.fillRect(bx, by, 88, 28);
+        ctx.strokeStyle = sel ? def.accent : '#444';
+        ctx.strokeRect(bx + 0.5, by + 0.5, 87, 27);
+        ctx.fillStyle = sel ? def.accent : GREY;
+        ctx.font = 'bold 11px monospace';
+        ctx.fillText(def.label, bx + 44, by + 18);
+        newBtns.push({ x: bx, y: by, w: 88, h: 28, label: def.label, action: `${panel.sideIndex === 0 ? 'set_sim_a_ai_' : 'set_sim_b_ai_'}${def.value}` });
+      }
+    }
+
+    ctx.fillStyle = GOLD;
+    ctx.font = 'bold 22px serif';
+    ctx.fillText(t('choose_map'), cx, panelY + panelH + 34);
+
+    const mapDefs = MAP_CATALOG;
+    for (let i = 0; i < mapDefs.length; i++) {
+      const map = mapDefs[i];
+      const col = i % 3;
+      const row = Math.floor(i / 3);
+      const bx = cx - 120 + col * 84;
+      const by = panelY + panelH + 48 + row * 34;
+      const sel = ms.mapId === map.id;
+      ctx.fillStyle = sel ? '#44446688' : 'rgba(0,0,0,0.2)';
+      ctx.fillRect(bx, by, 72, 26);
+      ctx.strokeStyle = sel ? GOLD : '#444';
+      ctx.strokeRect(bx + 0.5, by + 0.5, 71, 25);
+      ctx.fillStyle = sel ? GOLD : GREY;
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText(`${map.id}`, bx + 36, by + 17);
+      newBtns.push({ x: bx, y: by, w: 72, h: 26, label: map.name, action: `set_map_${map.id}` });
+    }
+
+    const startBtn: MenuButton = {
+      x: cx - 120,
+      y: panelY + panelH + 128,
+      w: 240,
+      h: 38,
+      label: t('menu_simulation'),
+      action: 'start_simulation',
+      accent: GOLD,
+    };
+    newBtns.push(startBtn);
+    drawButton(startBtn, isHovered(startBtn));
+
+    const backBtn: MenuButton = { x: 20, y: 20, w: 90, h: 32, label: t('back'), action: 'back_simulation' };
+    newBtns.push(backBtn);
+    drawButton(backBtn, isHovered(backBtn));
 
     buttons = newBtns;
   }
@@ -1003,6 +1163,7 @@ export function runMenu(
       case 'howtoplay':drawHowToPlay();    break;
       case 'race':     drawRaceSelect();   break;
       case 'map':      drawMapSelect();    break;
+      case 'simulation': drawSimulationScreen(); break;
       case 'online':   drawOnlineScreen(); break;
     }
 

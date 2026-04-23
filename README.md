@@ -128,13 +128,14 @@ The next meaningful gains should come from:
 - playtest-driven follow-up on whether eco / tempo / pressure now diverge enough in real matches
 
 Immediate next `/new` target:
-- verify the new forest/wood/lumber-mill loop end to end in live/manual play
-- confirm workers can harvest forest, carry wood home, and credit it correctly
-- confirm depleted forest turns into passable grass and pathing updates correctly
-- confirm Lumber Mill can be built, towers are gated by it, and all three upgrades apply correctly
-- confirm each Lumber Mill upgrade now has a visible `15s` research phase and deterministic completion timing
-- run determinism regression checks before and after any command-processing edits
-- after that, validate current map-pressure systems as a combined package, not as isolated features:
+- simulation mode design doc now exists at `docs/LW2B_SIMULATION_MODE_DESIGN_2026-04-23.md`
+- start simulation-mode v1 with a narrow pass:
+  - owner-parameterize AI so it can run for either side
+  - add offline simulation mode with dual AI ticking
+  - gate observer gameplay input
+  - render full observer vision without redesigning fog storage
+- keep online / net paths untouched during this feature pass
+- after that, resume validation of current map-pressure systems as a combined package, not as isolated features:
   - contested mines
   - watch-post leverage
   - center-rich objectives

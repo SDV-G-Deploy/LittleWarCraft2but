@@ -153,6 +153,7 @@ export function render(
   selectedIds: Set<number>,
   myOwner: 0 | 1 = 0,
   alpha = 1,
+  observerFullVision = false,
 ): void {
   const sp = getSprites();
 
@@ -162,10 +163,10 @@ export function render(
 
   drawTiles(ctx, sp, state, cam, viewW, viewH);
   drawCorpses(ctx, sp, state, cam);
-  drawEntities(ctx, sp, state, cam, selectedIds, myOwner, alpha);
-  drawCombatVisuals(ctx, state, cam, myOwner);
+  drawEntities(ctx, sp, state, cam, selectedIds, myOwner, alpha, observerFullVision);
+  drawCombatVisuals(ctx, state, cam, myOwner, observerFullVision);
   drawRallyPoints(ctx, state, cam, selectedIds, myOwner);
-  drawFog(ctx, state, cam, viewW, viewH);
+  drawFog(ctx, state, cam, viewW, viewH, observerFullVision);
 }
 
 // ─── Minimap ──────────────────────────────────────────────────────────────────
@@ -182,6 +183,7 @@ export function drawMinimap(
   viewH_game: number,
   myOwner: 0 | 1 = 0,
   minimapRect?: Rect,
+  observerFullVision = false,
 ): void {
   const nextSignature = buildMinimapTerrainSignature(state);
   if (!minimapTerrain || minimapTerrainSignature !== nextSignature) {
@@ -197,34 +199,38 @@ export function drawMinimap(
   ctx.drawImage(minimapTerrain, MX, MY);
 
   // ── Fog overlay ───────────────────────────────────────────────────────────
-  // 4096 fillRect calls per frame — well within 60fps budget
-  for (let ty = 0; ty < MAP_H; ty++) {
-    for (let tx = 0; tx < MAP_W; tx++) {
-      const fog = state.fog[ty][tx];
-      if (fog === 'visible') continue;
-      ctx.fillStyle = fog === 'unseen'
-        ? 'rgba(0,0,0,0.95)'
-        : 'rgba(0,0,0,0.50)';
-      ctx.fillRect(MX + tx * MINI_SCALE, MY + ty * MINI_SCALE, MINI_SCALE, MINI_SCALE);
+  if (!observerFullVision) {
+    // 4096 fillRect calls per frame — well within 60fps budget
+    for (let ty = 0; ty < MAP_H; ty++) {
+      for (let tx = 0; tx < MAP_W; tx++) {
+        const fog = state.fog[ty][tx];
+        if (fog === 'visible') continue;
+        ctx.fillStyle = fog === 'unseen'
+          ? 'rgba(0,0,0,0.95)'
+          : 'rgba(0,0,0,0.50)';
+        ctx.fillRect(MX + tx * MINI_SCALE, MY + ty * MINI_SCALE, MINI_SCALE, MINI_SCALE);
+      }
     }
   }
 
   // ── Entity dots ───────────────────────────────────────────────────────────
   for (const e of state.entities) {
     if (e.kind === 'goldmine') {
-      // Show once explored
-      const fog = state.fog[Math.min(MAP_H - 1, e.pos.y)][Math.min(MAP_W - 1, e.pos.x)];
-      if (fog === 'unseen') continue;
+      if (!observerFullVision) {
+        const fog = state.fog[Math.min(MAP_H - 1, e.pos.y)][Math.min(MAP_W - 1, e.pos.x)];
+        if (fog === 'unseen') continue;
+      }
       ctx.fillStyle = '#ffe840';
     } else if (isNeutralOwner(e.owner)) {
       ctx.fillStyle = '#b8b8b8';
     } else if (isOpposingPlayerOwner(e.owner, myOwner)) {
-      // Opposing player: obey fog rules (same as entityVisible in main render)
-      const cy  = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
-      const cx  = Math.min(MAP_W - 1, Math.max(0, e.pos.x + Math.floor(e.tileW / 2)));
-      const fog = state.fog[cy][cx];
-      if (isUnitKind(e.kind) && fog !== 'visible') continue;
-      if (!isUnitKind(e.kind) && fog === 'unseen') continue;
+      if (!observerFullVision) {
+        const cy  = Math.min(MAP_H - 1, Math.max(0, e.pos.y + Math.floor(e.tileH / 2)));
+        const cx  = Math.min(MAP_W - 1, Math.max(0, e.pos.x + Math.floor(e.tileW / 2)));
+        const fog = state.fog[cy][cx];
+        if (isUnitKind(e.kind) && fog !== 'visible') continue;
+        if (!isUnitKind(e.kind) && fog === 'unseen') continue;
+      }
       ctx.fillStyle = '#ff4444';
     } else {
       ctx.fillStyle = '#4488ff'; // own units
@@ -332,7 +338,8 @@ function drawCorpses(
  *  - Enemy units: visible only in 'visible' fog cells
  *  - Enemy buildings: visible once explored (remembered after scouting)
  */
-function entityVisible(state: GameState, e: Entity, myOwner: 0 | 1): boolean {
+function entityVisible(state: GameState, e: Entity, myOwner: 0 | 1, observerFullVision = false): boolean {
+  if (observerFullVision) return true;
   // Player's own entities (not goldmines) are always visible
   if (e.owner === myOwner && e.kind !== 'goldmine') return true;
 
@@ -366,6 +373,7 @@ function drawEntities(
   selectedIds: Set<number>,
   myOwner: 0 | 1 = 0,
   alpha = 1,
+  observerFullVision = false,
 ): void {
   const clampedAlpha = Math.max(0, Math.min(1, alpha));
   const visibleUnitIds = new Set<number>();
@@ -382,7 +390,7 @@ function drawEntities(
   // Draw buildings first, units on top
   for (const pass of [false, true] as const) {
     for (const e of state.entities) {
-      if (!entityVisible(state, e, myOwner)) continue;
+      if (!entityVisible(state, e, myOwner, observerFullVision)) continue;
       const isUnit = isUnitKind(e.kind);
       if (isUnit !== pass) continue;
 
@@ -431,6 +439,7 @@ function drawCombatVisuals(
   state: GameState,
   cam: Camera,
   myOwner: 0 | 1,
+  observerFullVision = false,
 ): void {
   const attackEvents = state.recentAttackEvents ?? [];
   const entityById = state.entityById;
@@ -441,7 +450,7 @@ function drawCombatVisuals(
     const attacker = entityById?.get(ev.attackerId) ?? state.entities.find(e => e.id === ev.attackerId);
     const target = entityById?.get(ev.targetId) ?? state.entities.find(e => e.id === ev.targetId);
 
-    if (attacker && entityVisible(state, attacker, myOwner)) {
+    if (attacker && entityVisible(state, attacker, myOwner, observerFullVision)) {
       const { sx, sy } = worldToScreen(attacker.pos.x * TILE_SIZE, attacker.pos.y * TILE_SIZE, cam);
       const alpha = Math.max(0, 1 - age / 8);
       const pulse = 0.55 + 0.45 * (1 - age / 8);
@@ -456,7 +465,7 @@ function drawCombatVisuals(
       ctx.restore();
     }
 
-    if (target && entityVisible(state, target, myOwner)) {
+    if (target && entityVisible(state, target, myOwner, observerFullVision)) {
       const tx = target.pos.x * TILE_SIZE + (target.tileW * TILE_SIZE) / 2;
       const ty = target.pos.y * TILE_SIZE + (target.tileH * TILE_SIZE) / 2;
       const { sx, sy } = worldToScreen(tx, ty, cam);
@@ -760,7 +769,9 @@ function drawFog(
   cam: Camera,
   viewW: number,
   viewH: number,
+  observerFullVision = false,
 ): void {
+  if (observerFullVision) return;
   const startTX = Math.max(0, Math.floor(cam.x / TILE_SIZE));
   const startTY = Math.max(0, Math.floor(cam.y / TILE_SIZE));
   const endTX   = Math.min(MAP_W - 1, startTX + Math.ceil(viewW / TILE_SIZE) + 1);

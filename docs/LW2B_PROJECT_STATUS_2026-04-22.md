@@ -32,6 +32,17 @@ The current open problem is best split into separate layers:
 
 ## Current repo-level signals
 
+### New design track now prepared
+- simulation mode v1 is now documented in `docs/LW2B_SIMULATION_MODE_DESIGN_2026-04-23.md`
+- agreed implementation framing is intentionally narrow:
+  - `mode` in `GameOptions`
+  - simulation-specific side config for two AI-controlled sides
+  - owner-parameterized AI
+  - observer-only input/render gating
+  - no broad fog/state/control-model rewrite
+  - no online/net refactor in this pass
+
+
 ### Docs now relevant for resume
 - `docs/LW2B_PROJECT_DEVELOPMENT_PLAN_2026-04-22.md`
 - `docs/LW2B_GAMEPLAY_DOCTRINE_AND_CROSS_LAYER_INVARIANTS.md`

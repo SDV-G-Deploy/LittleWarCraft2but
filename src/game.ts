@@ -1,5 +1,5 @@
 import { SIM_TICK_MS, TILE_SIZE, CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL, SIM_HZ,
-         isUnitKind, isWorkerKind, NEUTRAL, PLAYER_1, PLAYER_2, areHostile, type EntityKind, type Race, type MapId, type OpeningPlan, type AIDifficulty } from './types';
+         isUnitKind, isWorkerKind, NEUTRAL, PLAYER_1, PLAYER_2, areHostile, type EntityKind, type Race, type MapId, type OpeningPlan, type AIDifficulty, type GameMode, type SimulationSideConfig } from './types';
 import { createWorld } from './sim/world';
 import { spawnEntity, killEntity, setEntityFootprint } from './sim/entities';
 import { processCommandPass, issueMoveCommand, separateUnits, autoAttackPass } from './sim/commands';
@@ -67,6 +67,8 @@ export interface GameOptions {
   guestRace?: Race;         // guest's race → races[1]; defaults to opposite if omitted
   mapId:      MapId;
   aiDifficulty?: AIDifficulty;
+  mode?:      GameMode;
+  simSides?:  [SimulationSideConfig, SimulationSideConfig];
   net?:       NetSession;   // present → online 1v1, no AI
   myOwner?:   0 | 1;        // which owner this client controls (default 0)
 }
@@ -83,12 +85,20 @@ export function startGame(
   // Reset cached render data from any prior game
   resetRenderCache();
 
-  // In online mode guestRace is set from the handshake; offline defaults to opposite
-  const aiRace: Race = options.guestRace ?? (options.playerRace === 'human' ? 'orc' : 'human');
+  const mode: GameMode = options.mode ?? (options.net ? 'online_pvp' : 'offline_skirmish');
+  const simulationSides = options.simSides ?? [
+    { race: options.playerRace, aiDifficulty: options.aiDifficulty ?? 'medium' },
+    { race: options.guestRace ?? (options.playerRace === 'human' ? 'orc' : 'human'), aiDifficulty: options.aiDifficulty ?? 'medium' },
+  ] as [SimulationSideConfig, SimulationSideConfig];
+  const side0Race: Race = mode === 'offline_simulation' ? simulationSides[0].race : options.playerRace;
+  const side1Race: Race = mode === 'offline_simulation'
+    ? simulationSides[1].race
+    : (options.guestRace ?? (options.playerRace === 'human' ? 'orc' : 'human'));
   const mapData   = buildMapById(options.mapId);
-  const state     = createWorld(mapData, [options.playerRace, aiRace]);
-  // Camera starts at MY base: owner-0 → playerStart, owner-1 → aiStart
-  const myStart   = (options.myOwner ?? 0) === 0 ? mapData.playerStart : mapData.aiStart;
+  const state     = createWorld(mapData, [side0Race, side1Race]);
+  const observerMode = mode === 'offline_simulation';
+  const effectiveMyOwner: 0 | 1 = observerMode ? 0 : (options.myOwner ?? 0);
+  const myStart   = effectiveMyOwner === 0 ? mapData.playerStart : mapData.aiStart;
   const cam       = createCamera(
     Math.max(0, myStart.x - 8),
     Math.max(0, myStart.y - 6),
@@ -98,12 +108,12 @@ export function startGame(
   const keys = keysInput.state;
   const mouse = mouseInput.state;
 
-  const playerRC = RACES[options.playerRace];
-  const aiRC     = RACES[aiRace];
+  const playerRC = RACES[state.races[0]];
+  const aiRC     = RACES[state.races[1]];
 
   // ── Online / offline mode ──────────────────────────────────────────────────
   const net       = options.net ?? null;
-  const myOwner   = options.myOwner ?? 0;
+  const myOwner   = effectiveMyOwner;
   const peerOwner = (myOwner === 0 ? 1 : 0) as 0 | 1;
   const myRC      = RACES[state.races[myOwner]];
   const commandMarkers: CommandMarker[] = [];
@@ -187,6 +197,9 @@ export function startGame(
 
   // ── AI controller ──────────────────────────────────────────────────────────
   const ai: AIController = createAI(options.aiDifficulty ?? 'medium');
+  const simulationAI: [AIController, AIController] | null = observerMode
+    ? [createAI(simulationSides[0].aiDifficulty), createAI(simulationSides[1].aiDifficulty)]
+    : null;
 
   // ── Initial fog reveal ─────────────────────────────────────────────────────
   updateFog(state, myOwner);
@@ -196,6 +209,7 @@ export function startGame(
   let uiButtons: UiButton[] = [];
   let placementMode: { building: EntityKind } | null = null;
   let gameResult: 'playing' | 'win' | 'lose' = 'playing';
+  let observerWinner: 0 | 1 | null = null;
   let attackMoveHeld = false;
   let forceAttackHeld = false;
 
@@ -214,6 +228,14 @@ export function startGame(
 
   // ── Keyboard ───────────────────────────────────────────────────────────────
   function onKeyDown(e: KeyboardEvent): void {
+    if (observerMode) {
+      if (e.key === 'Escape') { placementMode = null; return; }
+      if ((e.key === 'r' || e.key === 'R') && gameResult !== 'playing') {
+        backToMenu(); return;
+      }
+      return;
+    }
+
     // Control-group bind (Ctrl/Meta + 1-9)
     if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9') {
       e.preventDefault();
@@ -295,6 +317,7 @@ export function startGame(
   }
 
   function onKeyUp(e: KeyboardEvent): void {
+    if (observerMode) return;
     if (e.key === 'a' || e.key === 'A') {
       attackMoveHeld = false;
       forceAttackHeld = false;
@@ -324,6 +347,27 @@ export function startGame(
 
   // ── Input ──────────────────────────────────────────────────────────────────
   function handleInput(): void {
+    const viewH_game = canvas.height - UI_HEIGHT;
+    const minimapRect = getDockLayout(canvas.width, canvas.height).minimapRect;
+
+    if (observerMode) {
+      for (const click of mouse.clicks) {
+        if (click.x >= minimapRect.x && click.x < minimapRect.x + minimapRect.w &&
+            click.y >= minimapRect.y && click.y < minimapRect.y + minimapRect.h) {
+          const tileX = (click.x - minimapRect.x) / MINI_SCALE;
+          const tileY = (click.y - minimapRect.y) / MINI_SCALE;
+          cam.x = tileX * TILE_SIZE - canvas.width / 2;
+          cam.y = tileY * TILE_SIZE - viewH_game / 2;
+          clampCamera(cam, canvas.width, viewH_game);
+        }
+      }
+      mouse.dragSelects.length = 0;
+      mouse.clicks.length = 0;
+      selectedIds.clear();
+      placementMode = null;
+      return;
+    }
+
     // Drag-box select (my units only)
     for (const drag of mouse.dragSelects) {
       if (!mouse.shiftHeld) selectedIds.clear();
@@ -339,8 +383,6 @@ export function startGame(
     mouse.dragSelects.length = 0;
 
     // Minimap position
-    const viewH_game = canvas.height - UI_HEIGHT;
-    const minimapRect = getDockLayout(canvas.width, canvas.height).minimapRect;
 
     // Click events
     for (const click of mouse.clicks) {
@@ -511,6 +553,7 @@ export function startGame(
   }
 
   function handleUiAction(action: string): void {
+    if (observerMode) return;
     const parts = action.split('|');
     let pendingPlan: OpeningPlan | null = null;
     let pendingAction = '';
@@ -571,6 +614,18 @@ export function startGame(
   const BLDG_KINDS = new Set(['townhall', 'barracks', 'lumbermill', 'farm', 'tower']);
   function checkWinLose(): void {
     if (gameResult !== 'playing') return;
+    if (observerMode) {
+      const side0Alive = state.entities.some(e => e.owner === PLAYER_1 && BLDG_KINDS.has(e.kind));
+      const side1Alive = state.entities.some(e => e.owner === PLAYER_2 && BLDG_KINDS.has(e.kind));
+      if (!side0Alive && side1Alive) {
+        observerWinner = PLAYER_2;
+        gameResult = 'lose';
+      } else if (!side1Alive && side0Alive) {
+        observerWinner = PLAYER_1;
+        gameResult = 'win';
+      }
+      return;
+    }
     const hasMyTH      = state.entities.some(e => e.owner === myOwner   && e.kind === 'townhall');
     const hasEnemyBldg = state.entities.some(e => e.owner === peerOwner && BLDG_KINDS.has(e.kind));
     if (!hasMyTH)      gameResult = 'lose';
@@ -670,7 +725,12 @@ export function startGame(
 
     if (!net) {
       p0 = profiler.now();
-      tickAI(state, ai);   // AI only runs in offline mode
+      if (simulationAI) {
+        tickAI(state, simulationAI[0], PLAYER_1);
+        tickAI(state, simulationAI[1], PLAYER_2);
+      } else {
+        tickAI(state, ai);
+      }
       profiler.recordPhase('tickAI', profiler.now() - p0);
     }
 
@@ -697,9 +757,17 @@ export function startGame(
     ctx.fillStyle = 'rgba(0,0,0,0.65)';
     ctx.fillRect(0, 0, w, h);
     ctx.textAlign = 'center';
-    ctx.fillStyle = gameResult === 'win' ? '#ffe97a' : '#ff5555';
-    ctx.font = 'bold 72px monospace';
-    ctx.fillText(gameResult === 'win' ? t('victory') : t('defeat'), w / 2, h / 2 - 24);
+    if (observerMode) {
+      const winningRace = observerWinner === PLAYER_2 ? state.races[1] : state.races[0];
+      const winnerLabel = winningRace === 'human' ? t('race_humans') : t('race_orcs');
+      ctx.fillStyle = '#ffe97a';
+      ctx.font = 'bold 58px monospace';
+      ctx.fillText(`${winnerLabel} win`, w / 2, h / 2 - 24);
+    } else {
+      ctx.fillStyle = gameResult === 'win' ? '#ffe97a' : '#ff5555';
+      ctx.font = 'bold 72px monospace';
+      ctx.fillText(gameResult === 'win' ? t('victory') : t('defeat'), w / 2, h / 2 - 24);
+    }
     ctx.fillStyle = '#ccc';
     ctx.font = '22px monospace';
     ctx.fillText(t('press_r_menu'), w / 2, h / 2 + 30);
@@ -801,7 +869,7 @@ export function startGame(
     }
 
     const dockLayout = getDockLayout(canvas.width, viewH);
-    render(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, selectedIds, myOwner, renderAlpha);
+    render(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, selectedIds, myOwner, renderAlpha, observerMode);
     if (placementMode) {
       const { tx, ty } = screenToTile(mouse.x, mouse.y, cam);
       drawGhostBuilding(ctx, state, cam, placementMode.building, tx, ty);
@@ -816,7 +884,7 @@ export function startGame(
       statusMsg: lastNetChecksumLine ? `${net.statusMsg} | ${lastNetChecksumLine}` : net.statusMsg,
       stats: net.getStats(),
     } : null, openingPlanFeedback);
-    drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, myOwner, dockLayout.minimapRect);
+    drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, myOwner, dockLayout.minimapRect, observerMode);
     drawGroupBadges();
     drawOnlineStartupOverlay();
     drawResultOverlay();

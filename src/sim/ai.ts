@@ -131,49 +131,46 @@ export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
 
 // ─── Main tick (runs at 1 Hz) ─────────────────────────────────────────────────
 
-export function tickAI(state: GameState, ai: AIController): void {
+export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): void {
   if (state.tick < ai.nextDecisionTick) return;
 
   ai.nextDecisionTick = state.tick + ai.reactionDelayTicks;
 
   const es = state.entities;
+  const race = state.races[owner];
 
-  const myTH = es.find(e => e.owner === 1 && e.kind === 'townhall');
+  const myTH = es.find(e => e.owner === owner && e.kind === 'townhall');
   if (!myTH) return; // AI defeated — nothing to do
 
-  // ── Race config for owner 1 ────────────────────────────────────────────────
-  const rc = RACES[state.races[1]];
-
-  const myBarracks = es.find(e  => e.owner === 1 && e.kind === 'barracks');
-  const myLumberMill = es.find(e => e.owner === 1 && e.kind === 'lumbermill');
-  const myWorkers  = es.filter(e => e.owner === 1 && e.kind === rc.worker);
-  const mySoldiers = es.filter(e => e.owner === 1 &&
+  const rc = RACES[race];
+  const myBarracks = es.find(e  => e.owner === owner && e.kind === 'barracks');
+  const myLumberMill = es.find(e => e.owner === owner && e.kind === 'lumbermill');
+  const myWorkers  = es.filter(e => e.owner === owner && e.kind === rc.worker);
+  const mySoldiers = es.filter(e => e.owner === owner &&
     (e.kind === rc.soldier || e.kind === rc.ranged || e.kind === rc.heavy));
-  const farmCount  = es.filter(e => e.owner === 1 && e.kind === 'farm').length;
-  const towerCount = es.filter(e => e.owner === 1 && e.kind === 'tower').length;
+  const farmCount  = es.filter(e => e.owner === owner && e.kind === 'farm').length;
+  const towerCount = es.filter(e => e.owner === owner && e.kind === 'tower').length;
 
-  // Flags: is a worker already tasked with building X?
   const buildingFarm     = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'farm');
   const buildingBarracks = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'barracks');
   const buildingTower    = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'tower');
   const buildingLumber   = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'lumbermill');
 
-  if (!state.openingPlanSelected[1] && state.tick >= ai.openingChoiceDelayTicks) {
-    state.openingPlanSelected[1] = ai.openingPlan;
+  if (!state.openingPlanSelected[owner] && state.tick >= ai.openingChoiceDelayTicks) {
+    state.openingPlanSelected[owner] = ai.openingPlan;
     for (const e of es) {
-      if (e.owner === 1 && (e.kind === 'townhall' || e.kind === 'barracks')) e.openingPlan = ai.openingPlan;
+      if (e.owner === owner && (e.kind === 'townhall' || e.kind === 'barracks')) e.openingPlan = ai.openingPlan;
     }
   }
 
-  const woodDemand = estimateWoodDemand(state, ai, myBarracks, myLumberMill, farmCount, towerCount, mySoldiers.length);
+  const woodDemand = estimateWoodDemand(state, ai, owner, myBarracks, myLumberMill, farmCount, towerCount, mySoldiers.length);
   keepGathering(state, myWorkers, woodDemand);
-  const defenseThreat = assessBaseThreat(state, ai, myTH, myWorkers);
+  const defenseThreat = assessBaseThreat(state, ai, owner, myTH, myWorkers);
   if (defenseThreat.active) {
     recallDefenders(state, myTH, mySoldiers, defenseThreat, ai.baseDefenseRadius);
   }
 
   switch (ai.phase) {
-    // ── Economy: build workforce, first farm, first barracks ─────────────────
     case 'economy': {
       if (myWorkers.length < ai.workerTarget) {
         issueTrainCommand(state, myTH, rc.worker);
@@ -197,11 +194,10 @@ export function tickAI(state: GameState, ai: AIController): void {
       break;
     }
 
-    // ── Military: train soldiers, expand pop cap, wait for wave ──────────────
     case 'military': {
       if (!myLumberMill && !buildingLumber && myBarracks) {
-        const lumberCost = getResolvedCost('lumbermill', state.races[1]);
-        if (state.gold[1] >= lumberCost.gold && state.wood[1] >= lumberCost.wood) {
+        const lumberCost = getResolvedCost('lumbermill', race);
+        if (state.gold[owner] >= lumberCost.gold && state.wood[owner] >= lumberCost.wood) {
           const w = freeWorker(myWorkers);
           if (w) {
             const pos = findLumberMillSpot(state, myTH);
@@ -211,8 +207,8 @@ export function tickAI(state: GameState, ai: AIController): void {
       }
 
       if (myLumberMill) {
-        const nextUpgrade = pickNextUpgrade(state, ai);
-        if (nextUpgrade) tryStartLumberUpgrade(state, 1, nextUpgrade);
+        const nextUpgrade = pickNextUpgrade(state, ai, owner);
+        if (nextUpgrade) tryStartLumberUpgrade(state, owner, nextUpgrade);
       }
 
       if (myBarracks) {
@@ -224,12 +220,12 @@ export function tickAI(state: GameState, ai: AIController): void {
         const targetRangedCount = Math.max(0, Math.floor((totalArmy + 1) * mixPlan.rangedRatio));
         const targetHeavyCount = Math.min(ai.preferredHeavyCap, Math.max(0, Math.floor((totalArmy + 1) * mixPlan.heavyRatio)));
 
-        const heavyCost    = getResolvedCost(rc.heavy, state.races[1]);
-        const rangedCost   = getResolvedCost(rc.ranged, state.races[1]);
-        const soldierCost  = getResolvedCost(rc.soldier, state.races[1]);
-        const canHeavy     = state.gold[1] >= heavyCost.gold && state.wood[1] >= heavyCost.wood;
-        const canRanged    = state.gold[1] >= rangedCost.gold && state.wood[1] >= rangedCost.wood;
-        const canSoldier   = state.gold[1] >= soldierCost.gold && state.wood[1] >= soldierCost.wood;
+        const heavyCost    = getResolvedCost(rc.heavy, race);
+        const rangedCost   = getResolvedCost(rc.ranged, race);
+        const soldierCost  = getResolvedCost(rc.soldier, race);
+        const canHeavy     = state.gold[owner] >= heavyCost.gold && state.wood[owner] >= heavyCost.wood;
+        const canRanged    = state.gold[owner] >= rangedCost.gold && state.wood[owner] >= rangedCost.wood;
+        const canSoldier   = state.gold[owner] >= soldierCost.gold && state.wood[owner] >= soldierCost.wood;
 
         const needFrontline = soldierCount < mixPlan.minFrontline;
         const wantHeavy    = !needFrontline && heavyCount < targetHeavyCount && soldierCount >= mixPlan.minFrontline && canHeavy;
@@ -239,18 +235,18 @@ export function tickAI(state: GameState, ai: AIController): void {
         const barracksBusy = myBarracks.cmd?.type === 'train';
         if (!barracksBusy && canTrainNext) issueTrainCommand(state, myBarracks, nextUnit);
       }
-      if (!buildingFarm && state.popCap[1] - state.pop[1] <= 2 && farmCount < ai.maxFarms) {
+      if (!buildingFarm && state.popCap[owner] - state.pop[owner] <= 2 && farmCount < ai.maxFarms) {
         const w = freeWorker(myWorkers);
         if (w) {
           const pos = findBuildSpot(state, myTH, 'farm');
           if (pos) issueBuildCommand(state, w, 'farm', pos, state.tick);
         }
       }
-      const towerCost = getResolvedCost('tower', state.races[1]);
-      if (!buildingTower && towerCount < ai.maxTowers && myBarracks && myLumberMill && mySoldiers.length >= ai.towerMinArmy && state.gold[1] >= towerCost.gold && state.wood[1] >= towerCost.wood) {
+      const towerCost = getResolvedCost('tower', race);
+      if (!buildingTower && towerCount < ai.maxTowers && myBarracks && myLumberMill && mySoldiers.length >= ai.towerMinArmy && state.gold[owner] >= towerCost.gold && state.wood[owner] >= towerCost.wood) {
         const w = freeWorker(myWorkers);
         if (w) {
-          const pos = findTowerBuildSpot(state, myTH, 1);
+          const pos = findTowerBuildSpot(state, myTH, owner);
           if (pos) issueBuildCommand(state, w, 'tower', pos, state.tick);
         }
       }
@@ -260,20 +256,19 @@ export function tickAI(state: GameState, ai: AIController): void {
       break;
     }
 
-    // ── Assault: send army toward player base ─────────────────────────────────
     case 'assault': {
-      const opposingPlayerTH = es.find(e => isOwnedByOpposingPlayer(e, 1) && e.kind === 'townhall');
-      const contestedMine = bestContestedMine(state, 1, ai);
-      const expansionMine = bestExpansionMine(state, 1, ai);
+      const opposingPlayerTH = es.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
+      const contestedMine = bestContestedMine(state, owner, ai);
+      const expansionMine = bestExpansionMine(state, owner, ai);
 
       for (const s of mySoldiers) {
         if (s.cmd && s.cmd.type !== 'move') continue;
 
         const nearest = ai.difficulty === 'easy'
-          ? nearestPlayerUnit(state, s, ai.attackRetargetRadius)
+          ? nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius)
           : s.kind === rc.ranged
-            ? (nearestPlayerUnit(state, s, ai.attackRetargetRadius) ?? nearestPlayerEntity(state, s, ai.attackRetargetRadius))
-            : nearestPlayerEntity(state, s, ai.attackRetargetRadius);
+            ? (nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius) ?? nearestPlayerEntity(state, s, owner, ai.attackRetargetRadius))
+            : nearestPlayerEntity(state, s, owner, ai.attackRetargetRadius);
 
         if (nearest) {
           issueAttackCommand(s, nearest.id, state.tick, state);
@@ -328,15 +323,15 @@ function doctrineKind(choice: AIController['doctrineChoice']): LumberUpgradeKind
       : 'doctrineLongReach';
 }
 
-function pickNextUpgrade(state: GameState, ai: AIController): LumberUpgradeKind | null {
-  const upgrades = state.upgrades[1];
+function pickNextUpgrade(state: GameState, ai: AIController, owner: 0 | 1): LumberUpgradeKind | null {
+  const upgrades = state.upgrades[owner];
   if (upgrades.pendingLumberUpgrade) return null;
 
-  if (!upgrades.doctrine && state.gold[1] >= DOCTRINE_COST.gold && state.wood[1] >= DOCTRINE_COST.wood) {
+  if (!upgrades.doctrine && state.gold[owner] >= DOCTRINE_COST.gold && state.wood[owner] >= DOCTRINE_COST.wood) {
     return doctrineKind(ai.doctrineChoice);
   }
 
-  const raceUpgrades = RACE_BALANCE_PROFILES[state.races[1]].upgrades;
+  const raceUpgrades = RACE_BALANCE_PROFILES[state.races[owner]].upgrades;
   const ladder: Array<{ kind: LumberUpgradeKind; current: number; max: number; gold: number; wood: number; slot: number }> = [
     {
       kind: 'meleeAttack',
@@ -369,7 +364,7 @@ function pickNextUpgrade(state: GameState, ai: AIController): LumberUpgradeKind 
     for (const entry of ladder) {
       if (entry.current >= tier || entry.max < tier) continue;
       if (ai.difficulty === 'medium' && ((tier - 1) * ladder.length + entry.slot) % 2 === 1) continue;
-      if (state.gold[1] < entry.gold || state.wood[1] < entry.wood) continue;
+      if (state.gold[owner] < entry.gold || state.wood[owner] < entry.wood) continue;
       return entry.kind;
     }
   }
@@ -494,10 +489,10 @@ type DefenseThreatInfo = {
   defendPoint: Vec2;
 };
 
-function assessBaseThreat(state: GameState, ai: AIController, myTownHall: Entity, myWorkers: Entity[]): DefenseThreatInfo {
+function assessBaseThreat(state: GameState, ai: AIController, owner: 0 | 1, myTownHall: Entity, myWorkers: Entity[]): DefenseThreatInfo {
   const recentWindowStart = state.tick - ai.defenseRecallWindowTicks;
   const nearbyEnemyUnits = state.entities.filter(e =>
-    isOwnedByOpposingPlayer(e, 1) &&
+    isOwnedByOpposingPlayer(e, owner) &&
     isUnitKind(e.kind) &&
     Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y) <= ai.baseDefenseRadius,
   );
@@ -508,7 +503,7 @@ function assessBaseThreat(state: GameState, ai: AIController, myTownHall: Entity
     ? nearbyEnemyUnits
     : townHallUnderAttack || attackedWorkers.length > 0
       ? state.entities.filter(e =>
-        isOwnedByOpposingPlayer(e, 1) &&
+        isOwnedByOpposingPlayer(e, owner) &&
         isUnitKind(e.kind) &&
         Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y) <= ai.baseDefenseRadius + 4,
       )
@@ -559,19 +554,19 @@ function nearestThreat(unit: Entity, threats: Entity[]): Entity | null {
   return best;
 }
 
-function estimateWoodDemand(state: GameState, ai: AIController, myBarracks: Entity | undefined, myLumberMill: Entity | undefined, farmCount: number, towerCount: number, soldierCount: number): number {
+function estimateWoodDemand(state: GameState, ai: AIController, owner: 0 | 1, myBarracks: Entity | undefined, myLumberMill: Entity | undefined, farmCount: number, towerCount: number, soldierCount: number): number {
   let demand = 0;
-  const wood = state.wood[1];
-  const races = state.races[1];
+  const wood = state.wood[owner];
+  const races = state.races[owner];
   const farmCost = getResolvedCost('farm', races).wood;
   const lumberCost = getResolvedCost('lumbermill', races).wood;
   const towerCost = getResolvedCost('tower', races).wood;
   const soldierCost = getResolvedCost(RACES[races].soldier, races).wood;
 
   if (!myLumberMill) demand += lumberCost;
-  if (state.popCap[1] - state.pop[1] <= 2 && farmCount < ai.maxFarms) demand += farmCost;
+  if (state.popCap[owner] - state.pop[owner] <= 2 && farmCount < ai.maxFarms) demand += farmCost;
   if (myBarracks) demand += soldierCost * Math.max(1, Math.min(2, ai.attackWaveSize - soldierCount));
-  if (myLumberMill && !state.upgrades[1].doctrine) demand += DOCTRINE_COST.wood;
+  if (myLumberMill && !state.upgrades[owner].doctrine) demand += DOCTRINE_COST.wood;
   if (myBarracks && soldierCount >= ai.towerMinArmy && towerCount < ai.maxTowers) demand += towerCost;
 
   if (wood < Math.max(40, demand)) return Math.min(3, Math.max(1, Math.ceil((Math.max(40, demand) - wood) / 60)));
@@ -646,10 +641,10 @@ function findTowerBuildSpot(state: GameState, myTownHall: Entity, owner: 0 | 1):
   return findBuildSpot(state, myTownHall, 'tower');
 }
 
-function nearestPlayerEntity(state: GameState, unit: Entity, maxDistance = Infinity): Entity | null {
+function nearestPlayerEntity(state: GameState, unit: Entity, owner: 0 | 1, maxDistance = Infinity): Entity | null {
   let best: Entity | null = null; let bestD = Infinity;
   for (const e of state.entities) {
-    if (!isOwnedByOpposingPlayer(e, 1) || e.kind === 'goldmine' || e.kind === 'barrier') continue;
+    if (!isOwnedByOpposingPlayer(e, owner) || e.kind === 'goldmine' || e.kind === 'barrier') continue;
     const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
     if (d > maxDistance) continue;
     if (d < bestD || (d === bestD && best && e.id < best.id)) { bestD = d; best = e; }
@@ -657,10 +652,10 @@ function nearestPlayerEntity(state: GameState, unit: Entity, maxDistance = Infin
   return best;
 }
 
-function nearestPlayerUnit(state: GameState, unit: Entity, maxDistance = Infinity): Entity | null {
+function nearestPlayerUnit(state: GameState, unit: Entity, owner: 0 | 1, maxDistance = Infinity): Entity | null {
   let best: Entity | null = null; let bestD = Infinity;
   for (const e of state.entities) {
-    if (!isOwnedByOpposingPlayer(e, 1) || !isUnitKind(e.kind)) continue;
+    if (!isOwnedByOpposingPlayer(e, owner) || !isUnitKind(e.kind)) continue;
     const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
     if (d > maxDistance) continue;
     if (d < bestD || (d === bestD && best && e.id < best.id)) { bestD = d; best = e; }
