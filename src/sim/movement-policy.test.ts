@@ -28,8 +28,33 @@ function testAllyBlockWaitBudgetThenSidestep(): void {
   assert.notEqual(mover.pos.x, 20, 'sidestep should move unit off origin x');
 }
 
+function testWorkerSwapWhenEconomyFlowOptionEnabled(): void {
+  const state = makeState();
+  const mover = spawnEntity(state, 'worker', 0, { x: 20, y: 20 });
+  const blocker = spawnEntity(state, 'worker', 0, { x: 21, y: 20 });
+
+  const path = [{ x: 21, y: 20 }, { x: 22, y: 20 }];
+  const policy = createAllyBlockPolicyState();
+
+  const step = tryAdvancePathWithAvoidance(
+    state,
+    mover,
+    path,
+    { x: 22, y: 20 },
+    policy,
+    undefined,
+    { allowAllyWorkerSwap: true },
+  );
+
+  assert.equal(step, 'moved', 'economy worker flow should allow allied worker swap');
+  assert.deepEqual(mover.pos, { x: 21, y: 20 }, 'mover should advance into blocked tile after swap');
+  assert.deepEqual(blocker.pos, { x: 20, y: 20 }, 'blocking worker should be swapped back');
+  assert.equal(path.length, 1, 'path should consume one step after successful swap movement');
+}
+
 function run(): void {
   testAllyBlockWaitBudgetThenSidestep();
+  testWorkerSwapWhenEconomyFlowOptionEnabled();
   console.log('movement policy tests passed');
 }
 

@@ -1,5 +1,5 @@
 import type { Entity, GameState, Vec2 } from '../types';
-import { MAP_H, MAP_W, isUnitKind } from '../types';
+import { MAP_H, MAP_W, isUnitKind, isWorkerKind } from '../types';
 import { isTileBlockedByEntity } from './entities';
 
 const NUDGE_DIRS = [
@@ -52,6 +52,10 @@ export function findDeterministicSidestep(state: GameState, entity: Entity, bloc
 
 export type StepAvoidanceResult = 'no-path' | 'moved' | 'repathed' | 'sidestep' | 'blocked';
 
+export type StepAvoidanceOptions = {
+  allowAllyWorkerSwap?: boolean;
+};
+
 export type AllyBlockPolicyState = {
   blockedAllyStreak: number;
   blockedAllyTile: Vec2 | null;
@@ -95,6 +99,7 @@ export function tryAdvancePathWithAvoidance(
   goal: Vec2,
   allyBlockPolicyOrTryRepath?: AllyBlockPolicyState | (() => Vec2[] | null),
   tryRepathArg?: () => Vec2[] | null,
+  options?: StepAvoidanceOptions,
 ): StepAvoidanceResult {
   let allyBlockPolicy: AllyBlockPolicyState;
   let tryRepath: (() => Vec2[] | null) | undefined;
@@ -121,6 +126,23 @@ export function tryAdvancePathWithAvoidance(
   }
 
   const blockedByAlly = occupant.owner === entity.owner;
+  if (
+    blockedByAlly
+    && options?.allowAllyWorkerSwap
+    && isWorkerKind(entity.kind)
+    && isWorkerKind(occupant.kind)
+  ) {
+    const prevX = entity.pos.x;
+    const prevY = entity.pos.y;
+    entity.pos.x = next.x;
+    entity.pos.y = next.y;
+    occupant.pos.x = prevX;
+    occupant.pos.y = prevY;
+    path.shift();
+    resetAllyBlockPolicy(allyBlockPolicy);
+    return 'moved';
+  }
+
   if (blockedByAlly && shouldWaitForAllyBlock(allyBlockPolicy, next)) {
     return 'blocked';
   }
