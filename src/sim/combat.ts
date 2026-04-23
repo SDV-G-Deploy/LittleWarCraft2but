@@ -8,7 +8,11 @@ import { getDoctrineArmorBonus, getDoctrineRangeBonus } from '../balance/doctrin
 import { killEntity } from './entities';
 import { isTileBlockedByEntity } from './entities';
 import { findPath } from './pathfinding';
+import { findFlowFieldPath } from './nav/flow-field';
+import { createFlowFieldCache } from './nav/flow-field-cache';
 import { tryAdvancePathWithAvoidance } from './movement';
+
+const combatFlowFieldCache = createFlowFieldCache();
 
 // ─── Issue ────────────────────────────────────────────────────────────────────
 
@@ -252,6 +256,20 @@ function pickChaseGoal(state: GameState, attacker: Entity, target: Entity, range
   };
 }
 
+function findCombatChasePath(
+  state: GameState,
+  entity: Entity,
+  goal: { x: number; y: number },
+): { x: number; y: number }[] | null {
+  const flowPath = findFlowFieldPath(state, entity.pos.x, entity.pos.y, goal.x, goal.y, combatFlowFieldCache);
+  if (flowPath && (flowPath.length > 0 || (entity.pos.x === goal.x && entity.pos.y === goal.y))) {
+    return flowPath;
+  }
+
+  const fallbackPath = findPath(state, entity.pos.x, entity.pos.y, goal.x, goal.y);
+  return fallbackPath;
+}
+
 export function isTargetAttackableNow(state: GameState, attacker: Entity, target: Entity): boolean {
   const race = usesRaceProfile(attacker.owner) ? state.races[attacker.owner] : null;
   const resolved = resolveEntityStats(attacker.kind, race);
@@ -442,17 +460,17 @@ export function processAttack(state: GameState, entity: Entity): void {
 
     if (cmd.chasePath.length === 0 || state.tick - cmd.chasePathTick >= SIM_HZ) {
       const chaseGoal = pickChaseGoal(state, entity, target, range);
-      const path  = findPath(state, entity.pos.x, entity.pos.y, chaseGoal.x, chaseGoal.y);
-      cmd.chasePath     = path ?? [];
+      const chasePath = findCombatChasePath(state, entity, chaseGoal);
+      cmd.chasePath = chasePath ?? [];
       cmd.chasePathTick = state.tick;
     }
 
     if (cmd.chasePath.length > 0) {
       const tryRepath = (): { x: number; y: number }[] | null => {
         const chaseGoal = pickChaseGoal(state, entity, target, range);
-        const path = findPath(state, entity.pos.x, entity.pos.y, chaseGoal.x, chaseGoal.y);
+        const chasePath = findCombatChasePath(state, entity, chaseGoal);
         cmd.chasePathTick = state.tick;
-        return path;
+        return chasePath;
       };
 
       const chaseGoal = pickChaseGoal(state, entity, target, range);
