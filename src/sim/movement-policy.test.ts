@@ -52,9 +52,52 @@ function testWorkerSwapWhenEconomyFlowOptionEnabled(): void {
   assert.equal(path.length, 1, 'path should consume one step after successful swap movement');
 }
 
+function testWorkerPrefersSidestepBeforeRepathWhenBlockedByAlliedCombatUnit(): void {
+  const state = makeState();
+  const worker = spawnEntity(state, 'worker', 0, { x: 20, y: 20 });
+  spawnEntity(state, 'footman', 0, { x: 21, y: 20 });
+
+  const path = [{ x: 21, y: 20 }, { x: 22, y: 20 }];
+  const policy = createAllyBlockPolicyState();
+
+  const first = tryAdvancePathWithAvoidance(
+    state,
+    worker,
+    path,
+    { x: 22, y: 20 },
+    policy,
+    () => [{ x: 21, y: 20 }, { x: 22, y: 20 }],
+    { preferSidestepBeforeRepathOnAllyBlock: true },
+  );
+  const second = tryAdvancePathWithAvoidance(
+    state,
+    worker,
+    path,
+    { x: 22, y: 20 },
+    policy,
+    () => [{ x: 21, y: 20 }, { x: 22, y: 20 }],
+    { preferSidestepBeforeRepathOnAllyBlock: true },
+  );
+  const third = tryAdvancePathWithAvoidance(
+    state,
+    worker,
+    path,
+    { x: 22, y: 20 },
+    policy,
+    () => [{ x: 21, y: 20 }, { x: 22, y: 20 }],
+    { preferSidestepBeforeRepathOnAllyBlock: true },
+  );
+
+  assert.equal(first, 'blocked');
+  assert.equal(second, 'blocked');
+  assert.equal(third, 'sidestep', 'worker should sidestep allied combat block instead of repathing to the same blocked tile');
+  assert.notDeepEqual(worker.pos, { x: 20, y: 20 }, 'worker should move off origin to break ally-block loop');
+}
+
 function run(): void {
   testAllyBlockWaitBudgetThenSidestep();
   testWorkerSwapWhenEconomyFlowOptionEnabled();
+  testWorkerPrefersSidestepBeforeRepathWhenBlockedByAlliedCombatUnit();
   console.log('movement policy tests passed');
 }
 

@@ -87,6 +87,7 @@ export type StepAvoidanceResult = 'no-path' | 'moved' | 'repathed' | 'sidestep' 
 export type StepAvoidanceOptions = {
   allowAllyWorkerSwap?: boolean;
   useMoveReservation?: boolean;
+  preferSidestepBeforeRepathOnAllyBlock?: boolean;
 };
 
 export type AllyBlockPolicyState = {
@@ -195,6 +196,21 @@ export function tryAdvancePathWithAvoidance(
 
   if (blockedByAlly && shouldWaitForAllyBlock(allyBlockPolicy, next)) {
     return 'blocked';
+  }
+
+  if (blockedByAlly && options?.preferSidestepBeforeRepathOnAllyBlock) {
+    const sidestep = findDeterministicSidestep(state, entity, next, goal);
+    if (sidestep) {
+      entity.pos.x = sidestep.x;
+      entity.pos.y = sidestep.y;
+
+      const repathAfterSidestep = tryRepath?.();
+      if (repathAfterSidestep && repathAfterSidestep.length > 0) {
+        replacePath(path, repathAfterSidestep);
+      }
+      resetAllyBlockPolicy(allyBlockPolicy);
+      return 'sidestep';
+    }
   }
 
   const repath = tryRepath?.();
