@@ -3,6 +3,7 @@ import { buildMapById } from '../data/maps';
 import { createWorld } from './world';
 import { spawnEntity } from './entities';
 import { processAttack, issueAttackCommand } from './combat';
+import { processCommandPass } from './commands';
 import type { GameState } from '../types';
 
 function makeState(): GameState {
@@ -43,8 +44,48 @@ function testBlockedChaseRespectsMovementCadence(): void {
   );
 }
 
+function testMeleeManyVsOneUsesDistinctContactAndStagingSlots(): void {
+  const state = makeState();
+  state.tick = 1;
+
+  const target = spawnEntity(state, 'grunt', 1, { x: 40, y: 40 });
+  // Leave only two contact slots open (west/east), block the rest.
+  spawnEntity(state, 'wall', 2, { x: 39, y: 39 });
+  spawnEntity(state, 'wall', 2, { x: 40, y: 39 });
+  spawnEntity(state, 'wall', 2, { x: 41, y: 39 });
+  spawnEntity(state, 'wall', 2, { x: 39, y: 41 });
+  spawnEntity(state, 'wall', 2, { x: 40, y: 41 });
+  spawnEntity(state, 'wall', 2, { x: 41, y: 41 });
+
+  const attackers = [
+    spawnEntity(state, 'footman', 0, { x: 35, y: 40 }),
+    spawnEntity(state, 'footman', 0, { x: 35, y: 41 }),
+    spawnEntity(state, 'footman', 0, { x: 35, y: 42 }),
+    spawnEntity(state, 'footman', 0, { x: 35, y: 43 }),
+    spawnEntity(state, 'footman', 0, { x: 35, y: 44 }),
+  ];
+
+  for (const attacker of attackers) {
+    const issued = issueAttackCommand(attacker, target.id, state.tick, state);
+    assert.equal(issued, true);
+  }
+
+  for (let i = 0; i < 20; i++) {
+    processCommandPass(state);
+    state.tick += 1;
+  }
+
+  const claimed = attackers
+    .map(a => a.cmd?.type === 'attack' ? a.cmd.contactSlot : undefined)
+    .filter((slot): slot is { x: number; y: number } => !!slot);
+  assert.equal(claimed.length, 2, 'only available melee contact slots should be claimed');
+  const claimedKeys = new Set(claimed.map(slot => `${slot.x},${slot.y}`));
+  assert.equal(claimedKeys.size, 2, 'different attackers must claim different contact slots');
+}
+
 function run(): void {
   testBlockedChaseRespectsMovementCadence();
+  testMeleeManyVsOneUsesDistinctContactAndStagingSlots();
   console.log('combat congestion tests passed');
 }
 

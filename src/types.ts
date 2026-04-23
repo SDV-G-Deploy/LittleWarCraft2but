@@ -146,7 +146,15 @@ export type Command =
       lastProgressTick: number;
       repathCount: number;
     }
-  | { type: 'attack';  targetId: number; cooldownTick: number; chasePath: Vec2[]; chasePathTick: number; chaseStepTick: number }
+  | {
+      type: 'attack';
+      targetId: number;
+      cooldownTick: number;
+      chasePath: Vec2[];
+      chasePathTick: number;
+      chaseStepTick: number;
+      contactSlot?: Vec2;
+    }
   | { type: 'gather';  targetId: number; resourceType: 'gold' | 'wood'; phase: 'toresource' | 'gathering' | 'returning'; waitTicks: number }
   | { type: 'build';   building: EntityKind; pos: Vec2; siteId: number; phase: 'moving' | 'building'; stepTick: number }
   | { type: 'train';   unit: EntityKind; ticksLeft: number; queue: EntityKind[]; openingTempoCommit?: boolean };

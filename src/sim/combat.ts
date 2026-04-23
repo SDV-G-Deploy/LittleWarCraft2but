@@ -6,6 +6,7 @@ import { getResolvedArmor, getResolvedAttackTicks, getResolvedDamage, getResolve
 import { resolveAttackBonus } from '../balance/modifiers';
 import { getDoctrineArmorBonus, getDoctrineRangeBonus } from '../balance/doctrines';
 import { killEntity } from './entities';
+import { isTileBlockedByEntity } from './entities';
 import { findPath } from './pathfinding';
 import { tryAdvancePathWithAvoidance } from './movement';
 
@@ -70,7 +71,134 @@ function distBetweenEntities(attacker: Entity, target: Entity): number {
   return chebyshev(nx, ny, mx, my);
 }
 
+function isTileOccupiedByOtherUnit(state: GameState, entity: Entity, tx: number, ty: number): boolean {
+  return state.entities.some(other =>
+    other.id !== entity.id &&
+    isUnitKind(other.kind) &&
+    other.pos.x === tx &&
+    other.pos.y === ty,
+  );
+}
+
+function collectRingTiles(state: GameState, target: Entity, ringDist: number): { x: number; y: number }[] {
+  const minX = Math.max(0, target.pos.x - ringDist);
+  const maxX = Math.min(MAP_W - 1, target.pos.x + target.tileW - 1 + ringDist);
+  const minY = Math.max(0, target.pos.y - ringDist);
+  const maxY = Math.min(MAP_H - 1, target.pos.y + target.tileH - 1 + ringDist);
+
+  const out: { x: number; y: number }[] = [];
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      if (distToEntity(x, y, target) !== ringDist) continue;
+      if (!state.tiles[y]?.[x]?.passable) continue;
+      if (isTileBlockedByEntity(state, x, y)) continue;
+      out.push({ x, y });
+    }
+  }
+  return out;
+}
+
+function isMeleeAttacker(state: GameState, entity: Entity): boolean {
+  const race = usesRaceProfile(entity.owner) ? state.races[entity.owner] : null;
+  return resolveEntityStats(entity.kind, race).range <= 1;
+}
+
+function tileKey(x: number, y: number): number {
+  return y * MAP_W + x;
+}
+
+function pickAssignedSlot(
+  attacker: Entity,
+  target: Entity,
+  candidates: { x: number; y: number }[],
+  reserved: Set<number>,
+  occupiedByUnit: Map<number, number>,
+): { x: number; y: number } | null {
+  let best: { x: number; y: number } | null = null;
+  let bestScore = Infinity;
+  const preferred = attacker.cmd?.type === 'attack' ? attacker.cmd.contactSlot : undefined;
+
+  for (const c of candidates) {
+    const key = tileKey(c.x, c.y);
+    const unitIdOnTile = occupiedByUnit.get(key);
+    if (unitIdOnTile !== undefined && unitIdOnTile !== attacker.id) continue;
+    if (reserved.has(key)) continue;
+
+    const travelDist = chebyshev(attacker.pos.x, attacker.pos.y, c.x, c.y);
+    const stickyBonus = preferred && preferred.x === c.x && preferred.y === c.y ? -25 : 0;
+    const tie = Math.abs((c.x * 31 + c.y * 17 + attacker.id * 13) % 7);
+    const score = travelDist * 100 + distToEntity(c.x, c.y, target) * 10 + tie + stickyBonus;
+
+    if (!best || score < bestScore) {
+      best = c;
+      bestScore = score;
+    }
+  }
+
+  return best;
+}
+
+let cachedMeleeAssignmentsTick = -1;
+const cachedMeleeAssignmentsByTarget = new Map<number, Map<number, { x: number; y: number }>>();
+
+function computeMeleeApproachAssignments(state: GameState, target: Entity): Map<number, { x: number; y: number }> {
+  if (cachedMeleeAssignmentsTick !== state.tick) {
+    cachedMeleeAssignmentsTick = state.tick;
+    cachedMeleeAssignmentsByTarget.clear();
+  }
+
+  const fromCache = cachedMeleeAssignmentsByTarget.get(target.id);
+  if (fromCache) return fromCache;
+
+  const attackers = state.entities
+    .filter(entity =>
+      isUnitKind(entity.kind) &&
+      entity.cmd?.type === 'attack' &&
+      entity.cmd.targetId === target.id &&
+      isMeleeAttacker(state, entity),
+    )
+    .sort((a, b) => a.id - b.id);
+
+  const contact = collectRingTiles(state, target, 1);
+  const staging = collectRingTiles(state, target, 2);
+  const reserved = new Set<number>();
+  const occupiedByUnit = new Map<number, number>();
+  for (const e of state.entities) {
+    if (!isUnitKind(e.kind)) continue;
+    occupiedByUnit.set(tileKey(e.pos.x, e.pos.y), e.id);
+  }
+
+  const assignments = new Map<number, { x: number; y: number }>();
+  for (const attacker of attackers) {
+    const chosenContact = pickAssignedSlot(attacker, target, contact, reserved, occupiedByUnit);
+    if (chosenContact) {
+      const key = tileKey(chosenContact.x, chosenContact.y);
+      reserved.add(key);
+      assignments.set(attacker.id, chosenContact);
+      if (attacker.cmd?.type === 'attack') attacker.cmd.contactSlot = { ...chosenContact };
+      continue;
+    }
+
+    const chosenStaging = pickAssignedSlot(attacker, target, staging, reserved, occupiedByUnit);
+    if (chosenStaging) {
+      const key = tileKey(chosenStaging.x, chosenStaging.y);
+      reserved.add(key);
+      assignments.set(attacker.id, chosenStaging);
+      if (attacker.cmd?.type === 'attack') attacker.cmd.contactSlot = undefined;
+    }
+  }
+
+  cachedMeleeAssignmentsByTarget.set(target.id, assignments);
+  return assignments;
+}
+
 function pickChaseGoal(state: GameState, attacker: Entity, target: Entity, range: number): { x: number; y: number } {
+  if (range <= 1 && isUnitKind(attacker.kind)) {
+    const assignments = computeMeleeApproachAssignments(state, target);
+    const assigned = assignments.get(attacker.id);
+    if (assigned) return assigned;
+  }
+
   const minX = Math.max(0, target.pos.x - range);
   const maxX = Math.min(MAP_W - 1, target.pos.x + target.tileW - 1 + range);
   const minY = Math.max(0, target.pos.y - range);
@@ -237,6 +365,7 @@ export function processAttack(state: GameState, entity: Entity): void {
 
   const clearAttackState = () => {
     cmd.chasePath = [];
+    cmd.contactSlot = undefined;
   };
 
   const target = getEntity(state, cmd.targetId);
