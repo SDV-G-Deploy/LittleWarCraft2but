@@ -83,9 +83,45 @@ function testMeleeManyVsOneUsesDistinctContactAndStagingSlots(): void {
   assert.equal(claimedKeys.size, 2, 'different attackers must claim different contact slots');
 }
 
+function testRearMeleeHoldsWhenNoFrontlineSlotsAreAvailable(): void {
+  const state = makeState();
+  state.tick = 1;
+
+  const target = spawnEntity(state, 'grunt', 1, { x: 40, y: 40 });
+
+  // Fully surround target so no contact/staging slots exist.
+  for (let y = 38; y <= 42; y++) {
+    for (let x = 38; x <= 42; x++) {
+      if (x === 40 && y === 40) continue;
+      spawnEntity(state, 'wall', 2, { x, y });
+    }
+  }
+
+  const attacker = spawnEntity(state, 'footman', 0, { x: 40, y: 42 });
+  const issued = issueAttackCommand(attacker, target.id, state.tick, state);
+  assert.equal(issued, true);
+
+  const chasePathTicks: number[] = [];
+  const positions: string[] = [];
+
+  for (let i = 0; i < 8; i++) {
+    processCommandPass(state);
+    chasePathTicks.push(attacker.cmd?.type === 'attack' ? attacker.cmd.chasePathTick : -1);
+    positions.push(`${attacker.pos.x},${attacker.pos.y}`);
+    state.tick += 1;
+  }
+
+  assert.deepEqual(new Set(positions), new Set(['40,42']), 'rear melee should hold instead of thrashing into occupied frontline');
+  assert.ok(new Set(chasePathTicks).size <= 2, 'hold mode should avoid per-tick chase retries/churn');
+  assert.equal(attacker.cmd?.type, 'attack');
+  assert.equal(attacker.cmd?.chasePath.length, 0, 'no pointless chase path should be retained while holding');
+  assert.deepEqual(attacker.cmd?.chaseGoal, { x: 40, y: 42 }, 'hold-mode chase goal should stay pinned to current tile');
+}
+
 function run(): void {
   testBlockedChaseRespectsMovementCadence();
   testMeleeManyVsOneUsesDistinctContactAndStagingSlots();
+  testRearMeleeHoldsWhenNoFrontlineSlotsAreAvailable();
   console.log('combat congestion tests passed');
 }
 

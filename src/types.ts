@@ -155,6 +155,7 @@ export type Command =
       chasePath: Vec2[];
       chasePathTick: number;
       chaseStepTick: number;
+      chaseGoal?: Vec2;
       contactSlot?: Vec2;
     }
   | { type: 'gather';  targetId: number; resourceType: 'gold' | 'wood'; phase: 'toresource' | 'gathering' | 'returning'; waitTicks: number }

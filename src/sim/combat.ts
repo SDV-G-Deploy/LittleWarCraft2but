@@ -33,6 +33,7 @@ export function issueAttackCommand(entity: Entity, targetId: number, currentTick
     chasePath: [],
     chasePathTick: currentTick, // align movement cadence to now, not epoch
     chaseStepTick: currentTick,
+    chaseGoal: undefined,
   };
   return true;
 }
@@ -201,6 +202,12 @@ function pickChaseGoal(state: GameState, attacker: Entity, target: Entity, range
     const assignments = computeMeleeApproachAssignments(state, target);
     const assigned = assignments.get(attacker.id);
     if (assigned) return assigned;
+
+    // No contact/staging slot available for this melee attacker right now.
+    // Hold position instead of constantly re-poking occupied frontline tiles.
+    if (distToEntity(attacker.pos.x, attacker.pos.y, target) <= 2) {
+      return { x: attacker.pos.x, y: attacker.pos.y };
+    }
   }
 
   const minX = Math.max(0, target.pos.x - range);
@@ -383,6 +390,7 @@ export function processAttack(state: GameState, entity: Entity): void {
 
   const clearAttackState = () => {
     cmd.chasePath = [];
+    cmd.chaseGoal = undefined;
     cmd.contactSlot = undefined;
   };
 
@@ -458,22 +466,36 @@ export function processAttack(state: GameState, entity: Entity): void {
     const owner = entity.owner as 0 | 1;
     const range = attackerStats.range + (usesRaceProfile(entity.owner) ? getDoctrineRangeBonus(state, owner, entity.kind) : 0);
 
-    if (cmd.chasePath.length === 0 || state.tick - cmd.chasePathTick >= SIM_HZ) {
-      const chaseGoal = pickChaseGoal(state, entity, target, range);
+    const chaseGoal = pickChaseGoal(state, entity, target, range);
+    const isMeleeHold =
+      range <= 1 &&
+      chaseGoal.x === entity.pos.x &&
+      chaseGoal.y === entity.pos.y;
+
+    if (isMeleeHold) {
+      cmd.chasePath = [];
+      cmd.chaseGoal = { ...chaseGoal };
+      cmd.chasePathTick = state.tick;
+      cmd.chaseStepTick = state.tick;
+      return;
+    }
+
+    const goalChanged = !cmd.chaseGoal || cmd.chaseGoal.x !== chaseGoal.x || cmd.chaseGoal.y !== chaseGoal.y;
+    if (goalChanged || state.tick - cmd.chasePathTick >= SIM_HZ) {
       const chasePath = findCombatChasePath(state, entity, chaseGoal);
       cmd.chasePath = chasePath ?? [];
       cmd.chasePathTick = state.tick;
+      cmd.chaseGoal = { ...chaseGoal };
     }
 
     if (cmd.chasePath.length > 0) {
       const tryRepath = (): { x: number; y: number }[] | null => {
-        const chaseGoal = pickChaseGoal(state, entity, target, range);
         const chasePath = findCombatChasePath(state, entity, chaseGoal);
         cmd.chasePathTick = state.tick;
+        cmd.chaseGoal = { ...chaseGoal };
         return chasePath;
       };
 
-      const chaseGoal = pickChaseGoal(state, entity, target, range);
       const stepResult = tryAdvancePathWithAvoidance(
         state,
         entity,
