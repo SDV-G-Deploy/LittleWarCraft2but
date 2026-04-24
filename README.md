@@ -264,6 +264,7 @@ Supported Vite env vars:
 - `VITE_PEER_SECURE`
 - `VITE_ICE_SERVERS` as a JSON array string
 - `VITE_WS_RELAY_URL` (manual WS relay transport endpoint)
+- `VITE_MWC_WS_URL` (MultiWebCore websocket endpoint)
 
 Runtime ICE override:
 - client first tries `GET /api/ice`
@@ -282,9 +283,11 @@ Online menu now supports two runtime test modes:
 Online menu also supports manual transport selection:
 - `PEERJS` keeps existing WebRTC data-channel behavior
 - `WS RELAY` uses a websocket relay path (`VITE_WS_RELAY_URL`)
+- `MWC` routes LW2B wire payloads through MultiWebCore tick commit flow (`VITE_MWC_WS_URL`)
 
 Share links preserve the selected mode via `?mode=public` when needed.
 Relay links preserve transport selection via `?transport=ws-relay`.
+MultiWebCore links preserve transport selection via `?transport=mwc`.
 Room-code input is normalized before join, so copied codes/URLs with accidental surrounding whitespace do not cause avoidable guest connect failures.
 
 Examples:

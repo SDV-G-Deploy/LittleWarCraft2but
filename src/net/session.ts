@@ -13,6 +13,7 @@ import {
 } from './session-core';
 import { wirePeerJsTransport } from './transports/peerjs-transport';
 import { wireWsRelayTransport } from './transports/ws-relay-transport';
+import { wireMwcTransport } from './transports/mwc-transport';
 
 export type { SessionStatus, SessionConfig, SessionStats, TickExchange, NetMode, NetSession, TransportMode } from './session-core';
 
@@ -41,13 +42,20 @@ export async function createSession(
       core,
       session: core.session,
     })
-    : await wirePeerJsTransport({
-      role,
-      hostCode,
-      netMode,
-      core,
-      session: core.session,
-    });
+    : transportMode === 'mwc'
+      ? await wireMwcTransport({
+        role,
+        hostCode,
+        core,
+        session: core.session,
+      })
+      : await wirePeerJsTransport({
+        role,
+        hostCode,
+        netMode,
+        core,
+        session: core.session,
+      });
 
   const originalDestroy = core.session.destroy;
   core.session.destroy = () => {

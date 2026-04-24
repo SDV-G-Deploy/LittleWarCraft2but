@@ -158,7 +158,7 @@ export function runMenu(
   if (urlMode === 'public' || urlMode === 'selfhost') {
     ms.netMode = urlMode;
   }
-  if (urlTransport === 'ws-relay' || urlTransport === 'peerjs') {
+  if (urlTransport === 'ws-relay' || urlTransport === 'peerjs' || urlTransport === 'mwc') {
     ms.transportMode = urlTransport;
   }
   if (urlRoom) {
@@ -967,6 +967,7 @@ export function runMenu(
     const transportDefs: Array<{ mode: TransportMode; label: string; accent: string }> = [
       { mode: 'peerjs', label: t('transport_peerjs'), accent: '#88bbff' },
       { mode: 'ws-relay', label: t('transport_ws_relay'), accent: '#ffbb66' },
+      { mode: 'mwc', label: t('transport_mwc'), accent: '#44ddaa' },
     ];
     for (let i = 0; i < transportDefs.length; i++) {
       const def = transportDefs[i];
@@ -988,9 +989,11 @@ export function runMenu(
     ctx.font = '10px monospace';
     const modeHint = ms.transportMode === 'ws-relay'
       ? t('transport_hint_ws_relay')
-      : ms.netMode === 'selfhost'
-        ? t('mode_hint_server')
-        : t('mode_hint_direct');
+      : ms.transportMode === 'mwc'
+        ? t('transport_hint_mwc')
+        : ms.netMode === 'selfhost'
+          ? t('mode_hint_server')
+          : t('mode_hint_direct');
     ctx.fillText(modeHint, cx, cy - 50);
 
     // ── HOST panel ─────────────────────────────────────────────────────────────

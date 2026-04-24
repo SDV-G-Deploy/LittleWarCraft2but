@@ -61,7 +61,7 @@ interface FriendlyError {
 }
 
 export type NetMode = 'public' | 'selfhost';
-export type TransportMode = 'peerjs' | 'ws-relay';
+export type TransportMode = 'peerjs' | 'ws-relay' | 'mwc';
 
 const VALID_RACES = new Set<Race>(['human', 'orc']);
 const VALID_MAP_IDS = new Set<MapId>([1, 2, 3, 4, 5, 6]);
