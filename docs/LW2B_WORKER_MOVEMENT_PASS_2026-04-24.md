@@ -106,12 +106,36 @@ What it explicitly does **not** do:
 
 That remaining work, if needed, should stay narrow and scenario-driven.
 
-## Next-step note
+## Updated design direction after live-like townhall scenario review
 
-The next useful validation is **not** a broad rewrite.
-The next useful validation is a more live-like reproduction around townhall worker traffic lanes.
+For the next worker-traffic pass, the preferred simplification is now stronger than the current implemented behavior:
+- Human `worker` and Orc `peon` should be treated as **transparent worker traffic actors**
+- workers should be able to pass through other workers
+- workers should also be able to pass through other units when needed to preserve economy flow
+
+This should be understood as a **worker-domain exception**, not as a global movement rule.
+It stays doctrine-compatible because the goal is gameplay robustness, not collision realism.
+
+Why this direction now looks correct:
+- the main pain point is not abstract path optimality but visible congestion near townhall return lanes and base interiors
+- live-like economy traffic around townhall creates repeated mixed-unit interference that narrow swap/spread heuristics only partially soften
+- workers are utility actors, so readability cost from fake collision is lower than the gameplay cost of stalled harvesting and deposit loops
+- symmetrical handling for both factions is cleaner than race- or state-specific worker traffic exceptions
+
+Practical framing for the next pass:
+- treat worker / peon movement as throughput-first
+- prefer guaranteed economy continuity over collision purity
+- keep this logic local to worker travel, return, gather, and build movement
+- do not reinterpret it as a reason to make combat units transparent
+
+## Updated next-step note
+
+The next useful validation is still **not** a broad rewrite.
+But the next scenario-driven pass should now be evaluated against a clearer target:
+- a more live-like reproduction around townhall worker traffic lanes
+- with the working assumption that workers may need full transparent traversal through mixed base traffic
 
 Planned handling:
-- do that in a separate `/new` work thread
-- evaluate from repo + docs again
-- add only a narrow scenario test if it matches a real observed behavior
+- validate whether transparent-worker rules can replace part of the current narrow swap/approach heuristics instead of adding more local exceptions
+- keep the change worker-only and doctrine-local
+- add only narrow scenario tests that represent real base-economy congestion

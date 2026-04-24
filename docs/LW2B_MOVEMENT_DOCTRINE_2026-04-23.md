@@ -55,16 +55,18 @@ Slightly fake movement is acceptable if it improves RTS play.
 Workers should be treated as a **forgiving movement domain**, not as full participants in strict combat-style congestion logic.
 
 Accepted worker-specific behavior includes:
-- worker-worker soft pass-through / swap,
+- worker-worker soft or full pass-through,
 - worker sidestep bias,
 - worker yield-through around allied stationary combat units,
+- worker transparency through other units when needed to preserve economy flow,
 - permissive reroute behavior.
 
 Worker movement should optimize for:
 - continuity,
 - throughput,
 - anti-deadlock behavior,
-- low economic stall risk.
+- low economic stall risk,
+- low townhall/base-lane congestion sensitivity.
 
 Do **not** optimize worker movement primarily for realism.
 
@@ -163,7 +165,8 @@ A movement change is usually good if it:
 - preserves or improves determinism,
 - keeps workers from stalling the economy,
 - improves combat readability,
-- avoids architecture-wide coupling.
+- avoids architecture-wide coupling,
+- simplifies worker traffic policy instead of layering more fragile exceptions.
 
 A movement change is suspicious if it:
 - introduces new generalized movement state for all domains,
@@ -179,7 +182,7 @@ As of 2026-04-23, the preferred direction is:
 
 - keep **combat movement** as the main area for advanced pathing work,
 - keep **plain move** deterministic and moderate,
-- keep **workers** permissive and economy-first,
+- keep **workers** permissive, economy-first, and allowed to become fully transparent if that best preserves flow,
 - avoid reintroducing a single universal movement core.
 
 ---

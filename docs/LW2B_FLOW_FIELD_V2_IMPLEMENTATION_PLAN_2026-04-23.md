@@ -247,7 +247,9 @@ Stop letting each moving unit independently discover conflicts too late.
 4. Second pass:
    - winners move
    - losers wait or sidestep deterministically
-5. Keep worker swap support as a separate rule, not global behavior.
+5. Keep worker-domain permissive traffic as a separate rule, not global behavior.
+
+This can include full worker transparency in economy scenarios if that proves cleaner than extending swap-only heuristics.
 
 ### Acceptance
 - reduced “walk into same tile then react” jitter
@@ -285,7 +287,7 @@ Move attack chase off repeated raw A* where possible.
 ## Phase 5, worker travel migration
 
 ### Goal
-Bring workers onto the new nav system carefully.
+Bring workers onto the new nav system carefully, while keeping open the simpler fallback that workers may remain a largely transparent traffic class.
 
 ### Files
 - `src/sim/economy.ts`
@@ -296,13 +298,15 @@ Bring workers onto the new nav system carefully.
    - gather `returning`
    - build `moving`
 2. Keep resource and build FSM phases unchanged.
-3. Preserve worker-specific ally swap behavior.
-4. Keep point A* fallback for special approach tiles around mines/trees/build sites.
+3. Preserve worker-specific permissive traffic behavior.
+4. Prefer simpler transparent-worker rules over accumulating special-case swap logic if live testing shows that is cleaner.
+5. Keep point A* fallback for special approach tiles around mines/trees/build sites.
 
 ### Acceptance
 - `worker-traffic.test.ts` still passes
 - no regressions in gather/build completion
 - worker deadlocks not worse than baseline
+- townhall return lanes behave better in live-like mixed-unit traffic
 
 ---
 
@@ -425,6 +429,7 @@ This is a good place to stay conservative. Combat is more fragile than plain mov
 - still permit exact A* for the final approach tile
 
 The worker system already has special traffic behavior. Do not flatten it into generic unit logic.
+If needed, simplify it further by making workers transparent instead of adding more layered local collision exceptions.
 
 ---
 
@@ -467,7 +472,8 @@ This matters because the whole point is reducing pathfinding pressure and visibl
 2. 20+ units through a 1-2 tile choke
 3. melee surround on moving target
 4. two worker streams crossing each other near a townhall
-5. replayed identical command stream yields identical hash/checksum
+5. workers returning to townhall through mixed worker + combat-unit base traffic under transparent-worker rules
+6. replayed identical command stream yields identical hash/checksum
 
 ---
 
@@ -496,6 +502,7 @@ That means in practice:
 - use flow-field improvements mainly for plain move and combat,
 - do not use this plan as a reason to re-unify worker traffic with combat movement,
 - prefer worker-specific permissive fixes over worker realism,
+- prefer simpler transparent-worker behavior over layered exception trees when both solve the same economy issue,
 - reject abstractions that require many policy flags just to preserve worker behavior.
 
 ## Recommended first commit sequence
@@ -548,4 +555,5 @@ What this means for the plan:
 
 Practical consequence:
 - worker congestion can continue to receive narrow doctrine-compatible fixes
+- one valid next worker fix is to make worker/peon traffic fully transparent in economy scenarios if live-like testing supports it
 - but the main structural nav work is still `move` first, `combat` second, workers later and carefully
