@@ -1,5 +1,8 @@
 # LW2B Helsinki realtime status (2026-04-22)
 
+> Historical note (2026-04-24): this report captures an earlier `rts.kislota.today` phase.
+> Current canonical production setup is documented in `README.md` and `NETWORK_ARCHITECTURE.md` and uses same-origin `w2.kislota.today` paths (including `/mwc`).
+
 ## Purpose
 
 This note captures the currently verified state of the new **Hetzner Helsinki realtime backend** used for LW2B multiplayer accessibility work.

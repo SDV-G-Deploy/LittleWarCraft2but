@@ -18,10 +18,10 @@ This should be treated as a layered reachability/product problem, not as a singl
 - current movement state is improved versus the broken refactor, but plain unit traffic is still an active gameplay-quality concern and should be treated as unfinished rather than solved
 
 ### Live realtime infra
-- Helsinki realtime host is live and documented
-- `rts.kislota.today` serves the realtime stack
-- `nginx`, `peerjs`, `coturn`, and `ice-api` are live
-- floating IP and TURN/TLS on `443` are configured and documented
+- production canonical origin is `w2.kislota.today`
+- same-origin realtime paths are expected for `/peerjs`, `/api/ice`, `/ws-relay`, and `/mwc`
+- `nginx`, `peerjs`, `coturn`, `ice-api`, and MultiWebCore transport are live in that stack
+- TURN/TLS on `443` remains part of the live baseline
 
 ### Active product/network risk
 The current open problem is best split into separate layers:

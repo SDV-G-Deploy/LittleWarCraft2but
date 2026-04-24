@@ -2,6 +2,14 @@
 
 This note exists to keep live LW2B multiplayer validation focused after the April 2026 desync fix sequence.
 
+## Canonical deployment note (2026-04-24)
+
+Current production baseline is same-origin on `w2.kislota.today`.
+Treat older split-origin guidance in this file as historical context.
+For authoritative architecture and operator defaults, follow:
+- `README.md`
+- `NETWORK_ARCHITECTURE.md`
+
 ## What was just verified
 
 Verified in a live `SERVER` mode test:
@@ -151,13 +159,12 @@ Next validation steps for this topic:
 - explicitly verify CORS/origin behavior for the real frontend origin against both `/api/ice` and `/peerjs`
 - verify that the new Helsinki backend accepts the intended frontend origin and does not silently retain old same-origin assumptions from `w2.kislota.today`
 
-## Current pre-live checklist after Helsinki backend switch
+## Current pre-live checklist for canonical same-origin stack
 
 Before interpreting the next live results, confirm these points:
-1. `rts.kislota.today/api/ice` responds correctly for the real frontend origin
-2. `rts.kislota.today/peerjs/id` works and websocket upgrade path is still correct
-3. client build really uses:
-   - `VITE_PEER_HOST=rts.kislota.today`
-   - explicit `VITE_ICE_API_URL=https://rts.kislota.today/api/ice`
-4. runtime ICE config no longer depends on Google STUN for the self-host path
-5. if a new failure appears, capture the exact PeerJS / ICE wording before changing infra again
+1. `https://w2.kislota.today/` loads and reaches the main menu
+2. `https://w2.kislota.today/peerjs/id` works and websocket upgrade path is correct
+3. `https://w2.kislota.today/api/ice` responds correctly for the real frontend origin
+4. `wss://w2.kislota.today/mwc` accepts room create/join traffic for MWC mode
+5. client defaults and deploy wiring target `w2.kislota.today` (`/peerjs`, `/api/ice`, `/ws-relay`, `/mwc`)
+6. if a new failure appears, capture exact PeerJS / ICE / MWC wording before changing infra again

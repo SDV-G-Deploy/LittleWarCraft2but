@@ -370,7 +370,7 @@ That will make network behavior much clearer to users.
 ## Environment/config additions
 Likely new client env:
 ```env
-VITE_WS_RELAY_URL=wss://rts.kislota.today/ws-relay
+VITE_WS_RELAY_URL=wss://w2.kislota.today/ws-relay
 ```
 
 Existing PeerJS env can stay separate:
