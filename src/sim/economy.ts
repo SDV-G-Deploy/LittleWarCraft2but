@@ -82,6 +82,8 @@ type EntityWithCache = Entity & {
   _gatherPath?: Vec2[];
   _gatherTarget?: Vec2;
   _gatherReturnTarget?: Vec2;
+  _gatherReturnNoProgressStreak?: number;
+  _gatherReturnLastPos?: Vec2;
   _buildPath?:  Vec2[];
   _buildApproachTarget?: Vec2;
 };
@@ -266,6 +268,8 @@ export function processGather(state: GameState, entity: Entity): void {
     ec._gatherPath = undefined;
     ec._gatherTarget = undefined;
     ec._gatherReturnTarget = undefined;
+    ec._gatherReturnNoProgressStreak = undefined;
+    ec._gatherReturnLastPos = undefined;
   };
 
   const lastTargetId = cmd.targetId;
@@ -419,9 +423,18 @@ export function processGather(state: GameState, entity: Entity): void {
             if (raw.length === 0 && reservedPenalty === 0) break;
           }
         }
+        if (!bestReturn) {
+          ec._gatherReturnTarget = undefined;
+          ec._gatherPath = undefined;
+          ec._gatherReturnNoProgressStreak = (ec._gatherReturnNoProgressStreak ?? 0) + 1;
+          recordWorkerBlockedTick();
+          return;
+        }
 
-        ec._gatherReturnTarget = bestReturn?.target ?? { x: dropoff.pos.x + Math.floor(dropoff.tileW / 2), y: dropoff.pos.y + dropoff.tileH };
-        ec._gatherPath = bestReturn?.path ?? [];
+        ec._gatherReturnTarget = bestReturn.target;
+        ec._gatherPath = bestReturn.path;
+        ec._gatherReturnLastPos = { x: entity.pos.x, y: entity.pos.y };
+        ec._gatherReturnNoProgressStreak = 0;
       }
       if (ec._gatherPath.length === 0) {
         const owner = entity.owner as 0 | 1;
@@ -478,9 +491,26 @@ export function processGather(state: GameState, entity: Entity): void {
       cmd.waitTicks = state.tick;
       if (stepResult === 'blocked') {
         recordWorkerBlockedTick();
+        ec._gatherReturnNoProgressStreak = (ec._gatherReturnNoProgressStreak ?? 0) + 1;
+        if ((ec._gatherReturnNoProgressStreak ?? 0) >= 2) {
+          ec._gatherPath = undefined;
+          ec._gatherReturnTarget = undefined;
+        }
         return;
       }
-      if (stepResult === 'repathed') return;
+      if (stepResult === 'repathed') {
+        const lastPos = ec._gatherReturnLastPos;
+        const noProgress = !lastPos || (lastPos.x === entity.pos.x && lastPos.y === entity.pos.y);
+        ec._gatherReturnNoProgressStreak = noProgress ? (ec._gatherReturnNoProgressStreak ?? 0) + 1 : 0;
+        ec._gatherReturnLastPos = { x: entity.pos.x, y: entity.pos.y };
+        if ((ec._gatherReturnNoProgressStreak ?? 0) >= 4) {
+          ec._gatherPath = undefined;
+          ec._gatherReturnTarget = undefined;
+        }
+        return;
+      }
+      ec._gatherReturnNoProgressStreak = 0;
+      ec._gatherReturnLastPos = { x: entity.pos.x, y: entity.pos.y };
       break;
     }
   }

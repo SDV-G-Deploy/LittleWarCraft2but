@@ -127,10 +127,78 @@ function testBuildMovementWorkerPassesThroughTownhallLaneTraffic(): void {
   assert.deepEqual(enemyBlocker.pos, { x: 21, y: 20 }, 'blocking traffic should not be displaced during build travel pass-through');
 }
 
+function testReturningWorkerClearsStickyReturnTargetAfterRepeatedStaticBlock(): void {
+  const state = makeState();
+  spawnEntity(state, 'townhall', 0, { x: 10, y: 10 });
+  const mine = spawnEntity(state, 'goldmine', 2, { x: 30, y: 30 });
+  mine.goldReserve = 1000;
+  const worker = spawnEntity(state, 'worker', 0, { x: 14, y: 12 });
+
+  worker.carryGold = 10;
+  worker.cmd = {
+    type: 'gather',
+    targetId: mine.id,
+    resourceType: 'gold',
+    phase: 'returning',
+    waitTicks: 0,
+  };
+
+  const workerCache = worker as Entity & {
+    _gatherPath?: { x: number; y: number }[];
+    _gatherReturnTarget?: { x: number; y: number };
+    _gatherReturnNoProgressStreak?: number;
+  };
+
+  workerCache._gatherPath = [{ x: 13, y: 12 }, { x: 12, y: 12 }];
+  workerCache._gatherReturnTarget = { x: 12, y: 12 };
+
+  spawnEntity(state, 'construction', 0, { x: 13, y: 12 });
+  state.tick = 999;
+  processGather(state, worker);
+  state.tick += 999;
+  processGather(state, worker);
+
+  assert.equal(workerCache._gatherPath, undefined, 'repeated static return blockage should clear stale return path');
+  assert.equal(workerCache._gatherReturnTarget, undefined, 'repeated static return blockage should clear stale return target');
+}
+
+function testReturningWorkerDoesNotDepositWhenNoDropoffRouteExists(): void {
+  const state = makeState();
+  spawnEntity(state, 'townhall', 0, { x: 10, y: 10 });
+  const mine = spawnEntity(state, 'goldmine', 2, { x: 30, y: 30 });
+  mine.goldReserve = 1000;
+  const worker = spawnEntity(state, 'worker', 0, { x: 20, y: 20 });
+
+  spawnEntity(state, 'construction', 0, { x: 19, y: 20 });
+  spawnEntity(state, 'construction', 0, { x: 21, y: 20 });
+  spawnEntity(state, 'construction', 0, { x: 20, y: 19 });
+  spawnEntity(state, 'construction', 0, { x: 20, y: 21 });
+
+  state.gold[0] = 0;
+  worker.carryGold = 10;
+  worker.cmd = {
+    type: 'gather',
+    targetId: mine.id,
+    resourceType: 'gold',
+    phase: 'returning',
+    waitTicks: 0,
+  };
+
+  state.tick = 999;
+  processGather(state, worker);
+
+  assert.equal(state.gold[0], 0, 'worker must not deposit while physically unable to route to any dropoff-adjacent tile');
+  assert.equal(worker.carryGold, 10, 'worker should keep carried resource while no route exists');
+  assert.equal(worker.cmd?.type, 'gather', 'worker should keep gather command and retry later');
+  assert.equal(worker.cmd?.phase, 'returning', 'worker should stay in returning phase while waiting for route');
+}
+
 function run(): void {
   testReturningWorkerPassesThroughMixedTrafficNearTownhall();
   testGatherTravelWorkerPassesThroughEnemyAndAlliedUnits();
   testBuildMovementWorkerPassesThroughTownhallLaneTraffic();
+  testReturningWorkerClearsStickyReturnTargetAfterRepeatedStaticBlock();
+  testReturningWorkerDoesNotDepositWhenNoDropoffRouteExists();
   console.log('worker traffic tests passed');
 }
 
