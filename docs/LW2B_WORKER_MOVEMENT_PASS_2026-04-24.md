@@ -1,7 +1,7 @@
 # LW2B Worker Movement Pass (2026-04-24)
 
 Status: updated with transparent-through-units worker travel contract pass
-Commit: `86d0cea` (original pass), follow-up commit updates worker gather/build travel semantics
+Commit: `86d0cea` (original pass), follow-up implemented in `5fea663`
 
 Related doctrine:
 - `docs/LW2B_MOVEMENT_DOCTRINE_2026-04-23.md`
@@ -93,7 +93,7 @@ Validated before push with:
 - full `npm test`
 
 Result:
-- all green at commit `86d0cea`
+- all green for the transparent-worker follow-up in commit `5fea663`
 
 ## Important limit / honest risk
 
@@ -132,25 +132,21 @@ Why this direction now looks correct:
 - workers are utility actors, so readability cost from fake collision is lower than the gameplay cost of stalled harvesting and deposit loops
 - symmetrical handling for both factions is cleaner than race- or state-specific worker traffic exceptions
 
-Practical framing for the next pass:
+Practical framing for the implemented pass:
 - treat worker / peon movement as throughput-first
 - prefer guaranteed economy continuity over collision purity
 - keep this logic local to worker travel, return, gather, and build movement
 - do not reinterpret it as a reason to make combat units transparent
 
+Implemented conclusion:
+- transparent/permissive worker travel is now the default gather/build rule,
+- worker-vs-worker and worker-vs-mixed-unit traffic is simplified by letting workers traverse unit traffic directly,
+- allied stationary combat units are not treated as shove candidates for economy traffic.
+
 ## Updated next-step note
 
-The next useful validation is still **not** a broad rewrite.
-But the next scenario-driven pass should now be evaluated against a clearer target:
-- a more live-like reproduction around townhall worker traffic lanes
-- with the working assumption that workers may need full transparent traversal through mixed base traffic
-
-Planned handling:
-- validate whether transparent-worker rules can replace part of the current narrow swap/approach heuristics instead of adding more local exceptions
-- keep the change worker-only and doctrine-local
-- add only narrow scenario tests that represent real base-economy congestion
-
-Refined redesign conclusion:
-- transparent/permissive worker travel should likely become the default gather/build rule rather than a secondary fallback,
-- worker-vs-worker and worker-vs-mixed-unit traffic should be simplified rather than patched with more displacement edge handling,
-- allied stationary combat units should not be treated as shove candidates for economy traffic.
+The next useful step is still **not** a broad rewrite.
+After this worker-domain fix, the recommended follow-up is:
+- narrow movement boundary cleanup in shared helpers,
+- then combat stabilization for rear-line thrash and frontline slot discipline,
+- while preserving the worker transparent-through-units contract as a hard architectural rule.
