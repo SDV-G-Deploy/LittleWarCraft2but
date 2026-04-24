@@ -29,7 +29,7 @@ Instead of rewriting gameplay or lockstep internals, this spike adds a third tra
 ## Env/config
 
 - New optional env for LW2B client: `VITE_MWC_WS_URL`
-  - default fallback: `ws://localhost:8788` (or `wss://<host>:8788` from browser origin)
+  - default fallback: same-origin `/mwc` (`ws://localhost:8787/mwc` without browser origin, or `wss://<host>/mwc` from browser origin)
 
 ## Current status of the spike
 

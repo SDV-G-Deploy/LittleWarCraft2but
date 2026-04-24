@@ -25,9 +25,9 @@ function makeId(prefix: string): string {
 function getRuntimeMwcUrl(): string {
   const configured = (import.meta.env.VITE_MWC_WS_URL as string | undefined)?.trim();
   if (configured) return configured;
-  if (typeof window === 'undefined') return 'ws://localhost:8788';
+  if (typeof window === 'undefined') return 'ws://localhost:8787/mwc';
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${proto}//${window.location.hostname}:8788`;
+  return `${proto}//${window.location.host}/mwc`;
 }
 
 function isTickWireMessage(msg: WireMessage): msg is Extract<WireMessage, { tick: number; cmds: unknown[] }> {

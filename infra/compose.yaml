@@ -25,6 +25,7 @@ services:
     restart: unless-stopped
     depends_on:
       - peerjs
+      - mwc
     ports:
       - "80:80"
       - "443:443"
@@ -103,3 +104,24 @@ services:
       - "8082"
     volumes:
       - ..:/app:ro
+
+  mwc:
+    build:
+      context: ../../MultiWebCore
+      dockerfile: Dockerfile
+    container_name: lwc2-mwc
+    restart: unless-stopped
+    environment:
+      MWC_HOST: 0.0.0.0
+      MWC_PORT: 8787
+      MWC_SERVER_NAME: multiwebcore-w2
+      MWC_SERVER_VERSION: 0.1.0
+      MWC_DEFAULT_SIM_RATE_HZ: 20
+      MWC_DEFAULT_INPUT_LEAD_TICKS: 2
+      MWC_DEFAULT_MIN_PLAYERS: 2
+      MWC_REPLAY_HISTORY_SIZE: 128
+      MWC_RECONNECT_WINDOW_MS: 20000
+      MWC_RESUME_LIVE_MAX_GAP_TICKS: 2
+      MWC_HEARTBEAT_MS: 10000
+    expose:
+      - "8787"

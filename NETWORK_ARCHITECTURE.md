@@ -24,10 +24,11 @@ This is important because it means connectivity issues can be addressed by movin
 Public entry point:
 - `https://w2.kislota.today/`
 
-That public origin currently fronts three roles:
+That public origin currently fronts multiplayer roles:
 1. game client entry point (`/`)
 2. PeerJS signaling endpoint (`/peerjs`)
 3. runtime ICE config endpoint (`/api/ice`)
+4. MultiWebCore websocket endpoint (`/mwc`)
 
 TURN relay is also part of the same production networking stack.
 
@@ -280,40 +281,25 @@ Interpretation:
 - the initial fail-closed startup regression was introduced by a too-rigid first guardrail and was then corrected
 - the current online path is materially healthier than the pre-fix state and is suitable for the next round of live tests
 
-## Online infra update, under consideration
+## Canonical deployment policy
 
-After the April 2026 live tests, the working hypothesis changed in an important way.
+Current production policy is now explicit:
+- `https://w2.kislota.today` is the canonical online origin
+- realtime multiplayer should resolve on the same origin over 443
+- MultiWebCore is exposed as same-origin websocket endpoint: `wss://w2.kislota.today/mwc`
+- GitHub Pages is secondary/fallback static hosting, not the primary multiplayer surface
 
-What the successful test appears to show:
-- frontend served from GitHub Pages worked for a Russia-side player
-- `SERVER` mode still worked against the existing self-hosted backend
-- room creation/join and in-match sync were viable in that split setup
+Implications:
+- public player docs and defaults should point to `w2.kislota.today`
+- nginx should route `/mwc` to the MultiWebCore runtime in the same production stack as `/peerjs` and `/api/ice`
+- LW2B `VITE_MWC_WS_URL` defaults should target `wss://w2.kislota.today/mwc`
 
-Current working interpretation:
-- the existing PeerJS/TURN/self-hosted backend path on Hetzner is not fundamentally broken
-- the more likely weak point for Russia access is the player-facing frontend origin `w2.kislota.today`, or something tightly coupled to its reachability path
-- in practice, `GitHub Pages frontend + existing Hetzner networking backend` currently looks like a viable low-effort hobby/demo deployment shape
+## Immediate operational focus
 
-Important caution:
-- this does **not** prove with 100% certainty that only the domain name itself was the issue
-- it may still involve DNS, routing, TLS, domain reputation, or other reachability factors around the public entry origin
-- however, it strongly suggests the multiplayer backend should not be treated as the primary failed component
-
-Practical conclusion for now:
-- keep the current backend shape as-is
-- treat alternate frontend hosting as the lowest-effort compatibility lever
-- do not rush into a larger networking rewrite while the current hobby/demo setup is now demonstrably usable
-
-This update is intentionally marked **under consideration** rather than final architecture policy.
-It should be revisited only if later live tests contradict it or if the project graduates from hobby/demo constraints.
-
-## Immediate next implementation target
-
-If this turns into execution work, the next technical step should be:
-1. deploy a second networking stack outside Hetzner
-2. parameterize multiple backend endpoints in runtime config
-3. add endpoint selection or fallback in the client
-4. validate room creation/join, direct connect, and TURN relay from Russia
+1. keep same-origin paths healthy (`/`, `/peerjs`, `/api/ice`, `/ws-relay`, `/mwc`)
+2. keep GitHub Pages as an emergency mirror/fallback only
+3. validate room create/join and in-match sync through `wss://w2.kislota.today/mwc`
+4. continue TURN/ICE validation for hard NAT cases
 
 ## Non-goals for this document
 

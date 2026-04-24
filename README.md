@@ -246,10 +246,11 @@ npm run balance:report
 The canonical public entry point for the game is:
 - `https://w2.kislota.today/`
 
-Architecturally, `w2.kislota.today` is not just a static page host. It is the single public origin that fronts three roles:
+Architecturally, `w2.kislota.today` is not just a static page host. It is the single public origin that fronts multiplayer roles:
 - game client entry point (`/`)
 - PeerJS signaling endpoint (`/peerjs`)
 - runtime ICE config endpoint (`/api/ice`)
+- MultiWebCore websocket endpoint (`/mwc`)
 
 That same-origin shape matters because multiplayer should resolve through one stable public origin, while nginx routes traffic internally to the right service.
 
@@ -268,7 +269,7 @@ Supported Vite env vars:
 
 GitHub Pages deploy workflow wiring:
 - `.github/workflows/deploy.yml` now forwards `VITE_WS_RELAY_URL` and `VITE_MWC_WS_URL` into the Vite build
-- value precedence is `secrets.*` -> `vars.*` -> built-in defaults (`wss://rts.kislota.today/ws-relay` and `wss://rts.kislota.today/mwc`)
+- value precedence is `secrets.*` -> `vars.*` -> built-in defaults (`wss://w2.kislota.today/ws-relay` and `wss://w2.kislota.today/mwc`)
 
 Runtime ICE override:
 - client first tries `GET /api/ice`
@@ -375,7 +376,7 @@ Determinism note:
 
 ## Network architecture documentation
 
-For the current multiplayer architecture, deployment coupling, the April 2026 live desync incident/fix, and the current online infra update under consideration for Russia-facing access, see:
+For the current multiplayer architecture, deployment coupling, the April 2026 live desync incident/fix, and the current canonical same-origin deployment policy (`w2.kislota.today` + `/mwc`), see:
 - [NETWORK_ARCHITECTURE.md](./NETWORK_ARCHITECTURE.md)
 
 ## Roadmap
