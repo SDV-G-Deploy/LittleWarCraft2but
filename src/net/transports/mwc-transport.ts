@@ -23,7 +23,13 @@ function makeId(prefix: string): string {
 }
 
 function getRuntimeMwcUrl(): string {
-  const configured = (import.meta.env.VITE_MWC_WS_URL as string | undefined)?.trim();
+  const importMetaEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+  const fromVite = importMetaEnv?.VITE_MWC_WS_URL?.trim();
+  const fromProcess = typeof process !== 'undefined' ? process.env.VITE_MWC_WS_URL?.trim() : undefined;
+  const fromGlobal = typeof globalThis !== 'undefined'
+    ? (globalThis as { __LW2B_MWC_WS_URL?: string }).__LW2B_MWC_WS_URL?.trim()
+    : undefined;
+  const configured = fromVite || fromProcess || fromGlobal;
   if (configured) return configured;
   if (typeof window === 'undefined') return 'ws://localhost:8787/mwc';
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -56,11 +62,26 @@ export async function wireMwcTransport(params: {
   let inputLeadTicks = 2;
   let nextTargetTick = 0;
   let openToCore = false;
+  let phase:
+    | 'connecting'
+    | 'hello_sent'
+    | 'welcomed'
+    | 'room_created'
+    | 'room_joined'
+    | 'match_assigned'
+    | 'match_started' = 'connecting';
+
+  function setPhase(next: typeof phase, statusMsg?: string): void {
+    phase = next;
+    if (statusMsg) {
+      session.statusMsg = statusMsg;
+      session.onStatusChange?.();
+    }
+  }
 
   function markConnecting(): void {
     session.status = 'connecting';
-    session.statusMsg = role === 'host' ? 'Connecting to MultiWebCore…' : 'Joining MultiWebCore room…';
-    session.onStatusChange?.();
+    setPhase('connecting', role === 'host' ? 'Connecting to MultiWebCore…' : 'Joining MultiWebCore room…');
   }
 
   function submitWireMessage(wire: WireMessage): void {
@@ -97,6 +118,7 @@ export async function wireMwcTransport(params: {
   markConnecting();
 
   ws.addEventListener('open', () => {
+    setPhase('hello_sent');
     sendEnvelope(ws, {
       v: '0',
       type: 'conn.hello',
@@ -130,6 +152,7 @@ export async function wireMwcTransport(params: {
         return;
       }
       sessionId = incomingSessionId;
+      setPhase('welcomed');
       if (role === 'host') {
         sendEnvelope(ws, {
           v: '0',
@@ -175,8 +198,7 @@ export async function wireMwcTransport(params: {
         roomId = incomingRoomId;
         session.code = incomingRoomId;
         session.status = 'waiting';
-        session.statusMsg = `Room code: ${incomingRoomId}`;
-        session.onStatusChange?.();
+        setPhase('room_created', `Room code: ${incomingRoomId}`);
       }
       sendEnvelope(ws, {
         v: '0',
@@ -193,6 +215,7 @@ export async function wireMwcTransport(params: {
     if (msg.type === 'room.joined') {
       const incomingRoomId = msg.payload.roomId;
       if (typeof incomingRoomId === 'string') roomId = incomingRoomId;
+      setPhase('room_joined', 'Joined room, waiting for match start…');
       sendEnvelope(ws, {
         v: '0',
         type: 'room.readySet',
@@ -208,14 +231,28 @@ export async function wireMwcTransport(params: {
     if (msg.type === 'match.assigned') {
       if (typeof msg.payload.matchId === 'string') matchId = msg.payload.matchId;
       if (typeof msg.payload.playerId === 'string') playerId = msg.payload.playerId;
-      if (typeof msg.payload.inputLeadTicks === 'number' && Number.isFinite(msg.payload.inputLeadTicks)) {
-        inputLeadTicks = Math.max(1, Math.floor(msg.payload.inputLeadTicks));
+      const cfg = msg.payload.matchConfig;
+      if (cfg && typeof cfg === 'object') {
+        const cfgLead = (cfg as { inputLeadTicks?: unknown }).inputLeadTicks;
+        if (typeof cfgLead === 'number' && Number.isFinite(cfgLead)) {
+          inputLeadTicks = Math.max(1, Math.floor(cfgLead));
+        }
+      }
+      setPhase('match_assigned', 'Match assigned, waiting for start…');
+      return;
+    }
+
+    if (msg.type === 'match.starting') {
+      const lead = msg.payload.inputLeadTicks;
+      if (typeof lead === 'number' && Number.isFinite(lead)) {
+        inputLeadTicks = Math.max(1, Math.floor(lead));
       }
       return;
     }
 
     if (msg.type === 'match.started') {
       openToCore = true;
+      setPhase('match_started', 'Match started');
       core.onConnOpen();
       return;
     }
@@ -255,23 +292,40 @@ export async function wireMwcTransport(params: {
 
     if (msg.type === 'tick.inputRejected') {
       const code = msg.payload.code;
-      core.onConnError(`mwc:input-rejected:${typeof code === 'string' ? code : 'unknown'}`);
+      core.onConnError(`mwc:input-rejected:${typeof code === 'string' ? code : 'unknown'}:phase=${phase}`);
       return;
     }
 
     if (msg.type.startsWith('error.')) {
       const code = msg.payload.code;
-      core.onPeerError(`mwc:${msg.type}:${typeof code === 'string' ? code : 'unknown'}`);
+      const detail = `mwc:${msg.type}:${typeof code === 'string' ? code : 'unknown'}:phase=${phase}`;
+      if (msg.type === 'error.auth' || msg.type === 'error.protocol') core.onConnError(detail);
+      else core.onPeerError(detail);
+      return;
+    }
+
+    if (msg.type === 'tick.resyncNeeded') {
+      core.onConnError(`mwc:resync-needed:phase=${phase}`);
+      return;
     }
   });
 
-  ws.addEventListener('close', () => {
+  ws.addEventListener('close', (ev) => {
+    const wasOpenToCore = openToCore;
     openToCore = false;
+    if (session.status === 'error') {
+      core.onConnClose();
+      return;
+    }
+    if (!wasOpenToCore) {
+      core.onConnError(`mwc:closed-before-match:code=${ev.code}:phase=${phase}`);
+      return;
+    }
     core.onConnClose();
   });
 
   ws.addEventListener('error', () => {
-    core.onConnError('mwc:websocket-error');
+    core.onConnError(`mwc:websocket-error:phase=${phase}`);
   });
 
   return { destroyPeer: () => ws.close() };

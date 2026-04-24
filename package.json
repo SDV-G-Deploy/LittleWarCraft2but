@@ -10,6 +10,7 @@
     "test:build-net": "npx tsx src/sim/build-net-debug.test.ts",
     "test:combat-congestion": "npx tsx src/sim/combat-congestion.test.ts",
     "test:offline-simulation": "npx tsx src/sim/offline-simulation.test.ts",
+    "test:mwc-transport": "npx tsx src/net/mwc-transport.integration.test.ts",
     "preview": "vite preview",
     "balance:report": "npx tsx src/balance/report-cli.ts",
     "balance:sheet": "npx tsx src/balance/balance-sheet-cli.ts"
