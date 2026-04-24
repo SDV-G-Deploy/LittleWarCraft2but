@@ -114,6 +114,7 @@ function tileKey(x: number, y: number): number {
 }
 
 function pickAssignedSlot(
+  stateTick: number,
   attacker: Entity,
   target: Entity,
   candidates: { x: number; y: number }[],
@@ -123,6 +124,10 @@ function pickAssignedSlot(
   let best: { x: number; y: number } | null = null;
   let bestScore = Infinity;
   const preferred = attacker.cmd?.type === 'attack' ? attacker.cmd.contactSlot : undefined;
+  const preferredFresh =
+    attacker.cmd?.type === 'attack' &&
+    typeof attacker.cmd.contactSlotTick === 'number' &&
+    stateTick - attacker.cmd.contactSlotTick <= 2;
 
   for (const c of candidates) {
     const key = tileKey(c.x, c.y);
@@ -131,7 +136,7 @@ function pickAssignedSlot(
     if (reserved.has(key)) continue;
 
     const travelDist = chebyshev(attacker.pos.x, attacker.pos.y, c.x, c.y);
-    const stickyBonus = preferred && preferred.x === c.x && preferred.y === c.y ? -25 : 0;
+    const stickyBonus = preferredFresh && preferred && preferred.x === c.x && preferred.y === c.y ? -6 : 0;
     const tie = Math.abs((c.x * 31 + c.y * 17 + attacker.id * 13) % 7);
     const score = travelDist * 100 + distToEntity(c.x, c.y, target) * 10 + tie + stickyBonus;
 
@@ -144,18 +149,7 @@ function pickAssignedSlot(
   return best;
 }
 
-let cachedMeleeAssignmentsTick = -1;
-const cachedMeleeAssignmentsByTarget = new Map<number, Map<number, { x: number; y: number }>>();
-
 function computeMeleeApproachAssignments(state: GameState, target: Entity): Map<number, { x: number; y: number }> {
-  if (cachedMeleeAssignmentsTick !== state.tick) {
-    cachedMeleeAssignmentsTick = state.tick;
-    cachedMeleeAssignmentsByTarget.clear();
-  }
-
-  const fromCache = cachedMeleeAssignmentsByTarget.get(target.id);
-  if (fromCache) return fromCache;
-
   const attackers = state.entities
     .filter(entity =>
       isUnitKind(entity.kind) &&
@@ -176,7 +170,7 @@ function computeMeleeApproachAssignments(state: GameState, target: Entity): Map<
 
   const assignments = new Map<number, { x: number; y: number }>();
   for (const attacker of attackers) {
-    const chosenContact = pickAssignedSlot(attacker, target, contact, reserved, occupiedByUnit);
+    const chosenContact = pickAssignedSlot(state.tick, attacker, target, contact, reserved, occupiedByUnit);
     if (chosenContact) {
       const key = tileKey(chosenContact.x, chosenContact.y);
       reserved.add(key);
@@ -187,20 +181,22 @@ function computeMeleeApproachAssignments(state: GameState, target: Entity): Map<
           recordMeleeSlotReassign();
         }
         attacker.cmd.contactSlot = { ...chosenContact };
+        attacker.cmd.contactSlotTick = state.tick;
       }
       continue;
     }
 
-    const chosenStaging = pickAssignedSlot(attacker, target, staging, reserved, occupiedByUnit);
+    const chosenStaging = pickAssignedSlot(state.tick, attacker, target, staging, reserved, occupiedByUnit);
     if (chosenStaging) {
       const key = tileKey(chosenStaging.x, chosenStaging.y);
       reserved.add(key);
       assignments.set(attacker.id, chosenStaging);
-      if (attacker.cmd?.type === 'attack') attacker.cmd.contactSlot = undefined;
+      if (attacker.cmd?.type === 'attack') {
+        attacker.cmd.contactSlot = undefined;
+        attacker.cmd.contactSlotTick = undefined;
+      }
     }
   }
-
-  cachedMeleeAssignmentsByTarget.set(target.id, assignments);
   return assignments;
 }
 
@@ -399,6 +395,7 @@ export function processAttack(state: GameState, entity: Entity): void {
     cmd.chasePath = [];
     cmd.chaseGoal = undefined;
     cmd.contactSlot = undefined;
+    cmd.contactSlotTick = undefined;
   };
 
   const target = getEntity(state, cmd.targetId);

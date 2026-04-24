@@ -4,6 +4,7 @@ import { createWorld } from './world';
 import { spawnEntity } from './entities';
 import { processAttack, issueAttackCommand } from './combat';
 import { processCommandPass } from './commands';
+import { ticksPerStep } from '../data/units';
 import type { GameState } from '../types';
 
 function makeState(): GameState {
@@ -118,10 +119,51 @@ function testRearMeleeHoldsWhenNoFrontlineSlotsAreAvailable(): void {
   assert.deepEqual(attacker.cmd?.chaseGoal, { x: 40, y: 42 }, 'hold-mode chase goal should stay pinned to current tile');
 }
 
+function testMeleeAssignmentsRefreshWithinTickAfterFrontlinerStepsForward(): void {
+  const state = makeState();
+  state.tick = 1;
+
+  const target = spawnEntity(state, 'grunt', 1, { x: 40, y: 40 });
+
+  // Leave exactly one contact slot (39,40) and one staging slot (38,40).
+  for (let y = 39; y <= 41; y++) {
+    for (let x = 39; x <= 41; x++) {
+      if (x === 40 && y === 40) continue;
+      if (x === 39 && y === 40) continue;
+      spawnEntity(state, 'wall', 2, { x, y });
+    }
+  }
+  for (let y = 38; y <= 42; y++) {
+    for (let x = 38; x <= 42; x++) {
+      if (x >= 39 && x <= 41 && y >= 39 && y <= 41) continue;
+      if (x === 38 && y === 40) continue;
+      if (Math.max(Math.abs(x - 40), Math.abs(y - 40)) === 2) {
+        spawnEntity(state, 'wall', 2, { x, y });
+      }
+    }
+  }
+
+  const frontliner = spawnEntity(state, 'footman', 0, { x: 38, y: 40 });
+  const rear = spawnEntity(state, 'footman', 0, { x: 37, y: 40 });
+
+  assert.equal(issueAttackCommand(frontliner, target.id, state.tick, state), true);
+  assert.equal(issueAttackCommand(rear, target.id, state.tick, state), true);
+
+  state.tick += ticksPerStep(frontliner.kind, state.races[frontliner.owner]);
+
+  processAttack(state, frontliner);
+  assert.deepEqual(frontliner.pos, { x: 39, y: 40 }, 'frontliner should step into sole contact slot first');
+
+  processAttack(state, rear);
+  assert.equal(rear.cmd?.type, 'attack');
+  assert.deepEqual(rear.cmd?.chaseGoal, { x: 38, y: 40 }, 'rear unit should retarget fresh staging slot opened earlier in this tick');
+}
+
 function run(): void {
   testBlockedChaseRespectsMovementCadence();
   testMeleeManyVsOneUsesDistinctContactAndStagingSlots();
   testRearMeleeHoldsWhenNoFrontlineSlotsAreAvailable();
+  testMeleeAssignmentsRefreshWithinTickAfterFrontlinerStepsForward();
   console.log('combat congestion tests passed');
 }
 

@@ -157,6 +157,7 @@ export type Command =
       chaseStepTick: number;
       chaseGoal?: Vec2;
       contactSlot?: Vec2;
+      contactSlotTick?: number;
     }
   | { type: 'gather';  targetId: number; resourceType: 'gold' | 'wood'; phase: 'toresource' | 'gathering' | 'returning'; waitTicks: number }
   | { type: 'build';   building: EntityKind; pos: Vec2; siteId: number; phase: 'moving' | 'building'; stepTick: number }
