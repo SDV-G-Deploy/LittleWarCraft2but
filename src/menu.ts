@@ -962,7 +962,7 @@ export function runMenu(
 
     ctx.fillStyle = GREY;
     ctx.font = '11px monospace';
-    ctx.fillText(t('transport_mode'), cx, cy - 24);
+    ctx.fillText(t('transport_mode'), cx, cy - 66);
 
     const transportDefs: Array<{ mode: TransportMode; label: string; accent: string }> = [
       { mode: 'peerjs', label: t('transport_peerjs'), accent: '#88bbff' },
@@ -972,7 +972,7 @@ export function runMenu(
     for (let i = 0; i < transportDefs.length; i++) {
       const def = transportDefs[i];
       const bx = cx - 110 + i * 120;
-      const by = cy - 10;
+      const by = cy - 52;
       const sel = ms.transportMode === def.mode;
       ctx.fillStyle = sel ? `${def.accent}44` : 'rgba(0,0,0,0.2)';
       ctx.fillRect(bx, by, 100, 28);
@@ -994,7 +994,7 @@ export function runMenu(
         : ms.netMode === 'selfhost'
           ? t('mode_hint_server')
           : t('mode_hint_direct');
-    ctx.fillText(modeHint, cx, cy - 50);
+    ctx.fillText(modeHint, cx, cy - 18);
 
     // ── HOST panel ─────────────────────────────────────────────────────────────
     const hx = cx - 280; const hy = cy - 20; const hw = 240; const hh = 236;

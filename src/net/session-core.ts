@@ -207,10 +207,15 @@ export function createSessionCore(init: SessionCoreInit): SessionCore {
 
   function classifyError(message: string, source: 'peer' | 'conn' | 'lockstep'): FriendlyError {
     const text = message.toLowerCase();
+    const isMwcError = transportMode === 'mwc' || text.includes('mwc:') || text.includes('multiwebcore');
     if (source === 'lockstep' || text.includes('lockstep timeout')) return { userMessage: 'Connection timed out waiting for peer data (possible UDP/TURN path issue).', debugCode: 'LOCKSTEP_TIMEOUT' };
+    if (isMwcError && (text.includes('websocket') || text.includes('network') || text.includes('disconnected') || text.includes('error.'))) {
+      return { userMessage: 'MWC transport failed (check MultiWebCore websocket endpoint and reachability).', debugCode: 'MWC_TRANSPORT' };
+    }
     if (text.includes('network') || text.includes('failed to fetch') || text.includes('disconnected')) return { userMessage: 'Signaling/network path failed (check backend reachability and origin policy).', debugCode: 'SIGNALING_NETWORK' };
     if (text.includes('ice') || text.includes('webrtc') || text.includes('turn') || text.includes('stun')) return { userMessage: 'WebRTC ICE negotiation failed (relay/TCP/TLS route may be blocked).', debugCode: 'ICE_NEGOTIATION' };
     if (text.includes('peer-unavailable')) return { userMessage: 'Room not found or host offline.', debugCode: 'PEER_UNAVAILABLE' };
+    if (isMwcError) return { userMessage: 'MWC session failed.', debugCode: 'MWC_UNKNOWN' };
     return { userMessage: source === 'peer' ? 'Peer signaling failed.' : source === 'conn' ? 'Peer data channel failed.' : 'Online connection failed.', debugCode: 'UNKNOWN' };
   }
 

@@ -266,6 +266,10 @@ Supported Vite env vars:
 - `VITE_WS_RELAY_URL` (manual WS relay transport endpoint)
 - `VITE_MWC_WS_URL` (MultiWebCore websocket endpoint)
 
+GitHub Pages deploy workflow wiring:
+- `.github/workflows/deploy.yml` now forwards `VITE_WS_RELAY_URL` and `VITE_MWC_WS_URL` into the Vite build
+- value precedence is `secrets.*` -> `vars.*` -> built-in defaults (`wss://rts.kislota.today/ws-relay` and `wss://rts.kislota.today/mwc`)
+
 Runtime ICE override:
 - client first tries `GET /api/ice`
 - if unavailable, it falls back to `VITE_ICE_SERVERS`
