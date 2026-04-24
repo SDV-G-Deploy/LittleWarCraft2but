@@ -6,6 +6,10 @@ This note records the narrow movement/pathing fixes that were applied after obse
 
 These changes were intentionally kept incremental and low-risk.
 
+Update on 2026-04-24:
+This document should now be read as a pass-history note, not as the final architecture direction.
+Some ideas here remain useful, but later redesign review concluded that partial movement unification still went too far once worker and combat semantics started sharing too much local behavior.
+
 ## Problem summary
 
 Observed issue:
@@ -74,6 +78,9 @@ Why it matters:
 
 ## Design philosophy for these passes
 
+The intent of these passes was still sound: improve visible movement stupidity with narrow changes first.
+What later became clear is that preserving that narrowness matters more than preserving any specific unification direction.
+
 These fixes intentionally do **not** attempt a full pathfinding overhaul.
 
 Goals were:
@@ -132,12 +139,15 @@ Preserve the split between:
 This should remain explicit in code ownership.
 
 ### 4. Use one movement core with policy profiles
-The shared step layer should support policy-level variation for:
-- move
-- chase
-- gather approach
-- build approach
-Differences should come from explicit policy flags or small strategy inputs, not separate ad hoc movement implementations.
+This was a reasonable refactor hypothesis at the time, but later review showed it should not be treated as the final target architecture.
+
+Shared low-level helpers remain useful.
+However, once policy variation starts carrying too much domain meaning, the abstraction stops simplifying the system and starts hiding important semantic differences.
+
+Updated interpretation after redesign review:
+- unify low-level helpers where they genuinely reduce duplication,
+- do not force move / chase / gather / build to share one semantic behavior layer,
+- prefer separate domain-owned behavior when worker traffic or combat engagement needs diverge.
 
 ### 5. Treat arrival / stop behavior as a first-class concern
 Movement quality is not only route-taking. It also includes:
@@ -182,16 +192,25 @@ Success criteria for the refactor:
   - unreachable return path no longer deposits resources remotely
 
 ### Current intended architecture
+At the time of this note, the intended architecture was:
 - Shared core owns: path-step execution, occupancy/reservation handling, repath hooks, step result statuses.
 - Domain modules still own: move intent, chase/attack logic, gather logic, build logic, economic side effects.
 - Worker movement remains intentionally softer/lighter than combat movement.
 - This is a partial unification, not a mega-command rewrite.
+
+Updated redesign conclusion on 2026-04-24:
+- this partial unification should not be extended further,
+- worker movement should become even more explicitly domain-specific,
+- combat engagement quality should be improved by combat-side slot/staging logic rather than broader shared movement semantics,
+- plain move should stay comparatively simple.
 
 ### What we are consciously NOT doing yet
 - No deep crowd simulation / ORCA / boids-style rewrite.
 - No full merge of gather/build state machines into combat/move semantics.
 - No lockstep scheduling or protocol changes.
 - No further movement refactor pass until manual gameplay validation reveals a concrete need.
+
+This last point was later overtaken by gameplay evidence: movement did still need a redesign pass, but the correct direction is now understood as domain separation plus selective simplification, not more generalized movement layering.
 
 ### Manual stabilization checklist
 - Adjacent move: combat/military unit moves correctly to a neighboring valid tile.

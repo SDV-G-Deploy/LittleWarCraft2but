@@ -3,6 +3,10 @@
 Practical reference for future AI, UI, net, and balance passes.
 Goal: preserve intended game feel while changing implementation details.
 
+Update note, 2026-04-24:
+Movement redesign work should follow the dedicated movement doctrine and redesign docs.
+This document only adds high-level gameplay guardrails that movement changes must not violate.
+
 ## 1) Faction identity (intended)
 
 ### Humans
@@ -91,3 +95,5 @@ Goal: preserve intended game feel while changing implementation details.
 - Do not let UI promise actions that sim/net can reject for different reasons.
 - Do not tune balance through isolated unit stats while ignoring map pressure systems.
 - Do not ship broad cross-layer rewrites without small deterministic passes and regression checks.
+- Do not let movement changes reduce economy continuity or frontline readability in the name of cleaner abstraction.
+- Do not solve worker traffic and combat engagement with one generalized semantic model if gameplay feel gets worse.

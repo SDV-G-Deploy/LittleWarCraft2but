@@ -13,6 +13,8 @@ This mode should work both as:
 - a player-facing "watch bots fight" feature
 - an internal QA / balance / pathing observation tool
 
+This remains especially useful for later movement validation passes, including worker traffic, combat congestion, chase readability, and long-run pathing observation.
+
 The key requirement is that this should be a real mode, not a fragile special-case hack on top of the current human-vs-AI flow.
 
 ## Product definition

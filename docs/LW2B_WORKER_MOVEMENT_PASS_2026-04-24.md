@@ -1,6 +1,6 @@
 # LW2B Worker Movement Pass (2026-04-24)
 
-Status: implemented and pushed
+Status: implemented and pushed, later superseded as an intermediate checkpoint
 Commit: `86d0cea`
 
 Related doctrine:
@@ -13,6 +13,9 @@ This note records the narrow worker-only movement pass implemented after adoptin
 
 The pass intentionally does **not** introduce a universal movement core.
 It only tightens worker economy traffic behavior where congestion near bases, mines, and approach tiles can produce visible stalls or bad worker pileups.
+
+Update on 2026-04-24 later review:
+This pass should now be understood as an intermediate stabilization checkpoint, not the final intended worker movement design.
 
 ## Doctrine alignment
 
@@ -92,6 +95,8 @@ Result:
 
 ## Important limit / honest risk
 
+This section ended up being directionally correct: the pass improved worker traffic, but did not yet resolve the underlying design mismatch between economy traffic and stricter shared movement semantics.
+
 This pass improves worker traffic, but it does **not** claim to solve every dense synthetic congestion scenario.
 
 What it is meant to do:
@@ -107,6 +112,9 @@ What it explicitly does **not** do:
 That remaining work, if needed, should stay narrow and scenario-driven.
 
 ## Updated design direction after live-like townhall scenario review
+
+This updated direction now aligns with the broader redesign plan captured in:
+- `docs/LW2B_MOVEMENT_REDESIGN_PLAN_2026-04-24_PRE_FINAL.md`
 
 For the next worker-traffic pass, the preferred simplification is now stronger than the current implemented behavior:
 - Human `worker` and Orc `peon` should be treated as **transparent worker traffic actors**
@@ -139,3 +147,8 @@ Planned handling:
 - validate whether transparent-worker rules can replace part of the current narrow swap/approach heuristics instead of adding more local exceptions
 - keep the change worker-only and doctrine-local
 - add only narrow scenario tests that represent real base-economy congestion
+
+Refined redesign conclusion:
+- transparent/permissive worker travel should likely become the default gather/build rule rather than a secondary fallback,
+- worker-vs-worker and worker-vs-mixed-unit traffic should be simplified rather than patched with more displacement edge handling,
+- allied stationary combat units should not be treated as shove candidates for economy traffic.

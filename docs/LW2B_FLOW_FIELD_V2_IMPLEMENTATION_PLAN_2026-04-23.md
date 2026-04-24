@@ -1,7 +1,7 @@
 # LW2B Flow Field v2 Implementation Plan
 
 Date: 2026-04-23
-Status: planning / patch-ready checklist
+Status: planning / patch-ready checklist, later narrowed by 2026-04-24 redesign review
 
 Related doctrine:
 - `docs/LW2B_MOVEMENT_DOCTRINE_2026-04-23.md`
@@ -17,20 +17,30 @@ The doctrine defines the architectural guardrails:
 - concentrate movement sophistication mainly in combat,
 - keep plain move deterministic and moderate.
 
-Current LW2B movement is already cleaner than a naive RTS baseline:
+Current LW2B movement is already cleaner than a naive RTS baseline in some respects:
 - unit move uses A* plus deterministic sidestep/repath
 - combat chase uses assigned contact slots plus A*
 - worker traffic has separate ally-block handling
 - command processing already runs in stable entity-id order
+
+However, the 2026-04-24 redesign review concluded that movement semantics still became too layered overall, especially once worker traffic and combat behavior started sharing too much local machinery.
 
 That gives a strong base, but several movement paths are still individually replanning against live occupancy:
 - `src/sim/commands.ts` move commands
 - `src/sim/combat.ts` chase movement
 - `src/sim/economy.ts` gather/build travel
 
-On a 64x64 map and 20 Hz sim, the next practical step is not a full crowd-sim rewrite. The right move is:
+On a 64x64 map and 20 Hz sim, the next practical step is not a full crowd-sim rewrite.
 
-**Flow Field v2 for shared goals + deterministic local avoidance + A* fallback for edge cases.**
+Updated interpretation after the 2026-04-24 redesign review:
+- flow-field work is still potentially valuable,
+- but it should be treated as a supporting navigation optimization, not as the centerpiece of a broader movement unification push,
+- worker traffic should stay explicitly domain-specific,
+- combat engagement quality should still be solved primarily in combat logic.
+
+So the correct framing is:
+
+**Flow Field v2 remains a useful supporting plan for shared navigation goals, but not a reason to re-expand toward one generalized movement model.**
 
 ---
 
@@ -69,9 +79,9 @@ On a 64x64 map and 20 Hz sim, the next practical step is not a full crowd-sim re
 - worker-specific traffic policy
 
 ### Add
-- shared flow fields for common goals
+- shared flow fields for common goals where they genuinely help
 - cached direction maps keyed by goal + passability revision + mode
-- reservation-first local step resolution
+- reservation-first local step resolution where it improves ordinary travel or chase
 - nav debug counters and determinism/hash coverage
 
 ### Do not do yet
@@ -160,7 +170,8 @@ Primary integration point for unit move.
 Keep melee slotting, but switch chase travel to shared flow when possible.
 
 #### `src/sim/economy.ts`
-Workers should migrate later, after combat move is stable.
+Workers should not be forced into the same semantic movement model as move/chase.
+Any future flow-field use for workers must remain subordinate to worker-domain permissive traffic rules.
 
 #### `src/sim/profiler.ts`
 Add nav counters for flow builds, cache hits, reservation conflicts, fallback usage.
@@ -198,6 +209,9 @@ Add nav modules without changing gameplay yet.
 ---
 
 ## Phase 2, move-command integration
+
+This remains the safest primary integration point for flow-field work.
+Do not use this plan as justification to unify worker/combat semantics further.
 
 ### Goal
 Convert only plain move commands to flow-driven movement.
