@@ -28,7 +28,7 @@ function testAllyBlockWaitBudgetThenSidestep(): void {
   assert.notEqual(mover.pos.x, 20, 'sidestep should move unit off origin x');
 }
 
-function testWorkerSwapWhenEconomyFlowOptionEnabled(): void {
+function testWorkerDoesNotUseSwapPolicyInSharedMoveLayer(): void {
   const state = makeState();
   const mover = spawnEntity(state, 'worker', 0, { x: 20, y: 20 });
   const blocker = spawnEntity(state, 'worker', 0, { x: 21, y: 20 });
@@ -36,20 +36,13 @@ function testWorkerSwapWhenEconomyFlowOptionEnabled(): void {
   const path = [{ x: 21, y: 20 }, { x: 22, y: 20 }];
   const policy = createAllyBlockPolicyState();
 
-  const step = tryAdvancePathWithAvoidance(
-    state,
-    mover,
-    path,
-    { x: 22, y: 20 },
-    policy,
-    undefined,
-    { allowAllyWorkerSwap: true },
-  );
+  const first = tryAdvancePathWithAvoidance(state, mover, path, { x: 22, y: 20 }, policy);
+  const second = tryAdvancePathWithAvoidance(state, mover, path, { x: 22, y: 20 }, policy);
 
-  assert.equal(step, 'moved', 'economy worker flow should allow allied worker swap');
-  assert.deepEqual(mover.pos, { x: 21, y: 20 }, 'mover should advance into blocked tile after swap');
-  assert.deepEqual(blocker.pos, { x: 20, y: 20 }, 'blocking worker should be swapped back');
-  assert.equal(path.length, 1, 'path should consume one step after successful swap movement');
+  assert.equal(first, 'blocked', 'shared move layer should keep generic ally blocking behavior');
+  assert.equal(second, 'blocked', 'worker-specific travel semantics must not leak into shared move behavior');
+  assert.deepEqual(mover.pos, { x: 20, y: 20 });
+  assert.deepEqual(blocker.pos, { x: 21, y: 20 });
 }
 
 function testWorkerPrefersSidestepBeforeRepathWhenBlockedByAlliedCombatUnit(): void {
@@ -94,46 +87,26 @@ function testWorkerPrefersSidestepBeforeRepathWhenBlockedByAlliedCombatUnit(): v
   assert.notDeepEqual(worker.pos, { x: 20, y: 20 }, 'worker should move off origin to break ally-block loop');
 }
 
-function testWorkerBypassSwapDoesNotApplyToMovingAlliedCombatUnit(): void {
+function testSharedMoveLayerDoesNotDisplaceAlliedCombatUnits(): void {
   const state = makeState();
   const worker = spawnEntity(state, 'worker', 0, { x: 20, y: 20 });
   const ally = spawnEntity(state, 'footman', 0, { x: 21, y: 20 });
-  ally.cmd = {
-    type: 'move',
-    path: [{ x: 22, y: 20 }],
-    stepTick: 0,
-    attackMove: false,
-    goal: { x: 22, y: 20 },
-    lastPos: { x: 21, y: 20 },
-    lastProgressTick: 0,
-    repathCount: 0,
-    blockedAllyStreak: 0,
-    blockedAllyTile: null,
-  };
 
   const path = [{ x: 21, y: 20 }, { x: 22, y: 20 }];
   const policy = createAllyBlockPolicyState();
 
-  const first = tryAdvancePathWithAvoidance(
-    state,
-    worker,
-    path,
-    { x: 22, y: 20 },
-    policy,
-    undefined,
-    { allowWorkerSwapWithStationaryAlliedCombat: true },
-  );
+  const first = tryAdvancePathWithAvoidance(state, worker, path, { x: 22, y: 20 }, policy);
 
-  assert.equal(first, 'blocked', 'worker bypass swap should not displace allied combat units that are already moving');
+  assert.equal(first, 'blocked', 'shared move layer should not displace allied combat units');
   assert.deepEqual(worker.pos, { x: 20, y: 20 });
   assert.deepEqual(ally.pos, { x: 21, y: 20 });
 }
 
 function run(): void {
   testAllyBlockWaitBudgetThenSidestep();
-  testWorkerSwapWhenEconomyFlowOptionEnabled();
+  testWorkerDoesNotUseSwapPolicyInSharedMoveLayer();
   testWorkerPrefersSidestepBeforeRepathWhenBlockedByAlliedCombatUnit();
-  testWorkerBypassSwapDoesNotApplyToMovingAlliedCombatUnit();
+  testSharedMoveLayerDoesNotDisplaceAlliedCombatUnits();
   console.log('movement policy tests passed');
 }
 

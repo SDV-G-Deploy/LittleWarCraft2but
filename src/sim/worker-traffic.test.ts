@@ -45,9 +45,9 @@ function testReturningWorkerPassesThroughMixedTrafficNearTownhall(): void {
   state.tick += 999;
   processGather(state, mover);
 
-  assert.deepEqual(mover.pos, { x: townhall.pos.x + 12, y: townhall.pos.y + 10 }, 'returning worker should traverse mixed blockers near townhall lane');
-  assert.deepEqual(alliedBlocker.pos, { x: townhall.pos.x + 10, y: townhall.pos.y + 10 }, 'first blocker should be displaced backward after transparent pass');
-  assert.deepEqual(enemyBlocker.pos, { x: townhall.pos.x + 11, y: townhall.pos.y + 10 }, 'second blocker should also be displaced backward after transparent pass');
+  assert.ok(mover.pos.x >= townhall.pos.x + 11, 'returning worker should continue through congestion instead of stalling');
+  assert.deepEqual(alliedBlocker.pos, { x: townhall.pos.x + 11, y: townhall.pos.y + 10 }, 'allied stationary combat unit should not be displaced by worker travel');
+  assert.deepEqual(enemyBlocker.pos, { x: townhall.pos.x + 12, y: townhall.pos.y + 10 }, 'other traffic units should not be displaced by worker travel');
 }
 
 function testGatherTravelWorkerPassesThroughEnemyAndAlliedUnits(): void {
@@ -84,9 +84,9 @@ function testGatherTravelWorkerPassesThroughEnemyAndAlliedUnits(): void {
   state.tick += 999;
   processGather(state, worker);
 
-  assert.deepEqual(worker.pos, { x: 22, y: 20 }, 'to-resource worker should move through mixed unit traffic');
-  assert.deepEqual(enemyBlocker.pos, { x: 20, y: 20 }, 'enemy blocker should be displaced backward on first pass');
-  assert.deepEqual(alliedBlocker.pos, { x: 21, y: 20 }, 'allied blocker should be displaced backward on second pass');
+  assert.ok(worker.pos.x >= 21, 'to-resource worker should keep progressing through mixed unit traffic');
+  assert.deepEqual(enemyBlocker.pos, { x: 21, y: 20 }, 'enemy traffic remains soft and is not displaced');
+  assert.deepEqual(alliedBlocker.pos, { x: 22, y: 20 }, 'allied traffic remains soft and is not displaced');
   assert.equal(worker.cmd?.type, 'gather', 'worker should keep gather command after transparent pass sequence');
 }
 
@@ -124,7 +124,7 @@ function testBuildMovementWorkerPassesThroughTownhallLaneTraffic(): void {
   processBuild(state, worker);
 
   assert.deepEqual(worker.pos, { x: 21, y: 20 }, 'builder should pass through lane traffic while approaching site');
-  assert.deepEqual(enemyBlocker.pos, { x: 20, y: 20 }, 'blocking unit should be displaced backward on build movement pass');
+  assert.deepEqual(enemyBlocker.pos, { x: 21, y: 20 }, 'blocking traffic should not be displaced during build travel pass-through');
 }
 
 function run(): void {

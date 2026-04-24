@@ -1,5 +1,5 @@
 import type { Entity, GameState, Vec2 } from '../types';
-import { MAP_H, MAP_W, isUnitKind, isWorkerKind } from '../types';
+import { MAP_H, MAP_W, isUnitKind } from '../types';
 import { isTileBlockedByEntity } from './entities';
 
 const NUDGE_DIRS = [
@@ -94,9 +94,6 @@ export function findDeterministicSidestep(state: GameState, entity: Entity, bloc
 export type StepAvoidanceResult = 'no-path' | 'moved' | 'repathed' | 'sidestep' | 'blocked';
 
 export type StepAvoidanceOptions = {
-  allowAllyWorkerSwap?: boolean;
-  allowWorkerSwapWithStationaryAlliedCombat?: boolean;
-  allowWorkerTransparentPass?: boolean;
   useMoveReservation?: boolean;
   preferSidestepBeforeRepathOnAllyBlock?: boolean;
 };
@@ -145,13 +142,6 @@ function shouldWaitForAllyBlock(policy: AllyBlockPolicyState, blocked: Vec2): bo
   return policy.blockedAllyStreak <= ALLY_BLOCK_WAIT_STEPS;
 }
 
-function isStationaryForWorkerBypass(occupant: Entity): boolean {
-  if (!occupant.cmd) return true;
-  if (occupant.cmd.type === 'attack') return occupant.cmd.chasePath.length === 0;
-  if (occupant.cmd.type === 'move') return occupant.cmd.path.length === 0;
-  return false;
-}
-
 export function tryAdvancePathWithAvoidance(
   state: GameState,
   entity: Entity,
@@ -195,61 +185,6 @@ export function tryAdvancePathWithAvoidance(
   }
 
   const blockedByAlly = occupant.owner === entity.owner;
-  if (
-    options?.allowWorkerTransparentPass
-    && isWorkerKind(entity.kind)
-  ) {
-    const prevX = entity.pos.x;
-    const prevY = entity.pos.y;
-    if (!isTileOccupiedByUnitExcluding(state, prevX, prevY, [entity.id, occupant.id])) {
-      entity.pos.x = next.x;
-      entity.pos.y = next.y;
-      occupant.pos.x = prevX;
-      occupant.pos.y = prevY;
-      path.shift();
-      resetAllyBlockPolicy(allyBlockPolicy);
-      return 'moved';
-    }
-  }
-
-  if (
-    blockedByAlly
-    && options?.allowAllyWorkerSwap
-    && isWorkerKind(entity.kind)
-    && isWorkerKind(occupant.kind)
-  ) {
-    const prevX = entity.pos.x;
-    const prevY = entity.pos.y;
-    if (!isTileOccupiedByUnitExcluding(state, prevX, prevY, [entity.id, occupant.id])) {
-      entity.pos.x = next.x;
-      entity.pos.y = next.y;
-      occupant.pos.x = prevX;
-      occupant.pos.y = prevY;
-      path.shift();
-      resetAllyBlockPolicy(allyBlockPolicy);
-      return 'moved';
-    }
-  }
-
-  if (
-    blockedByAlly
-    && options?.allowWorkerSwapWithStationaryAlliedCombat
-    && isWorkerKind(entity.kind)
-    && !isWorkerKind(occupant.kind)
-    && isStationaryForWorkerBypass(occupant)
-  ) {
-    const prevX = entity.pos.x;
-    const prevY = entity.pos.y;
-    if (!isTileOccupiedByUnitExcluding(state, prevX, prevY, [entity.id, occupant.id])) {
-      entity.pos.x = next.x;
-      entity.pos.y = next.y;
-      occupant.pos.x = prevX;
-      occupant.pos.y = prevY;
-      path.shift();
-      resetAllyBlockPolicy(allyBlockPolicy);
-      return 'moved';
-    }
-  }
 
   if (blockedByAlly && shouldWaitForAllyBlock(allyBlockPolicy, next)) {
     return 'blocked';
