@@ -107,6 +107,7 @@ Implement and log these KPIs at minimum:
 - `worker_queue_depth_near_dropoff`
 - `worker_arrival_block_retries`
 - `worker_stall_events_per_1k_ticks`
+- `worker_return_retarget_resets`
 
 ### Determinism KPIs
 - hash parity pass/fail over deterministic scenario set
@@ -184,7 +185,8 @@ Exit criteria:
 - no new deterministic failures,
 - no semantic leakage into plain/combat movement,
 - workers no longer stall because of unit traffic,
-- workers traverse unit traffic directly during gather/build travel.
+- workers traverse unit traffic directly during gather/build travel,
+- stale return endpoints near base/building chokes are recoverable via retarget.
 
 ---
 
@@ -256,7 +258,8 @@ Reject changes that:
 3. `MOV-003` Plain-move congestion hardening (KPI-driven, narrow).
 4. `MOV-004` Worker transparent-through-units travel pass (economy-domain local).
 5. `MOV-005` Combat staging/anti-thrash stabilization.
-6. `MOV-006` Pathing performance pass (post-correctness only).
+6. `MOV-006` Worker return/dropoff retarget recovery near static choke.
+7. `MOV-007` Pathing performance pass (post-correctness only).
 
 ---
 
