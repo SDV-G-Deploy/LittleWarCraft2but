@@ -17,6 +17,56 @@ function moveGoalNear(entity: Entity, tx: number, ty: number): boolean {
     Math.max(Math.abs(entity.cmd.goal.x - tx), Math.abs(entity.cmd.goal.y - ty)) <= 1;
 }
 
+function buildLocalRingOffsets(maxRadius: number): Vec2[] {
+  const offsets: Vec2[] = [{ x: 0, y: 0 }];
+  for (let r = 1; r <= maxRadius; r++) {
+    for (let x = -r + 1; x <= r; x++) offsets.push({ x, y: -r });
+    for (let y = -r + 1; y <= r; y++) offsets.push({ x: r, y });
+    for (let x = r - 1; x >= -r; x--) offsets.push({ x, y: r });
+    for (let y = r - 1; y >= -r; y--) offsets.push({ x: -r, y });
+  }
+  return offsets;
+}
+
+const AI_MOVE_SPREAD_OFFSETS = buildLocalRingOffsets(2);
+
+function spreadMoveTargets(state: GameState, entity: Entity, tx: number, ty: number): Vec2[] {
+  if (AI_MOVE_SPREAD_OFFSETS.length <= 1) return [{ x: tx, y: ty }];
+
+  const ringSize = AI_MOVE_SPREAD_OFFSETS.length - 1;
+  const seed = (entity.id * 1103515245 + tx * 92821 + ty * 68917) >>> 0;
+  const preferred = 1 + (seed % ringSize);
+
+  const orderedOffsets: Vec2[] = [AI_MOVE_SPREAD_OFFSETS[preferred], AI_MOVE_SPREAD_OFFSETS[0]];
+  for (let i = 1; i <= ringSize; i++) {
+    const idx = 1 + ((preferred - 1 + i) % ringSize);
+    if (idx !== preferred) orderedOffsets.push(AI_MOVE_SPREAD_OFFSETS[idx]);
+  }
+
+  const seen = new Set<string>();
+  const goals: Vec2[] = [];
+  for (const offset of orderedOffsets) {
+    const gx = Math.max(0, Math.min(MAP_W - 1, tx + offset.x));
+    const gy = Math.max(0, Math.min(MAP_H - 1, ty + offset.y));
+    const key = `${gx},${gy}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    goals.push({ x: gx, y: gy });
+  }
+  return goals;
+}
+
+function issueSpreadMoveCommand(state: GameState, entity: Entity, tx: number, ty: number): boolean {
+  for (const goal of spreadMoveTargets(state, entity, tx, ty)) {
+    if (issueMoveCommand(state, entity, goal.x, goal.y)) return true;
+  }
+  return false;
+}
+
+function preferredSpreadGoal(state: GameState, entity: Entity, tx: number, ty: number): Vec2 {
+  return spreadMoveTargets(state, entity, tx, ty)[0] ?? { x: tx, y: ty };
+}
+
 // ─── Controller state ─────────────────────────────────────────────────────────
 
 export interface AIController {
@@ -275,15 +325,18 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
         } else if (ai.assaultRetargetMine && contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > ai.attackRetargetRadius) {
           const tx = contestedMine.pos.x;
           const ty = contestedMine.pos.y - 1;
-          if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
+          const target = preferredSpreadGoal(state, s, tx, ty);
+          if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
         } else if (expansionMine && mySoldiers.length >= ai.expansionMineMinArmy) {
           const tx = expansionMine.pos.x;
           const ty = expansionMine.pos.y - 1;
-          if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
+          const target = preferredSpreadGoal(state, s, tx, ty);
+          if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
         } else if (opposingPlayerTH && ai.difficulty !== 'easy') {
           const tx = opposingPlayerTH.pos.x + 1;
           const ty = opposingPlayerTH.pos.y + 2;
-          if (!moveGoalNear(s, tx, ty)) issueMoveCommand(state, s, tx, ty);
+          const target = preferredSpreadGoal(state, s, tx, ty);
+          if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
         }
       }
 
@@ -535,8 +588,9 @@ function recallDefenders(state: GameState, myTownHall: Entity, mySoldiers: Entit
       continue;
     }
 
-    if (!moveGoalNear(unit, threat.defendPoint.x, threat.defendPoint.y)) {
-      issueMoveCommand(state, unit, threat.defendPoint.x, threat.defendPoint.y);
+    const moveTarget = preferredSpreadGoal(state, unit, threat.defendPoint.x, threat.defendPoint.y);
+    if (!moveGoalNear(unit, moveTarget.x, moveTarget.y)) {
+      issueSpreadMoveCommand(state, unit, threat.defendPoint.x, threat.defendPoint.y);
     }
   }
 }
