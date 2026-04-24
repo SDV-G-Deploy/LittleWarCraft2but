@@ -474,7 +474,14 @@ export function processAttack(state: GameState, entity: Entity): void {
       };
 
       const chaseGoal = pickChaseGoal(state, entity, target, range);
-      const stepResult = tryAdvancePathWithAvoidance(state, entity, cmd.chasePath, chaseGoal, tryRepath);
+      const stepResult = tryAdvancePathWithAvoidance(
+        state,
+        entity,
+        cmd.chasePath,
+        chaseGoal,
+        undefined,
+        tryRepath,
+      );
 
       if (stepResult === 'moved' || stepResult === 'sidestep' || stepResult === 'repathed' || stepResult === 'blocked') {
         cmd.chaseStepTick = state.tick;

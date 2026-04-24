@@ -147,20 +147,13 @@ export function tryAdvancePathWithAvoidance(
   entity: Entity,
   path: Vec2[],
   goal: Vec2,
-  allyBlockPolicyOrTryRepath?: AllyBlockPolicyState | (() => Vec2[] | null),
-  tryRepathArg?: () => Vec2[] | null,
+  allyBlockPolicy?: AllyBlockPolicyState,
+  tryRepath?: () => Vec2[] | null,
   options?: StepAvoidanceOptions,
 ): StepAvoidanceResult {
-  let allyBlockPolicy: AllyBlockPolicyState;
-  let tryRepath: (() => Vec2[] | null) | undefined;
-  if (typeof allyBlockPolicyOrTryRepath === 'function') {
-    allyBlockPolicy = createAllyBlockPolicyState();
-    allyBlockPolicy.blockedAllyStreak = ALLY_BLOCK_WAIT_STEPS;
-    tryRepath = allyBlockPolicyOrTryRepath;
-  } else {
-    allyBlockPolicy = allyBlockPolicyOrTryRepath ?? createAllyBlockPolicyState();
-    if (!allyBlockPolicyOrTryRepath) allyBlockPolicy.blockedAllyStreak = ALLY_BLOCK_WAIT_STEPS;
-    tryRepath = tryRepathArg;
+  const policy = allyBlockPolicy ?? createAllyBlockPolicyState();
+  if (!allyBlockPolicy) {
+    policy.blockedAllyStreak = ALLY_BLOCK_WAIT_STEPS;
   }
 
   if (path.length === 0) return 'no-path';
@@ -177,7 +170,7 @@ export function tryAdvancePathWithAvoidance(
       movementResolutionState.reservedMoveDestByTile.set(nextKey, entity.id);
     }
 
-    resetAllyBlockPolicy(allyBlockPolicy);
+    resetAllyBlockPolicy(policy);
     path.shift();
     entity.pos.x = next.x;
     entity.pos.y = next.y;
@@ -186,7 +179,7 @@ export function tryAdvancePathWithAvoidance(
 
   const blockedByAlly = occupant.owner === entity.owner;
 
-  if (blockedByAlly && shouldWaitForAllyBlock(allyBlockPolicy, next)) {
+  if (blockedByAlly && shouldWaitForAllyBlock(policy, next)) {
     return 'blocked';
   }
 
@@ -200,14 +193,14 @@ export function tryAdvancePathWithAvoidance(
       if (repathAfterSidestep && repathAfterSidestep.length > 0) {
         replacePath(path, repathAfterSidestep);
       }
-      resetAllyBlockPolicy(allyBlockPolicy);
+      resetAllyBlockPolicy(policy);
       return 'sidestep';
     }
   }
 
   const repath = tryRepath?.();
   if (repath && repath.length > 0) {
-    resetAllyBlockPolicy(allyBlockPolicy);
+    resetAllyBlockPolicy(policy);
     replacePath(path, repath);
     return 'repathed';
   }
@@ -222,6 +215,6 @@ export function tryAdvancePathWithAvoidance(
   if (repathAfterSidestep && repathAfterSidestep.length > 0) {
     replacePath(path, repathAfterSidestep);
   }
-  resetAllyBlockPolicy(allyBlockPolicy);
+  resetAllyBlockPolicy(policy);
   return 'sidestep';
 }
