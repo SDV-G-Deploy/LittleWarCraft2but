@@ -1,6 +1,8 @@
 # LW2B Movement KPI Baseline (Lightweight)
 
 Date: 2026-04-24
+Status: implemented lightweight KPI/scenario baseline pass
+Commit: `7b279ee`
 
 This pass adds minimal instrumentation counters to support evidence-driven tuning without introducing a heavy framework.
 
@@ -38,3 +40,31 @@ Scenario-oriented baseline coverage:
 3. combat near-target hold behavior
 
 The test prints `[kpi-baseline]` JSON snapshots for each scenario.
+
+## Why this pass matters
+
+After the worker transparent-through-units fix, movement helper boundary cleanup, and combat stabilization pass, the project needed a way to measure whether future tuning actually helps.
+
+This baseline layer is intentionally small:
+- no heavy telemetry framework,
+- no persistent reporting backend,
+- no premature CI gate complexity.
+
+It is meant to provide just enough measurement to compare future movement changes against known scenario outputs.
+
+## Honest limits
+
+These numbers are currently:
+- scenario-specific,
+- best used as smoke baselines,
+- not yet full project-wide KPI gates.
+
+That is intentional. The goal of this pass is to improve engineering feedback without making the codebase harder to reason about.
+
+## Recommended use during active movement iteration
+
+When evaluating a new movement/combat/worker change:
+1. run `npm run test:movement-kpi`
+2. compare emitted snapshot values
+3. run full `npm test`
+4. only then decide whether a tuning change actually improved the target behavior
