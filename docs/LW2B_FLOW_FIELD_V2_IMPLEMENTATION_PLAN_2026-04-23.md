@@ -531,3 +531,21 @@ If you want the highest signal-to-risk next step, start with this exact slice:
 5. run determinism + move + congestion tests
 
 That is the smallest change that meaningfully improves future work and makes the next coding passes much easier.
+
+---
+
+## Update after worker traffic pass (2026-04-24)
+
+A narrow worker-only traffic pass was implemented and pushed in:
+- commit `86d0cea`
+- see `docs/LW2B_WORKER_MOVEMENT_PASS_2026-04-24.md`
+
+What this means for the plan:
+- the architectural direction is unchanged
+- do **not** reinterpret that worker pass as a step toward universal movement unification
+- worker fixes remain local economy-domain corrections
+- main future flow-field work should still concentrate on plain move first, then combat
+
+Practical consequence:
+- worker congestion can continue to receive narrow doctrine-compatible fixes
+- but the main structural nav work is still `move` first, `combat` second, workers later and carefully
