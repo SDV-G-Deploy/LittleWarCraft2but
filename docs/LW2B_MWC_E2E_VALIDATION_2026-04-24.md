@@ -24,6 +24,11 @@ Also checked reconnect branch reachability from LW2B transport behavior:
 - End-to-end transport path works for initial session and remote wire delivery.
 - Reconnect/resync remains not wired in LW2B transport (known limit, not changed here).
 
+## Decision framing (LW2B vs platform)
+- **LW2B product level:** this validation is enough to accept the current MWC path for now.
+- **LW2B blocker policy:** reconnect/resume is **not** a current LW2B release blocker.
+- **MultiWebCore platform level:** reconnect/resume stays on the roadmap as platform maturity work for future browser-game integrations, not only LW2B.
+
 ## Failure points found and classification
 ### 1) Runtime config/readability gap (transport wiring/runtime)
 - `mwc-transport.ts` previously read `import.meta.env.VITE_MWC_WS_URL` directly.

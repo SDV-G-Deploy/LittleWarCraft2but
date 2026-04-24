@@ -290,6 +290,11 @@ Online menu also supports manual transport selection:
 - `WS RELAY` uses a websocket relay path (`VITE_WS_RELAY_URL`)
 - `MWC` routes LW2B wire payloads through MultiWebCore tick commit flow (`VITE_MWC_WS_URL`)
 
+Current decision framing:
+- for LW2B product acceptance, the current MultiWebCore (`MWC`) transport path is validated and sufficient for now
+- reconnect/resume is not a current LW2B blocker
+- reconnect/resume remains important, but as a MultiWebCore platform-maturity milestone for future games beyond LW2B
+
 Share links preserve the selected mode via `?mode=public` when needed.
 Relay links preserve transport selection via `?transport=ws-relay`.
 MultiWebCore links preserve transport selection via `?transport=mwc`.
