@@ -149,7 +149,7 @@ function testMeleeAssignmentsRefreshWithinTickAfterFrontlinerStepsForward(): voi
   assert.equal(issueAttackCommand(frontliner, target.id, state.tick, state), true);
   assert.equal(issueAttackCommand(rear, target.id, state.tick, state), true);
 
-  state.tick += ticksPerStep(frontliner.kind, state.races[frontliner.owner]);
+  state.tick += ticksPerStep(frontliner.kind, frontliner.owner === 0 ? state.races[0] : frontliner.owner === 1 ? state.races[1] : null);
 
   processAttack(state, frontliner);
   assert.deepEqual(frontliner.pos, { x: 39, y: 40 }, 'frontliner should step into sole contact slot first');

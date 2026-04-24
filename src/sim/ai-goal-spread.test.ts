@@ -34,7 +34,11 @@ function testAssaultRetargetUsesSpreadGoals(): void {
     assert.equal(soldier.cmd?.type, 'move', 'assault soldiers should get move retarget when no nearby enemies');
   }
 
-  const goalKeys = new Set(soldiers.map(s => `${s.cmd!.goal.x},${s.cmd!.goal.y}`));
+  const moveGoals = soldiers.map(s => {
+    assert.equal(s.cmd?.type, 'move');
+    return s.cmd.goal;
+  });
+  const goalKeys = new Set(moveGoals.map(goal => `${goal.x},${goal.y}`));
   assert.ok(goalKeys.size >= 2, 'assault retarget should spread soldiers across nearby goals instead of one exact tile');
 }
 
