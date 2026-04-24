@@ -96,6 +96,7 @@ export type StepAvoidanceResult = 'no-path' | 'moved' | 'repathed' | 'sidestep' 
 export type StepAvoidanceOptions = {
   allowAllyWorkerSwap?: boolean;
   allowWorkerSwapWithStationaryAlliedCombat?: boolean;
+  allowWorkerTransparentPass?: boolean;
   useMoveReservation?: boolean;
   preferSidestepBeforeRepathOnAllyBlock?: boolean;
 };
@@ -194,6 +195,23 @@ export function tryAdvancePathWithAvoidance(
   }
 
   const blockedByAlly = occupant.owner === entity.owner;
+  if (
+    options?.allowWorkerTransparentPass
+    && isWorkerKind(entity.kind)
+  ) {
+    const prevX = entity.pos.x;
+    const prevY = entity.pos.y;
+    if (!isTileOccupiedByUnitExcluding(state, prevX, prevY, [entity.id, occupant.id])) {
+      entity.pos.x = next.x;
+      entity.pos.y = next.y;
+      occupant.pos.x = prevX;
+      occupant.pos.y = prevY;
+      path.shift();
+      resetAllyBlockPolicy(allyBlockPolicy);
+      return 'moved';
+    }
+  }
+
   if (
     blockedByAlly
     && options?.allowAllyWorkerSwap

@@ -317,8 +317,7 @@ export function processGather(state: GameState, entity: Entity): void {
           return findPath(state, entity.pos.x, entity.pos.y, ec._gatherTarget.x, ec._gatherTarget.y);
         },
         {
-          allowAllyWorkerSwap: true,
-          allowWorkerSwapWithStationaryAlliedCombat: true,
+          allowWorkerTransparentPass: true,
           preferSidestepBeforeRepathOnAllyBlock: true,
         },
       );
@@ -467,8 +466,7 @@ export function processGather(state: GameState, entity: Entity): void {
           return findPath(state, entity.pos.x, entity.pos.y, targetPos.x, targetPos.y);
         },
         {
-          allowAllyWorkerSwap: true,
-          allowWorkerSwapWithStationaryAlliedCombat: true,
+          allowWorkerTransparentPass: true,
           preferSidestepBeforeRepathOnAllyBlock: true,
         },
       );
@@ -882,8 +880,7 @@ export function processBuild(state: GameState, entity: Entity): void {
         return findPath(state, entity.pos.x, entity.pos.y, targetPos.x, targetPos.y);
       },
       {
-        allowAllyWorkerSwap: true,
-        allowWorkerSwapWithStationaryAlliedCombat: true,
+        allowWorkerTransparentPass: true,
         preferSidestepBeforeRepathOnAllyBlock: true,
       },
     );
