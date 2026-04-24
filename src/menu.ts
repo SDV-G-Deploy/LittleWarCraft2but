@@ -1067,7 +1067,7 @@ export function runMenu(
         // Build shareable URL — race/map are negotiated in-protocol now
         const origin = window.location.origin + window.location.pathname;
         const modeParam = ms.netMode === 'public' ? '&mode=public' : '';
-        const transportParam = ms.transportMode === 'ws-relay' ? '&transport=ws-relay' : '';
+        const transportParam = ms.transportMode === 'peerjs' ? '' : `&transport=${ms.transportMode}`;
         const link   = `${origin}?room=${sess.code}${modeParam}${transportParam}`;
         ctx.fillStyle = WHITE;
         ctx.font      = '11px monospace';
