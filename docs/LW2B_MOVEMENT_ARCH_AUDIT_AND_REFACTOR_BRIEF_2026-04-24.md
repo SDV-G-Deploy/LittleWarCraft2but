@@ -55,6 +55,19 @@ Never trade deterministic outcomes for local movement “smartness”.
 Worker traffic may be permissive/fake if that protects economy continuity.
 Do not let workers become shove-heavy actors against allied stationary combat lines.
 
+### Rule C.1 — Worker travel through units is mandatory
+During gather/build travel, workers are a transparent traffic class with respect to units.
+They must be allowed to move through units rather than trying to solve unit traffic with generic sidestep/repath logic.
+
+### Rule C.2 — Worker pathing must ignore unit traffic as an obstacle class
+For worker gather/build travel:
+- units are not authoritative blockers for path planning,
+- units are not authoritative blockers for local step resolution,
+- worker movement should not be routed into repeated ally-block sidestep/repath loops.
+
+Terrain, map bounds, static blockers, and building footprints still matter.
+Unit traffic does not.
+
 ### Rule D — Combat sophistication belongs in combat domain
 Fix rear-line thrash and front stability via combat engagement structure (slot/staging/anti-thrash), not via generalized crowd rules.
 
@@ -66,7 +79,7 @@ Fix rear-line thrash and front stability via combat engagement structure (slot/s
 |---|---|---|---|---|---|
 | R1 | Plain move | Local deadlock/repath churn in dense groups | High | units stall/jitter in chokepoints | keep bounded repath + deterministic reservation + strict stuck metrics |
 | R2 | Combat | Rear melee re-poking occupied frontline tile | High | twitchy front, ugly reinforcement behavior | staging-slot + anti-thrash hold logic |
-| R3 | Worker | Base-lane congestion around dropoff/mine | High | delayed returns, economic collapse feel | keep worker-domain permissive movement and endpoint guardrails |
+| R3 | Worker | Base-lane congestion around dropoff/mine | High | delayed returns, economic collapse feel | worker travel through units, endpoint guardrails, worker-domain local semantics |
 | R4 | Cross-domain | Semantic leakage from worker/combat into plain move | High | flag explosion and hard-to-reason outcomes | domain-owned policies only |
 | R5 | Performance | Pathing overhead spikes on browser | Medium | frame spikes in larger armies | keep flow-field as support optimization, not full dynamic crowd sim |
 | R6 | Verification | “Looks okay” but no hard movement KPIs | High | regressions caught late in manual play | add objective movement KPI gates in CI |
@@ -162,12 +175,16 @@ Tasks:
 - keep worker travel explicitly domain-owned,
 - optimize for throughput and anti-stall behavior,
 - preserve non-displacement of allied stationary combat units,
-- refine endpoint handling (dropoff/resource/build approach) to reduce visible pileups.
+- refine endpoint handling (dropoff/resource/build approach) to reduce visible pileups,
+- make gather/build travel transparent through units by contract, not as a fallback exception,
+- remove worker dependence on generic ally-block sidestep/repath resolution against units.
 
 Exit criteria:
 - better worker cycle KPIs,
 - no new deterministic failures,
-- no semantic leakage into plain/combat movement.
+- no semantic leakage into plain/combat movement,
+- workers no longer stall because of unit traffic,
+- workers traverse unit traffic directly during gather/build travel.
 
 ---
 
@@ -180,11 +197,13 @@ Tasks:
 - formalize staging behavior for rear melee,
 - add anti-thrash retry/hold logic,
 - reduce pointless pressure into occupied frontline tiles,
+- stabilize chase goal reuse/recompute cadence to avoid same-tick churn,
 - keep ranged behavior distinct.
 
 Exit criteria:
 - reduced combat thrash KPIs,
 - visually stable frontline behavior in manual check scenes,
+- lower pointless chase retry/reassign churn,
 - no move-domain regressions.
 
 ---
@@ -224,7 +243,9 @@ Reject changes that:
 - add multiple policy booleans to force worker/combat divergence inside shared move helper,
 - improve theoretical local correctness while worsening economy continuity,
 - introduce non-deterministic tie resolution,
-- widen scope without scenario/KPI evidence.
+- widen scope without scenario/KPI evidence,
+- route worker gather/build travel back into unit-blocked local avoidance logic,
+- treat unit traffic as a hard blocker for worker gather/build movement.
 
 ---
 
@@ -233,7 +254,7 @@ Reject changes that:
 1. `MOV-001` Add movement KPI capture + baseline snapshots.
 2. `MOV-002` Add deterministic scenario suite scaffolding + reporters.
 3. `MOV-003` Plain-move congestion hardening (KPI-driven, narrow).
-4. `MOV-004` Worker throughput/endpoint pass (economy-domain local).
+4. `MOV-004` Worker transparent-through-units travel pass (economy-domain local).
 5. `MOV-005` Combat staging/anti-thrash stabilization.
 6. `MOV-006` Pathing performance pass (post-correctness only).
 
@@ -241,4 +262,4 @@ Reject changes that:
 
 ## 11) One-line directive for OpenClaw
 
-**Keep domain boundaries strict, prove every movement change with deterministic scenario KPIs, and optimize gameplay readability/throughput before algorithm elegance.**
+**Keep domain boundaries strict, keep worker gather/build travel transparent through units, prove every movement change with deterministic scenario KPIs, and optimize gameplay readability/throughput before algorithm elegance.**
