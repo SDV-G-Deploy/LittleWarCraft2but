@@ -101,6 +101,7 @@ Implement and log these KPIs at minimum:
 - `rear_melee_wait_ratio`
 - `chase_repath_attempts_per_1k_ticks`
 - `contact_slot_reassign_rate`
+- `group_goal_spread_collisions`
 
 ### Worker KPIs
 - `median_worker_cycle_ticks` (gather→return)
@@ -129,7 +130,8 @@ Create/extend deterministic test scenarios:
 5. **Worker-Townhall-Lane-MixedTraffic**
 6. **Worker-Mine-Approach-HighConcurrency**
 7. **Worker-Build-Approach-NarrowLane**
-8. **LongRun-OfflineSimulation-PathingStability**
+8. **AI-GroupGoal-Spread-Massing**
+9. **LongRun-OfflineSimulation-PathingStability**
 
 Each scenario should emit KPI snapshots and deterministic pass signal.
 
@@ -259,7 +261,8 @@ Reject changes that:
 4. `MOV-004` Worker transparent-through-units travel pass (economy-domain local).
 5. `MOV-005` Combat staging/anti-thrash stabilization.
 6. `MOV-006` Worker return/dropoff retarget recovery near static choke.
-7. `MOV-007` Pathing performance pass (post-correctness only).
+7. `MOV-007` AI group-goal deterministic spread for massing/recall/pressure flows.
+8. `MOV-008` Pathing performance pass (post-correctness only).
 
 ---
 
