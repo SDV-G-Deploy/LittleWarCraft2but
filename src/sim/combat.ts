@@ -11,6 +11,7 @@ import { findPath } from './pathfinding';
 import { findFlowFieldPath } from './nav/flow-field';
 import { createFlowFieldCache } from './nav/flow-field-cache';
 import { tryAdvancePathWithAvoidance } from './movement';
+import { recordCombatChaseRepath, recordMeleeSlotReassign, recordNearTargetHoldTick } from './movement-kpi';
 
 const combatFlowFieldCache = createFlowFieldCache();
 
@@ -180,7 +181,13 @@ function computeMeleeApproachAssignments(state: GameState, target: Entity): Map<
       const key = tileKey(chosenContact.x, chosenContact.y);
       reserved.add(key);
       assignments.set(attacker.id, chosenContact);
-      if (attacker.cmd?.type === 'attack') attacker.cmd.contactSlot = { ...chosenContact };
+      if (attacker.cmd?.type === 'attack') {
+        const prev = attacker.cmd.contactSlot;
+        if (prev && (prev.x !== chosenContact.x || prev.y !== chosenContact.y)) {
+          recordMeleeSlotReassign();
+        }
+        attacker.cmd.contactSlot = { ...chosenContact };
+      }
       continue;
     }
 
@@ -473,6 +480,7 @@ export function processAttack(state: GameState, entity: Entity): void {
       chaseGoal.y === entity.pos.y;
 
     if (isMeleeHold) {
+      recordNearTargetHoldTick();
       cmd.chasePath = [];
       cmd.chaseGoal = { ...chaseGoal };
       cmd.chasePathTick = state.tick;
@@ -490,6 +498,7 @@ export function processAttack(state: GameState, entity: Entity): void {
 
     if (cmd.chasePath.length > 0) {
       const tryRepath = (): { x: number; y: number }[] | null => {
+        recordCombatChaseRepath();
         const chasePath = findCombatChasePath(state, entity, chaseGoal);
         cmd.chasePathTick = state.tick;
         cmd.chaseGoal = { ...chaseGoal };

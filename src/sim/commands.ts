@@ -8,6 +8,7 @@ import { processAttack, issueAttackCommand, isTargetAttackableNow } from './comb
 import { processGather, processTrain, processBuild } from './economy';
 import { getEntity, isTileBlockedByEntity } from './entities';
 import { profiler } from './profiler';
+import { recordMoveBlockedTick, recordMoveRepathAttempt } from './movement-kpi';
 import { getResolvedRange, getResolvedSpeed } from '../balance/resolver';
 import { beginMovementResolutionTick, endMovementResolutionTick, tryAdvancePathWithAvoidance } from './movement';
 
@@ -333,6 +334,7 @@ export function processCommand(state: GameState, entity: Entity): void {
         cmd.lastPos.y = entity.pos.y;
         cmd.repathCount++;
         const repathOk = !!(movePlan && movePlan.path.length > 0);
+        recordMoveRepathAttempt();
         profiler.recordMoveRepath(repathOk);
         if (repathOk) {
           cmd.goal = movePlan!.goal;
@@ -349,6 +351,7 @@ export function processCommand(state: GameState, entity: Entity): void {
         const movePlan = findNearbyMoveGoal(state, entity, cmd.goal.x, cmd.goal.y);
         cmd.repathCount++;
         const repathOk = !!(movePlan && movePlan.path.length > 0);
+        recordMoveRepathAttempt();
         profiler.recordMoveRepath(repathOk);
         if (!repathOk) return null;
         latestRepathGoal = movePlan!.goal;
@@ -385,6 +388,7 @@ export function processCommand(state: GameState, entity: Entity): void {
       }
 
       if (stepResult === 'blocked') {
+        recordMoveBlockedTick();
         profiler.recordMoveSidestep(false);
         cmd.stepTick = state.tick;
         cmd.lastProgressTick = state.tick;

@@ -18,6 +18,7 @@ import {
 import { applyDoctrineTrainTicks } from '../balance/doctrines';
 import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity, setEntityFootprint } from './entities';
 import { findPath } from './pathfinding';
+import { markWorkerCycleComplete, markWorkerCycleStart, recordWorkerBlockedTick } from './movement-kpi';
 
 // ─── Population ───────────────────────────────────────────────────────────────
 
@@ -58,6 +59,7 @@ export function issueGatherCommand(state: GameState, entity: Entity, targetId: n
   const target = resolveGatherTarget(state, targetId);
   if (!target) return;
   entity.cmd = { type: 'gather', targetId, resourceType: target.resourceType, phase: 'toresource', waitTicks: currentTick };
+  markWorkerCycleStart(entity.id, currentTick);
   entity.carryGold = 0;
   entity.carryWood = 0;
   (entity as EntityWithCache)._gatherPath = undefined;
@@ -257,6 +259,7 @@ function bestTreeApproach(state: GameState, entity: Entity, tx: number, ty: numb
 export function processGather(state: GameState, entity: Entity): void {
   if (!entity.cmd || entity.cmd.type !== 'gather') return;
   const cmd = entity.cmd;
+  markWorkerCycleStart(entity.id, state.tick);
   const ec  = entity as EntityWithCache;
 
   const clearGatherState = () => {
@@ -330,7 +333,11 @@ export function processGather(state: GameState, entity: Entity): void {
         },
       );
       cmd.waitTicks = state.tick;
-      if (stepResult === 'blocked' || stepResult === 'repathed') return;
+      if (stepResult === 'blocked') {
+        recordWorkerBlockedTick();
+        return;
+      }
+      if (stepResult === 'repathed') return;
       if (ec._gatherPath.length === 0) {
         cmd.phase = 'gathering'; cmd.waitTicks = state.tick; ec._gatherPath = undefined; ec._gatherTarget = undefined;
       }
@@ -428,6 +435,7 @@ export function processGather(state: GameState, entity: Entity): void {
         }
         entity.carryGold = 0;
         entity.carryWood = 0;
+        markWorkerCycleComplete(entity.id, state.tick);
         ec._gatherPath = undefined;
         if (resourceDepleted) {
           if (cmd.resourceType === 'wood') {
@@ -468,7 +476,11 @@ export function processGather(state: GameState, entity: Entity): void {
         },
       );
       cmd.waitTicks = state.tick;
-      if (stepResult === 'blocked' || stepResult === 'repathed') return;
+      if (stepResult === 'blocked') {
+        recordWorkerBlockedTick();
+        return;
+      }
+      if (stepResult === 'repathed') return;
       break;
     }
   }
@@ -868,7 +880,11 @@ export function processBuild(state: GameState, entity: Entity): void {
       },
     );
     cmd.stepTick = state.tick;
-    if (stepResult === 'blocked' || stepResult === 'repathed') return;
+    if (stepResult === 'blocked') {
+      recordWorkerBlockedTick();
+      return;
+    }
+    if (stepResult === 'repathed') return;
     if (ec._buildPath.length === 0) {
       cmd.phase = 'building';
       clearBuildState();

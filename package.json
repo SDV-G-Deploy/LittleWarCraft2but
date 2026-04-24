@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "npx tsx src/sim/determinism.test.ts && npx tsx src/sim/nav/flow-field.test.ts && npx tsx src/sim/build-net-debug.test.ts && npx tsx src/sim/move-command.test.ts && npx tsx src/sim/movement-policy.test.ts && npx tsx src/sim/worker-traffic.test.ts && npx tsx src/sim/combat-congestion.test.ts && npx tsx src/sim/rally-pathing.test.ts && npx tsx src/sim/offline-simulation.test.ts",
+    "test": "npx tsx src/sim/determinism.test.ts && npx tsx src/sim/nav/flow-field.test.ts && npx tsx src/sim/build-net-debug.test.ts && npx tsx src/sim/move-command.test.ts && npx tsx src/sim/movement-policy.test.ts && npx tsx src/sim/worker-traffic.test.ts && npx tsx src/sim/combat-congestion.test.ts && npx tsx src/sim/rally-pathing.test.ts && npx tsx src/sim/offline-simulation.test.ts && npx tsx src/sim/movement-kpi-baseline.test.ts",
     "test:determinism": "npx tsx src/sim/determinism.test.ts",
     "test:build-net": "npx tsx src/sim/build-net-debug.test.ts",
     "test:combat-congestion": "npx tsx src/sim/combat-congestion.test.ts",
     "test:offline-simulation": "npx tsx src/sim/offline-simulation.test.ts",
+    "test:movement-kpi": "npx tsx src/sim/movement-kpi-baseline.test.ts",
     "test:mwc-transport": "npx tsx src/net/mwc-transport.integration.test.ts",
     "preview": "vite preview",
     "balance:report": "npx tsx src/balance/report-cli.ts",
