@@ -1,7 +1,7 @@
 # LW2B Worker Movement Pass (2026-04-24)
 
-Status: implemented and pushed, later superseded as an intermediate checkpoint
-Commit: `86d0cea`
+Status: updated with transparent-through-units worker travel contract pass
+Commit: `86d0cea` (original pass), follow-up commit updates worker gather/build travel semantics
 
 Related doctrine:
 - `docs/LW2B_MOVEMENT_DOCTRINE_2026-04-23.md`
@@ -65,20 +65,22 @@ Why this matters:
 - throughput near mines and townhall/lumbermill edges is more distributed
 - this helps congestion without introducing a generalized crowd model
 
-### 3. Worker arrival guard for occupied approach tiles
+### 3. Transparent-through-units gather/build local step semantics
 
 File:
 - `src/sim/economy.ts`
 
-Workers in gather/build travel no longer blindly finalize arrival into an already-occupied worker tile.
+Worker gather/build travel now treats unit traffic as non-authoritative for local movement resolution.
 
-Instead:
-- if the final worker approach tile is still occupied, the worker waits and/or refreshes its target path state instead of collapsing into that tile
+What changed:
+- gather/build local step no longer runs stationary-allied-combat sidestep logic
+- gather/build arrival no longer waits/repaths when endpoint tiles are occupied by units
+- worker travel still respects terrain passability, bounds, and static/building blockers
 
 Why this matters:
-- preserves the forgiving worker model
-- reduces visible worker pileup at resource/build/dropoff approach endpoints
-- stays local to worker economy logic instead of leaking new policy into all movement domains
+- workers move through unit traffic directly during gather/build travel
+- economy movement no longer enters ally-block sidestep/repath churn against units
+- allied stationary combat units are not displaced/shoved by worker movement
 
 ## Test status
 
@@ -116,7 +118,7 @@ That remaining work, if needed, should stay narrow and scenario-driven.
 This updated direction now aligns with the broader redesign plan captured in:
 - `docs/LW2B_MOVEMENT_REDESIGN_PLAN_2026-04-24_PRE_FINAL.md`
 
-For the next worker-traffic pass, the preferred simplification is now stronger than the current implemented behavior:
+For this follow-up worker-traffic pass, the preferred simplification is now implemented as gather/build travel behavior:
 - Human `worker` and Orc `peon` should be treated as **transparent worker traffic actors**
 - workers should be able to pass through other workers
 - workers should also be able to pass through other units when needed to preserve economy flow

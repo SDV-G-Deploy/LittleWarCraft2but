@@ -18,7 +18,6 @@ import {
 import { applyDoctrineTrainTicks } from '../balance/doctrines';
 import { getEntity, spawnEntity, killEntity, isTileBlockedByEntity, setEntityFootprint } from './entities';
 import { findPath } from './pathfinding';
-import { findDeterministicSidestep, isTileOccupiedByOtherUnit } from './movement';
 
 // ─── Population ───────────────────────────────────────────────────────────────
 
@@ -89,24 +88,6 @@ function replacePath(path: Vec2[], nextPath: Vec2[]): void {
   path.splice(0, path.length, ...nextPath);
 }
 
-function getUnitOccupyingTile(state: GameState, unitId: number, tx: number, ty: number): Entity | null {
-  for (const other of state.entities) {
-    if (other.id === unitId) continue;
-    if (!isUnitKind(other.kind)) continue;
-    if (other.pos.x === tx && other.pos.y === ty) return other;
-  }
-  return null;
-}
-
-function isStationaryUnit(unit: Entity): boolean {
-  if (!unit.cmd) return true;
-  if (unit.cmd.type === 'attack') return unit.cmd.chasePath.length === 0;
-  if (unit.cmd.type === 'move') return unit.cmd.path.length === 0;
-  if (unit.cmd.type === 'gather') return unit.cmd.phase === 'gathering';
-  if (unit.cmd.type === 'build') return unit.cmd.phase === 'building';
-  return true;
-}
-
 function tryAdvanceWorkerTravel(
   state: GameState,
   worker: Entity,
@@ -124,18 +105,6 @@ function tryAdvanceWorkerTravel(
       return 'repathed';
     }
     return 'blocked';
-  }
-
-  const occupant = getUnitOccupyingTile(state, worker.id, next.x, next.y);
-  if (occupant && occupant.owner === worker.owner && !isWorkerKind(occupant.kind) && isStationaryUnit(occupant)) {
-    const sidestep = findDeterministicSidestep(state, worker, next, goal);
-    if (sidestep) {
-      worker.pos.x = sidestep.x;
-      worker.pos.y = sidestep.y;
-      const repath = tryRepath?.();
-      if (repath && repath.length > 0) replacePath(path, repath);
-      return 'sidestep';
-    }
   }
 
   worker.pos.x = next.x;
@@ -347,16 +316,6 @@ export function processGather(state: GameState, entity: Entity): void {
         ec._gatherTarget = approach.target;
       }
       if (ec._gatherPath.length === 0) {
-        if (ec._gatherTarget && isTileOccupiedByOtherUnit(state, entity, ec._gatherTarget.x, ec._gatherTarget.y)) {
-          const approach = target.resourceType === 'gold'
-            ? bestMineApproach(state, entity, target.entity)
-            : bestTreeApproach(state, entity, cmd.targetId % MAP_W, Math.floor(cmd.targetId / MAP_W));
-          if (approach) {
-            ec._gatherPath = approach.path;
-            ec._gatherTarget = approach.target;
-            return;
-          }
-        }
         cmd.phase = 'gathering'; cmd.waitTicks = state.tick; ec._gatherTarget = undefined; return;
       }
       if (state.tick - cmd.waitTicks < tps) return;
@@ -458,11 +417,6 @@ export function processGather(state: GameState, entity: Entity): void {
         ec._gatherPath = bestReturn?.path ?? [];
       }
       if (ec._gatherPath.length === 0) {
-        if (ec._gatherReturnTarget && isTileOccupiedByOtherUnit(state, entity, ec._gatherReturnTarget.x, ec._gatherReturnTarget.y)) {
-          ec._gatherPath = undefined;
-          ec._gatherReturnTarget = undefined;
-          return;
-        }
         const owner = entity.owner as 0 | 1;
         state.gold[owner] += entity.carryGold ?? 0;
         state.wood[owner] += entity.carryWood ?? 0;
@@ -897,11 +851,6 @@ export function processBuild(state: GameState, entity: Entity): void {
       ec._buildPath = findPath(state, entity.pos.x, entity.pos.y, adjX, adjY) ?? [];
     }
     if (ec._buildPath.length === 0) {
-      if (ec._buildApproachTarget && isTileOccupiedByOtherUnit(state, entity, ec._buildApproachTarget.x, ec._buildApproachTarget.y)) {
-        ec._buildPath = undefined;
-        ec._buildApproachTarget = undefined;
-        return;
-      }
       cmd.phase = 'building';
       clearBuildState();
       return;
