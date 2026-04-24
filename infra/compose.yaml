@@ -1,0 +1,127 @@
+services:
+  peerjs:
+    image: peerjs/peerjs-server:latest
+    container_name: lwc2-peerjs
+    restart: unless-stopped
+    command:
+      - --port
+      - "9000"
+      - --host
+      - 0.0.0.0
+      - --path
+      - /
+      - --key
+      - peerjs
+      - --proxied
+      - "true"
+      - --concurrent_limit
+      - "200"
+    expose:
+      - "9000"
+
+  peerjs-https:
+    image: nginx:alpine
+    container_name: lwc2-peerjs-https
+    restart: unless-stopped
+    depends_on:
+      - peerjs
+      - mwc
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/www:/var/www/certbot:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ../dist:/usr/share/nginx/html:ro
+
+  coturn:
+    image: coturn/coturn:4.6.3
+    container_name: lwc2-coturn
+    restart: unless-stopped
+    command:
+      - -n
+      - --log-file=stdout
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_STATIC_AUTH_SECRET}
+      - --fingerprint
+      - --realm=${TURN_REALM}
+      - --server-name=${TURN_REALM}
+      - --external-ip=${TURN_EXTERNAL_IP}
+      - --listening-ip=0.0.0.0
+      - --relay-ip=0.0.0.0
+      - --listening-port=3478
+      - --tls-listening-port=${TURN_TLS_PORT:-5349}
+      - --min-port=49160
+      - --max-port=49200
+      - --no-cli
+      - --no-dtls
+      - --cert=/certs/fullchain.pem
+      - --pkey=/certs/privkey.pem
+      - --cipher-list=HIGH:!aNULL:!MD5
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "${TURN_TLS_PORT:-5349}:${TURN_TLS_PORT:-5349}/tcp"
+      - "49160-49200:49160-49200/tcp"
+      - "49160-49200:49160-49200/udp"
+    volumes:
+      - ./certbot/conf/live/${TURN_REALM}:/certs:ro
+
+  ice-api:
+    image: node:20-alpine
+    container_name: lwc2-ice-api
+    restart: unless-stopped
+    working_dir: /app
+    command: ["node", "ice-server.js"]
+    environment:
+      ICE_API_PORT: 8081
+      ICE_ALLOWED_ORIGINS: https://w2.kislota.today,https://sdv-g-deploy.github.io
+      TURN_HOST: ${TURN_REALM}
+      TURN_PORT: 3478
+      TURN_TLS_PORT: ${TURN_TLS_PORT:-5349}
+      TURN_ENABLE_TLS: ${TURN_ENABLE_TLS:-true}
+      TURN_PREFER_TLS: ${TURN_PREFER_TLS:-true}
+      TURN_STATIC_AUTH_SECRET: ${TURN_STATIC_AUTH_SECRET}
+      TURN_TTL_SECONDS: 600
+    expose:
+      - "8081"
+    volumes:
+      - ./ice-server.js:/app/ice-server.js:ro
+
+  ws-relay:
+    image: node:20-alpine
+    container_name: lwc2-ws-relay
+    restart: unless-stopped
+    working_dir: /app
+    command: ["node", "infra/ws-relay-server.js"]
+    environment:
+      WS_RELAY_PORT: 8082
+      WS_RELAY_PATH: /ws-relay
+      WS_RELAY_MAX_MESSAGE_BYTES: 16384
+      WS_RELAY_ROOM_TTL_MS: 600000
+    expose:
+      - "8082"
+    volumes:
+      - ..:/app:ro
+
+  mwc:
+    build:
+      context: ../../MultiWebCore
+      dockerfile: Dockerfile
+    container_name: lwc2-mwc
+    restart: unless-stopped
+    environment:
+      MWC_HOST: 0.0.0.0
+      MWC_PORT: 8787
+      MWC_SERVER_NAME: multiwebcore-w2
+      MWC_SERVER_VERSION: 0.1.0
+      MWC_DEFAULT_SIM_RATE_HZ: 20
+      MWC_DEFAULT_INPUT_LEAD_TICKS: 2
+      MWC_DEFAULT_MIN_PLAYERS: 2
+      MWC_REPLAY_HISTORY_SIZE: 128
+      MWC_RECONNECT_WINDOW_MS: 20000
+      MWC_RESUME_LIVE_MAX_GAP_TICKS: 2
+      MWC_HEARTBEAT_MS: 10000
+    expose:
+      - "8787"

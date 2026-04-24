@@ -1,0 +1,28 @@
+{
+  "name": "little-warcraft",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "test": "npx tsx src/sim/determinism.test.ts && npx tsx src/sim/nav/flow-field.test.ts && npx tsx src/sim/build-net-debug.test.ts && npx tsx src/sim/move-command.test.ts && npx tsx src/sim/movement-policy.test.ts && npx tsx src/sim/worker-traffic.test.ts && npx tsx src/sim/combat-congestion.test.ts && npx tsx src/sim/rally-pathing.test.ts && npx tsx src/sim/offline-simulation.test.ts",
+    "test:determinism": "npx tsx src/sim/determinism.test.ts",
+    "test:build-net": "npx tsx src/sim/build-net-debug.test.ts",
+    "test:combat-congestion": "npx tsx src/sim/combat-congestion.test.ts",
+    "test:offline-simulation": "npx tsx src/sim/offline-simulation.test.ts",
+    "test:mwc-transport": "npx tsx src/net/mwc-transport.integration.test.ts",
+    "preview": "vite preview",
+    "balance:report": "npx tsx src/balance/report-cli.ts",
+    "balance:sheet": "npx tsx src/balance/balance-sheet-cli.ts"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0"
+  },
+  "dependencies": {
+    "peerjs": "^1.5.5",
+    "ws": "^8.20.0"
+  }
+}
