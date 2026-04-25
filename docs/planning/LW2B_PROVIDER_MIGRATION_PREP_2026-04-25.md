@@ -2,6 +2,8 @@
 
 Purpose: migration-ready source audit for moving realtime backend off current Helsinki contour toward a provider/route profile with better Russia reachability.
 
+Companion analysis: `LW2B_MWC_PROVIDER_MIGRATION_ANALYSIS_2026-04-25.md`
+
 Scope: networking backend only (signaling/ICE/TURN/relay). Gameplay simulation model stays unchanged.
 
 ## 1) Current source inventory (migration source of truth)
@@ -16,6 +18,7 @@ Scope: networking backend only (signaling/ICE/TURN/relay). Gameplay simulation m
 
 - **Frontend/public entry**: `w2.kislota.today` (static app)
 - **Realtime contour (actively movable)**: signaling + ICE + TURN + ws-relay + MWC websocket path
+- **MWC status inside migration scope**: part of the realtime contour, not an optional side experiment for this provider pass
 - **No authoritative game server**: deterministic sim remains client-side
 
 ## 1.3 Services and ports
@@ -67,7 +70,7 @@ Use this as execution checklist for provider move.
 
 ## 2.3 Must recreate on target provider
 
-- [ ] Docker/runtime stack (`peerjs`, `nginx`, `coturn`, `ice-api`, `ws-relay`, optional `mwc`)
+- [ ] Docker/runtime stack (`peerjs`, `nginx`, `coturn`, `ice-api`, `ws-relay`, `mwc`)
 - [ ] Firewall rules for required ports/protocols
 - [ ] DNS records and health checks
 - [ ] Cert renewal workflow and post-renew reload/restart policy
@@ -98,6 +101,7 @@ Score each provider 1..5 (5 best). Keep notes evidence-based from real field tes
 
 Acceptance gate before canonical switch:
 - At least one RU path can create/join and finish a real match with stable command flow.
+- `mwc` path must also complete real room create/join/start traffic on the target contour.
 - No regression vs current baseline for non-RU users.
 
 ### Phase A baseline target (VDSina NL)
@@ -108,9 +112,10 @@ Based on currently visible VDSina standard plans (`vdsina.com/pricing/standard`,
 - **Budget fallback (short pilot only)**: `1 vCPU / 2 GB RAM / 40 GB NVMe` (listed ~`$15.00/month`, `0.50/day`)
 
 Why this baseline is sensible for LW2B Phase A:
-- leaves comfortable headroom for the full realtime edge stack (`nginx + peerjs + ice-api + coturn + ws-relay`) plus logs and short traffic spikes,
+- leaves comfortable headroom for the full realtime edge stack (`nginx + peerjs + ice-api + coturn + ws-relay + mwc`) plus logs and short traffic spikes,
 - keeps cost low enough for route-profile testing,
-- avoids the tighter operational margin of 1 GB class nodes.
+- avoids the tighter operational margin of 1 GB class nodes,
+- matches the current direction where MultiWebCore is part of the movable realtime contour, not an optional side path.
 
 ## 4) Cutover skeleton (parallel bring-up, low-risk)
 
@@ -129,7 +134,8 @@ Why this baseline is sensible for LW2B Phase A:
    - room create/join
    - in-match sync 10+ minutes
    - reconnect/disconnect behavior
-3. Capture exact failure class per layer (frontend, signaling, ICE, relay).
+   - `mwc` room create/join/start path
+3. Capture exact failure class per layer (frontend, signaling, ICE, relay, `mwc`).
 
 ## Phase C, progressive traffic shift
 
