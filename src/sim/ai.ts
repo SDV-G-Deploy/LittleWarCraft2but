@@ -7,7 +7,7 @@ import { DOCTRINE_COST } from '../balance/doctrines';
 import { tryStartLumberUpgrade } from './upgrades';
 import {
   issueGatherCommand, issueTrainCommand,
-  issueBuildCommand, isValidPlacement,
+  issueBuildCommand, issueResumeBuildCommand, isValidPlacement,
 } from './economy';
 import { issueAttackCommand } from './combat';
 import { issueMoveCommand } from './commands';
@@ -91,6 +91,9 @@ export interface AIDifficultyPersonality {
 
 export interface AISnapshot {
   myArmySize: number;
+  enemyArmySize: number;
+  enemyWorkerCount: number;
+  enemyStructureCount: number;
   enemyArmyNearBase: number;
   myWorkersUnderThreat: number;
   myTownHallUnderThreat: boolean;
@@ -298,13 +301,15 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
   updateAssaultPosture(state, ai, snapshot);
   ai.mineIntent = chooseMineIntent(state, ai, owner, snapshot, { contestedMine, expansionMine });
 
-  const woodDemand = estimateWoodDemand(state, ai, owner, myBarracks, myLumberMill, farmCount, towerCount, mySoldiers.length);
-  keepGathering(state, myWorkers, woodDemand);
-
   if (defenseThreat.active) {
     ai.lastBaseThreatTick = state.tick;
     recallDefenders(state, myTH, mySoldiers, defenseThreat, ai.baseDefenseRadius, ai.homeReserveMin);
   }
+
+  resumeOwnedConstruction(state, owner, myWorkers, defenseThreat);
+
+  const woodDemand = estimateWoodDemand(state, ai, owner, myBarracks, myLumberMill, farmCount, towerCount, mySoldiers.length);
+  keepGathering(state, myWorkers, woodDemand);
 
   switch (ai.phase) {
     case 'economy': {
@@ -394,6 +399,7 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
 
     case 'assault': {
       const opposingPlayerTH = es.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
+      const finishOff = enemyCollapsed(snapshot) && mySoldiers.length >= Math.max(2, snapshot.enemyStructureCount);
       const reserveCount = getHomeReserveCount(ai, mySoldiers.length, defenseThreat.active, state.tick);
       const armyRolePlan = assignArmyRoles(state, owner, myTH, mySoldiers, reserveCount, contestedMine, expansionMine, opposingPlayerTH, ai);
       const assaultAssignments = armyRolePlan.assignments.filter(entry => entry.role !== 'reserve');
@@ -428,17 +434,24 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
             continue;
           }
 
-          const nearest = role === 'rangedFollow'
-            ? chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius, 'rangedFollow')
-            : ai.difficulty === 'easy'
-              ? nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius)
-              : chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius + (role === 'frontlineShock' ? 1 : 0), 'frontline');
+          const nearest = finishOff
+            ? nearestEnemyStructure(state, s, owner, ai.attackRetargetRadius + 10)
+            : role === 'rangedFollow'
+              ? chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius, 'rangedFollow')
+              : ai.difficulty === 'easy'
+                ? nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius)
+                : chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius + (role === 'frontlineShock' ? 1 : 0), 'frontline');
 
           if (nearest) {
             issueAttackCommand(s, nearest.id, state.tick, state);
             if (snapshot.nearbyFriendlyArmyAtFront >= snapshot.nearbyEnemyArmyAtFront + 2) {
               ai.lastWonLocalTradeTick = state.tick;
             }
+          } else if (finishOff && opposingPlayerTH) {
+            const tx = opposingPlayerTH.pos.x + 1;
+            const ty = opposingPlayerTH.pos.y + 2;
+            const target = preferredSpreadGoal(state, s, tx, ty);
+            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
           } else if (role === 'rangedFollow' && armyRolePlan.frontlineAnchor) {
             const tx = armyRolePlan.frontlineAnchor.x;
             const ty = armyRolePlan.frontlineAnchor.y;
@@ -501,6 +514,45 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
   }
 }
 
+function enemyCollapsed(snapshot: AISnapshot): boolean {
+  return snapshot.enemyStructureCount > 0 && snapshot.enemyArmySize === 0 && snapshot.enemyWorkerCount === 0;
+}
+
+function nearestEnemyStructure(state: GameState, unit: Entity, owner: 0 | 1, maxDistance = Infinity): Entity | null {
+  let best: Entity | null = null; let bestScore = -Infinity;
+  for (const e of state.entities) {
+    if (!isOwnedByOpposingPlayer(e, owner) || isUnitKind(e.kind) || e.kind === 'goldmine' || e.kind === 'barrier') continue;
+    const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
+    if (d > maxDistance) continue;
+    let score = -d;
+    if (e.kind === 'townhall') score += 10;
+    else if (e.kind === 'construction') score += 7;
+    else if (e.kind === 'barracks' || e.kind === 'tower') score += 5;
+    else score += 3;
+    if (score > bestScore || (score === bestScore && best && e.id < best.id)) {
+      best = e;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+function resumeOwnedConstruction(state: GameState, owner: 0 | 1, workers: Entity[], defenseThreat: DefenseThreatInfo): void {
+  if (defenseThreat.active) return;
+  const sites = state.entities
+    .filter(e => e.owner === owner && e.kind === 'construction' && e.hp < e.hpMax)
+    .sort((a, b) => a.id - b.id);
+  for (const site of sites) {
+    const alreadyAssigned = workers.some(w => w.cmd?.type === 'build' && w.cmd.siteId === site.id);
+    if (alreadyAssigned) continue;
+    const available = [...workers]
+      .filter(w => !w.cmd || (w.cmd.type === 'gather' && (w.carryGold ?? 0) === 0 && (w.carryWood ?? 0) === 0))
+      .sort((a, b) => Math.hypot(a.pos.x - site.pos.x, a.pos.y - site.pos.y) - Math.hypot(b.pos.x - site.pos.x, b.pos.y - site.pos.y))[0];
+    if (!available) continue;
+    issueResumeBuildCommand(available, site, state.tick);
+  }
+}
+
 function applyDoctrineBias(ai: AIController, race: Race): void {
   const doctrine = AI_RACE_DOCTRINES[race];
   ai.raceDoctrine = doctrine;
@@ -522,9 +574,16 @@ function evaluateAISnapshot(
   contestedMine: Entity | null,
   expansionMine: Entity | null,
 ): AISnapshot {
-  const enemyArmyNearBase = state.entities.filter(e =>
+  const enemyArmyUnits = state.entities.filter(e => isOwnedByOpposingPlayer(e, owner) && isUnitKind(e.kind));
+  const enemyArmySize = enemyArmyUnits.filter(e => e.kind !== RACES[state.races[(owner === 0 ? 1 : 0) as 0 | 1]].worker).length;
+  const enemyWorkerCount = enemyArmyUnits.filter(e => e.kind === RACES[state.races[(owner === 0 ? 1 : 0) as 0 | 1]].worker).length;
+  const enemyStructureCount = state.entities.filter(e =>
     isOwnedByOpposingPlayer(e, owner) &&
-    isUnitKind(e.kind) &&
+    !isUnitKind(e.kind) &&
+    e.kind !== 'goldmine' &&
+    e.kind !== 'barrier'
+  ).length;
+  const enemyArmyNearBase = enemyArmyUnits.filter(e =>
     Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y) <= ai.baseDefenseRadius + 2,
   ).length;
   const myWorkersUnderThreat = state.entities.filter(e => e.owner === owner && e.kind === RACES[state.races[owner]].worker && (e.underAttackTick ?? -Infinity) >= state.tick - ai.defenseRecallWindowTicks).length;
@@ -560,6 +619,9 @@ function evaluateAISnapshot(
 
   return {
     myArmySize: mySoldiers.length,
+    enemyArmySize,
+    enemyWorkerCount,
+    enemyStructureCount,
     enemyArmyNearBase,
     myWorkersUnderThreat,
     myTownHallUnderThreat: defenseThreat.active && defenseThreat.severe,

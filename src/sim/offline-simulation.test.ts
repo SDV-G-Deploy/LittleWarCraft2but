@@ -179,10 +179,43 @@ function testOfflineSimulationLongRunSmoke(): void {
   assert.ok(side1MineIntents.size >= 0, 'side 1 mine-intent collection should remain valid');
 }
 
+
+function testAiResumesOrFinishesSideTasks(): void {
+  const state = makeState();
+  seedSimulationStart(state);
+
+  const ai = createAI('hard');
+  const myWorker = state.entities.find(e => e.owner === 0 && e.kind === 'worker');
+  const enemyTownHall = state.entities.find(e => e.owner === 1 && e.kind === 'townhall');
+  assert.ok(myWorker, 'worker should exist');
+  assert.ok(enemyTownHall, 'enemy townhall should exist');
+
+  const site = spawnEntity(state, 'construction', 0, { x: 6, y: 48 });
+  site.constructionOf = 'barracks';
+  site.hp = 100;
+  site.hpMax = 680;
+
+  tickAI(state, ai, 0);
+  assert.equal(myWorker!.cmd?.type, 'build', 'AI should resume unfinished owned construction with an available worker');
+  assert.equal(myWorker!.cmd?.siteId, site.id, 'AI should target the unfinished owned construction site');
+
+  myWorker!.cmd = null;
+  state.entities = state.entities.filter(e => e.owner !== 1 || e.kind === 'townhall');
+  spawnEntity(state, 'footman', 0, { x: enemyTownHall!.pos.x - 3, y: enemyTownHall!.pos.y + 1 });
+  spawnEntity(state, 'footman', 0, { x: enemyTownHall!.pos.x - 2, y: enemyTownHall!.pos.y + 1 });
+  ai.phase = 'assault';
+  ai.nextDecisionTick = 0;
+
+  tickAI(state, ai, 0);
+  const attackers = state.entities.filter(e => e.owner === 0 && (e.kind === 'footman' || e.kind === 'archer' || e.kind === 'knight'));
+  assert.ok(attackers.some(u => u.cmd?.type === 'attack' || u.cmd?.type === 'move'), 'AI should issue closing commands when only enemy structures remain');
+}
+
 function run(): void {
   testOwnerLockRejectsForeignGameplayCommands();
   testOfflineSimulationTicksBothAIs();
   testOfflineSimulationLongRunSmoke();
+  testAiResumesOrFinishesSideTasks();
   console.log('offline simulation tests passed');
 }
 
