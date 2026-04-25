@@ -648,40 +648,48 @@ function chooseMineIntent(
   const expansionFrontAdvantage = snapshot.nearbyFriendlyArmyAtExpansionFront - snapshot.nearbyEnemyArmyAtExpansionFront;
   const enemyTownHallNear = snapshot.enemyTownHallDistance !== null && snapshot.enemyTownHallDistance <= 28;
   const aggressiveDoctrine = ai.raceDoctrine.pressureBias + ai.difficultyPersonality.opportunism >= 0.7;
+  const contestedPresenceStrong = contestedMine && snapshot.contestedMineFavorable && snapshot.nearbyFriendlyArmyAtContestedFront >= 2;
+  const contestedTradeWon = !!(contestedPresenceStrong && snapshot.recentWonLocalTrade && contestedFrontAdvantage >= 1);
+  const strongContestedControl = !!(contestedPresenceStrong && contestedFrontAdvantage >= 2);
+  const expansionCanTake = !!(
+    expansionMine &&
+    snapshot.safeExpansionExists &&
+    expansionFrontAdvantage >= 0 &&
+    (!snapshot.contestedMineFavorable || contestedFrontAdvantage <= -1)
+  );
 
   if (snapshot.recentBaseThreat) {
-    if (contestedMine && snapshot.contestedMineFavorable && contestedFrontAdvantage >= 1) return 'guard';
+    if (contestedTradeWon || strongContestedControl) return 'guard';
+    if (contestedPresenceStrong && contestedFrontAdvantage >= 0) return 'deny';
     return null;
   }
 
-  if (snapshot.recentWonLocalTrade && contestedMine && snapshot.contestedMineFavorable && snapshot.nearbyFriendlyArmyAtContestedFront >= 2 && contestedFrontAdvantage >= 1) {
-    return aggressiveDoctrine && contestedFrontAdvantage >= 2 ? 'baitFight' : 'guard';
+  if (contestedTradeWon) {
+    if (aggressiveDoctrine && strongContestedControl) return 'baitFight';
+    return 'guard';
   }
 
-  if (
-    expansionMine &&
-    snapshot.safeExpansionExists &&
-    ai.economicPosture === 'greed' &&
-    expansionFrontAdvantage >= 0 &&
-    (!snapshot.contestedMineFavorable || contestedFrontAdvantage <= 0)
-  ) {
-    return 'take';
+  if (expansionCanTake && ai.economicPosture === 'greed') {
+    return snapshot.recentWonLocalTrade ? 'guard' : 'take';
   }
 
-  if (contestedMine && snapshot.contestedMineFavorable && snapshot.nearbyFriendlyArmyAtContestedFront >= 2 && contestedFrontAdvantage >= 1) {
-    return aggressiveDoctrine && enemyTownHallNear ? 'deny' : 'guard';
+  if (contestedPresenceStrong && contestedFrontAdvantage >= 1) {
+    if (aggressiveDoctrine && enemyTownHallNear && strongContestedControl) return 'baitFight';
+    return 'guard';
   }
 
-  if (contestedMine && snapshot.contestedMineFavorable && contestedFrontAdvantage >= 0 && ai.strategicIntent !== 'stabilize') {
+  if (contestedMine && snapshot.contestedMineFavorable && contestedFrontAdvantage >= -1 && ai.strategicIntent !== 'stabilize') {
     return 'deny';
   }
 
+  if (snapshot.contestedMineFavorable && contestedFrontAdvantage > -2) {
+    return null;
+  }
+
   if (
-    expansionMine &&
-    snapshot.safeExpansionExists &&
+    expansionCanTake &&
     ai.economicPosture !== 'fortify' &&
-    expansionFrontAdvantage >= 0 &&
-    (!snapshot.contestedMineFavorable || contestedFrontAdvantage < 1)
+    !snapshot.recentWonLocalTrade
   ) {
     return 'take';
   }

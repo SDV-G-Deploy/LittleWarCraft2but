@@ -127,6 +127,7 @@ These are conceptual fields, not exact final names.
 Implemented checkpoint, 2026-04-25:
 - `mineIntent` is now real in `src/sim/ai.ts`
 - `raceDoctrine`, `difficultyPersonality`, `strategicIntent`, `economicPosture`, and `assaultPosture` are already active parts of the current controller layering
+- Phase 4.3 now tightens post-win conversion so contested success more often resolves into `guard` or `baitFight`, while safe expansion `take` is less eager under fresh pressure or recent defense stress
 
 ```ts
 strategicIntent: 'stabilize' | 'fortify' | 'contest' | 'expand' | 'pressure' | 'commitPush' | 'regroup' | 'contain';

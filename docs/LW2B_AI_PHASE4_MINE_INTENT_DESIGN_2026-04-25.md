@@ -204,12 +204,18 @@ Phase 4.2 also tightened the decision surface:
 - favorable contested states are less likely to be incorrectly overridden by greedy expansion conversion
 - recent base threat suppresses `take` unless mine-side control is clearly real
 
+Phase 4.3 now tightens pressure-conversion after local success:
+- recent won local trade near contested space now prefers `guard` or `baitFight` instead of drifting too easily into generic pressure or greed conversion
+- recent won local trade near safe expansion no longer jumps straight into `take`; it can first consolidate through `guard`
+- recent base threat now downgrades contested success into `guard` rather than allowing greed conversion
+- contested-mine pressure is less easily overridden by expansion-side `take` heuristics when mine space is still strategically active
+
 Validation status for the implemented pass:
 - `npm test` ✅
 - `npm run build` ✅
 
 Current caveat:
-- `deny` remains intentionally conservative because enemy-townhall-near bias is still cautious; this is acceptable for determinism stability, but likely leaves some aggression on the table for future passes
+- `deny` remains intentionally conservative because contested-favorability gates are still narrow; this preserves determinism discipline, but likely still leaves some mine-space aggression on the table for a later pass
 
 ## Test strategy for the future implementation
 
@@ -220,10 +226,11 @@ Recommended tests:
 
 ### `src/sim/ai-mine-intent.test.ts`
 Validate:
-- favorable contested state can produce `deny` or `guard` deterministically
+- favorable contested state can produce `guard` deterministically
 - safe expansion state can produce `take`
-- recent won local trade near contested mine can produce `baitFight` or `guard`
-- recent base threat suppresses greedy conversion
+- recent won local trade near contested mine can produce `baitFight`
+- recent won local trade near safe expansion can prefer `guard` over immediate `take`
+- recent base threat suppresses greedy conversion and can downgrade contested success into `guard`
 
 ### Extend `src/sim/offline-simulation.test.ts`
 Validate:

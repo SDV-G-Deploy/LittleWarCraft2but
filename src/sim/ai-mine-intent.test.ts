@@ -57,6 +57,7 @@ function testWonLocalTradeCanYieldBaitFight(): void {
   spawnEntity(state, 'grunt', 1, { x: 30, y: 31 });
   spawnEntity(state, 'grunt', 1, { x: 31, y: 31 });
   spawnEntity(state, 'grunt', 1, { x: 32, y: 31 });
+  spawnEntity(state, 'grunt', 1, { x: 33, y: 31 });
   spawnEntity(state, 'footman', 0, { x: 36, y: 34 });
 
   const ai = createAI('hard');
@@ -66,6 +67,33 @@ function testWonLocalTradeCanYieldBaitFight(): void {
   tickAI(state, ai, 1);
 
   assert.equal(ai.mineIntent, 'baitFight', 'aggressive doctrine with won local trade and strong contested advantage should choose baitFight');
+}
+
+function testWonLocalTradeNearSafeExpansionPrefersGuardOverTake(): void {
+  const state = makeState(['orc', 'human']);
+  const { myTownHall, enemyTownHall } = seedMatch(state, 1);
+  state.tick = 500;
+  myTownHall.pos = { x: 55, y: 5 };
+  enemyTownHall.pos = { x: 26, y: 30 };
+
+  spawnEntity(state, 'footman', 1, { x: 48, y: 10 });
+  spawnEntity(state, 'footman', 1, { x: 49, y: 10 });
+  spawnEntity(state, 'footman', 1, { x: 50, y: 10 });
+  spawnEntity(state, 'footman', 1, { x: 51, y: 10 });
+  spawnEntity(state, 'footman', 1, { x: 48, y: 11 });
+  spawnEntity(state, 'footman', 1, { x: 49, y: 11 });
+  spawnEntity(state, 'footman', 1, { x: 50, y: 11 });
+  spawnEntity(state, 'footman', 1, { x: 51, y: 11 });
+  spawnEntity(state, 'grunt', 0, { x: 28, y: 33 });
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  ai.lastWonLocalTradeTick = state.tick;
+
+  tickAI(state, ai, 1);
+
+  assert.equal(ai.economicPosture, 'greed', 'hard human doctrine should expose greed posture in safe expansion pressure state');
+  assert.equal(ai.mineIntent, 'guard', 'recent local success near safe expansion should consolidate with guard before greed-converting to take');
 }
 
 function testSafeExpansionGreedYieldsTake(): void {
@@ -117,11 +145,36 @@ function testRecentBaseThreatSuppressesTakeWithoutContestedEdge(): void {
   assert.notEqual(ai.mineIntent, 'take', 'recent base threat should suppress greedy take conversion');
 }
 
+function testRecentBaseThreatWithContestedControlFallsBackToGuard(): void {
+  const state = makeState();
+  const { myTownHall, enemyTownHall } = seedMatch(state, 1);
+  state.tick = 500;
+  myTownHall.pos = { x: 52, y: 6 };
+  enemyTownHall.pos = { x: 3, y: 55 };
+
+  spawnEntity(state, 'grunt', 1, { x: 30, y: 31 });
+  spawnEntity(state, 'grunt', 1, { x: 31, y: 31 });
+  spawnEntity(state, 'grunt', 1, { x: 32, y: 31 });
+  spawnEntity(state, 'footman', 0, { x: 36, y: 34 });
+
+  const ai = createAI('medium');
+  ai.phase = 'assault';
+  ai.lastWonLocalTradeTick = state.tick;
+  ai.lastBaseThreatTick = state.tick;
+
+  tickAI(state, ai, 1);
+
+  assert.equal(ai.mineIntent, 'guard', 'recent base threat should downgrade contested conversion to guard instead of take or baitFight');
+}
+
+
 function run(): void {
   testContestedFrontAdvantageYieldsGuard();
   testWonLocalTradeCanYieldBaitFight();
+  testWonLocalTradeNearSafeExpansionPrefersGuardOverTake();
   testSafeExpansionGreedYieldsTake();
   testRecentBaseThreatSuppressesTakeWithoutContestedEdge();
+  testRecentBaseThreatWithContestedControlFallsBackToGuard();
   console.log('ai mine intent tests passed');
 }
 
