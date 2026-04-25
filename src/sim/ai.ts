@@ -401,7 +401,7 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
       const opposingPlayerTH = es.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
       const finishOff = enemyCollapsed(snapshot) && mySoldiers.length >= Math.max(2, snapshot.enemyStructureCount);
       const reserveCount = getHomeReserveCount(ai, mySoldiers.length, defenseThreat.active, state.tick);
-      const armyRolePlan = assignArmyRoles(state, owner, myTH, mySoldiers, reserveCount, contestedMine, expansionMine, opposingPlayerTH, ai);
+      const armyRolePlan = assignArmyRoles(state, owner, myTH, mySoldiers, reserveCount, contestedMine, expansionMine, opposingPlayerTH, ai, finishOff);
       const assaultAssignments = armyRolePlan.assignments.filter(entry => entry.role !== 'reserve');
 
       if (ai.assaultPosture === 'regroup' && myTH) {
@@ -524,11 +524,14 @@ function nearestEnemyStructure(state: GameState, unit: Entity, owner: 0 | 1, max
     if (!isOwnedByOpposingPlayer(e, owner) || isUnitKind(e.kind) || e.kind === 'goldmine' || e.kind === 'barrier') continue;
     const d = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
     if (d > maxDistance) continue;
-    let score = -d;
-    if (e.kind === 'townhall') score += 10;
-    else if (e.kind === 'construction') score += 7;
-    else if (e.kind === 'barracks' || e.kind === 'tower') score += 5;
-    else score += 3;
+    let priority = 0;
+    if (e.kind === 'townhall') priority = 50;
+    else if (e.kind === 'barracks') priority = 40;
+    else if (e.kind === 'tower') priority = 30;
+    else if (e.kind === 'farm') priority = 20;
+    else if (e.kind === 'construction') priority = 10;
+    else priority = 15;
+    const score = priority * 100 - d;
     if (score > bestScore || (score === bestScore && best && e.id < best.id)) {
       best = e;
       bestScore = score;
@@ -1305,18 +1308,21 @@ function assignArmyRoles(
   expansionMine: Entity | null,
   opposingPlayerTH: Entity | undefined,
   ai: AIController,
+  finishOff = false,
 ): ArmyRolePlan {
   const rc = RACES[state.races[owner]];
   const sorted = [...mySoldiers].sort((a, b) => a.id - b.id);
   const reserveIds = new Set(sorted.slice(0, reserveCount).map(unit => unit.id));
-  const pressureTarget = ai.assaultPosture === 'contain'
-    ? contestedMine ?? expansionMine ?? opposingPlayerTH ?? myTownHall
-    : ai.assaultPosture === 'contest'
+  const pressureTarget = finishOff
+    ? opposingPlayerTH ?? nearestEnemyStructure(state, myTownHall, owner) ?? myTownHall
+    : ai.assaultPosture === 'contain'
       ? contestedMine ?? expansionMine ?? opposingPlayerTH ?? myTownHall
-      : opposingPlayerTH ?? contestedMine ?? expansionMine ?? myTownHall;
+      : ai.assaultPosture === 'contest'
+        ? contestedMine ?? expansionMine ?? opposingPlayerTH ?? myTownHall
+        : opposingPlayerTH ?? contestedMine ?? expansionMine ?? myTownHall;
   const frontlineUnits = sorted.filter(unit => !reserveIds.has(unit.id) && unit.kind !== rc.ranged);
   const frontliner = frontlineUnits[0] ?? sorted.find(unit => !reserveIds.has(unit.id)) ?? null;
-  const frontlineAnchor = frontliner ? computeFrontlineAnchor(frontliner, pressureTarget, myTownHall, ai, contestedMine) : null;
+  const frontlineAnchor = frontliner ? computeFrontlineAnchor(frontliner, pressureTarget, myTownHall, ai, contestedMine, finishOff) : null;
   const harassmentUnitIds = selectHarassmentUnits(ai, sorted, reserveIds, rc.ranged);
   const harassmentAnchor = harassmentUnitIds.size > 0
     ? computeHarassmentAnchor(myTownHall, contestedMine, expansionMine, opposingPlayerTH)
@@ -1339,7 +1345,7 @@ function assignArmyRoles(
   };
 }
 
-function computeFrontlineAnchor(frontliner: Entity, pressureTarget: Entity, myTownHall: Entity, ai: AIController, contestedMine: Entity | null): Vec2 {
+function computeFrontlineAnchor(frontliner: Entity, pressureTarget: Entity, myTownHall: Entity, ai: AIController, contestedMine: Entity | null, finishOff = false): Vec2 {
   if (ai.assaultPosture === 'regroup') {
     return {
       x: Math.floor((frontliner.pos.x + myTownHall.pos.x + 1) / 2),
@@ -1347,14 +1353,14 @@ function computeFrontlineAnchor(frontliner: Entity, pressureTarget: Entity, myTo
     };
   }
 
-  if (contestedMine && ai.assaultPosture !== 'commit') {
+  if (!finishOff && contestedMine && ai.assaultPosture !== 'commit') {
     return {
       x: Math.floor((frontliner.pos.x + contestedMine.pos.x * 2) / 3),
       y: Math.floor((frontliner.pos.y + contestedMine.pos.y * 2) / 3),
     };
   }
 
-  const ratio = ai.assaultPosture === 'commit' ? 0.82 : ai.assaultPosture === 'contain' ? 0.58 : ai.assaultPosture === 'contest' ? 0.64 : 0.72;
+  const ratio = finishOff ? 0.9 : ai.assaultPosture === 'commit' ? 0.82 : ai.assaultPosture === 'contain' ? 0.58 : ai.assaultPosture === 'contest' ? 0.64 : 0.72;
   return {
     x: Math.floor(frontliner.pos.x * (1 - ratio) + pressureTarget.pos.x * ratio),
     y: Math.floor(frontliner.pos.y * (1 - ratio) + pressureTarget.pos.y * ratio),

@@ -206,9 +206,16 @@ function testAiResumesOrFinishesSideTasks(): void {
   ai.phase = 'assault';
   ai.nextDecisionTick = 0;
 
+  const enemyBarracks = spawnEntity(state, 'barracks', 1, { x: enemyTownHall!.pos.x + 4, y: enemyTownHall!.pos.y });
+  const enemyFarm = spawnEntity(state, 'farm', 1, { x: enemyTownHall!.pos.x + 7, y: enemyTownHall!.pos.y });
+
   tickAI(state, ai, 0);
   const attackers = state.entities.filter(e => e.owner === 0 && (e.kind === 'footman' || e.kind === 'archer' || e.kind === 'knight'));
   assert.ok(attackers.some(u => u.cmd?.type === 'attack' || u.cmd?.type === 'move'), 'AI should issue closing commands when only enemy structures remain');
+
+  const targetIds = new Set(attackers.map(u => u.cmd?.type === 'attack' ? u.cmd.targetId : null).filter(Boolean));
+  assert.ok(targetIds.has(enemyTownHall!.id) || targetIds.has(enemyBarracks.id), 'finish-off targeting should prefer high-value structures before cleanup trash');
+  assert.ok(!targetIds.has(enemyFarm.id) || targetIds.has(enemyTownHall!.id) || targetIds.has(enemyBarracks.id), 'farm cleanup should not outrank townhall or production during finish-off');
 }
 
 function run(): void {
