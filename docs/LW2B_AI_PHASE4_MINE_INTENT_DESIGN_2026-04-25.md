@@ -1,6 +1,6 @@
 # LW2B AI Phase 4 mine-intent / pressure-conversion design note (2026-04-25)
 
-Status: design note  
+Status: design note + implementation checkpoint  
 Scope: compact design-first spec for the next AI pass after Phase 3 role split / target weighting work
 
 Related docs:
@@ -186,6 +186,31 @@ That means:
 
 ---
 
+## Implementation checkpoint, 2026-04-25
+
+Phase 4 was resumed and now has a real first implementation in `src/sim/ai.ts`.
+
+Implemented so far:
+- `AIMineIntent = 'deny' | 'take' | 'guard' | 'baitFight'`
+- `AIController.mineIntent: AIMineIntent | null`
+- `chooseMineIntent(...)` runs after strategic intent and assault posture updates
+- mine-intent now affects assault movement through a dedicated movement-bias helper
+- crafted tests exist in `src/sim/ai-mine-intent.test.ts`
+
+Phase 4.2 also tightened the decision surface:
+- snapshot now tracks separate local front counts for contested-mine space and expansion-mine space
+- `guard` / `baitFight` require clearer contested-front presence
+- `take` now requires safe expansion plus non-losing local expansion presence
+- favorable contested states are less likely to be incorrectly overridden by greedy expansion conversion
+- recent base threat suppresses `take` unless mine-side control is clearly real
+
+Validation status for the implemented pass:
+- `npm test` ✅
+- `npm run build` ✅
+
+Current caveat:
+- `deny` remains intentionally conservative because enemy-townhall-near bias is still cautious; this is acceptable for determinism stability, but likely leaves some aggression on the table for future passes
+
 ## Test strategy for the future implementation
 
 Do not start with broad simulation-only confidence.
@@ -223,11 +248,14 @@ Important:
 
 ## Recommended next coding sequence
 
-1. add compact `AIMineIntent` state
-2. add crafted mine-intent tests first
-3. implement only `deny` / `guard` / `take` if `baitFight` is still ambiguous
-4. run `npm test`
-5. run `npm run build`
-6. only then widen into `baitFight`
+Phase 4.1 and 4.2 are now effectively complete as a safe first mine-intent pass.
 
-This should be treated as the clean restart point for the next `/new` coding session.
+Recommended next continuation:
+1. distinguish movement/anchor behavior more clearly between `guard` and `baitFight`
+2. decide whether `deny` should stay a posture modifier or become a stronger lane-pressure behavior
+3. introduce lightweight `expand` strategic intent if it now improves readability instead of duplicating `take`
+4. extend offline simulation assertions from “collection stays valid” toward occasional observed non-null mine-intent under stable long-run conditions
+5. run `npm test`
+6. run `npm run build`
+
+This file should now be treated as the clean restart point for the next `/new` coding session.

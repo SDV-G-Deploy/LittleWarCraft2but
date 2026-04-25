@@ -70,6 +70,7 @@ function preferredSpreadGoal(state: GameState, entity: Entity, tx: number, ty: n
 export type AIStrategicIntent = 'stabilize' | 'fortify' | 'contest' | 'pressure' | 'regroup' | 'contain';
 export type AIEconomicPosture = 'stable' | 'greed' | 'recover' | 'fortify';
 export type AIAssaultPosture = 'probe' | 'contest' | 'commit' | 'contain' | 'regroup';
+export type AIMineIntent = 'deny' | 'take' | 'guard' | 'baitFight';
 
 export interface AIRaceDoctrine {
   reserveBias: number;
@@ -98,9 +99,18 @@ export interface AISnapshot {
   recentBaseThreat: boolean;
   nearbyEnemyArmyAtFront: number;
   nearbyFriendlyArmyAtFront: number;
+  nearbyEnemyArmyAtContestedFront: number;
+  nearbyFriendlyArmyAtContestedFront: number;
+  nearbyEnemyArmyAtExpansionFront: number;
+  nearbyFriendlyArmyAtExpansionFront: number;
   enemyTownHallDistance: number | null;
   recentFailedPush: boolean;
   recentWonLocalTrade: boolean;
+}
+
+export interface AIMineIntentContext {
+  contestedMine: Entity | null;
+  expansionMine: Entity | null;
 }
 
 const AI_RACE_DOCTRINES: Record<Race, AIRaceDoctrine> = {
@@ -171,6 +181,7 @@ export interface AIController {
   strategicIntent: AIStrategicIntent;
   economicPosture: AIEconomicPosture;
   assaultPosture: AIAssaultPosture;
+  mineIntent: AIMineIntent | null;
   raceDoctrine: AIRaceDoctrine;
   difficultyPersonality: AIDifficultyPersonality;
   homeReserveMin: number;
@@ -230,6 +241,7 @@ function createAIBase(difficulty: AIDifficulty): AIController {
     strategicIntent: 'stabilize',
     economicPosture: 'stable',
     assaultPosture: 'probe',
+    mineIntent: null,
     raceDoctrine: AI_RACE_DOCTRINES.human,
     difficultyPersonality: AI_DIFFICULTY_PERSONALITIES[difficulty],
     homeReserveMin: difficulty === 'hard' ? 1 : 2,
@@ -284,6 +296,7 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
   const snapshot = evaluateAISnapshot(state, ai, owner, myTH, mySoldiers, defenseThreat, contestedMine, expansionMine);
   updateStrategicIntent(state, ai, snapshot);
   updateAssaultPosture(state, ai, snapshot);
+  ai.mineIntent = chooseMineIntent(state, ai, owner, snapshot, { contestedMine, expansionMine });
 
   const woodDemand = estimateWoodDemand(state, ai, owner, myBarracks, myLumberMill, farmCount, towerCount, mySoldiers.length);
   keepGathering(state, myWorkers, woodDemand);
@@ -431,6 +444,8 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
             const ty = armyRolePlan.frontlineAnchor.y;
             const target = preferredSpreadGoal(state, s, tx, ty);
             if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
+          } else if (applyMineIntentMovement(state, s, ai, ai.mineIntent, contestedMine, expansionMine, opposingPlayerTH)) {
+            continue;
           } else if (role === 'frontlineShock' && opposingPlayerTH && (ai.assaultPosture === 'commit' || ai.strategicIntent === 'pressure')) {
             const tx = opposingPlayerTH.pos.x + 1;
             const ty = opposingPlayerTH.pos.y + 2;
@@ -530,6 +545,19 @@ function evaluateAISnapshot(
     : 0;
   const enemyTownHall = state.entities.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
 
+  const nearbyFriendlyArmyAtContestedFront = contestedMine
+    ? mySoldiers.filter(e => Math.hypot(e.pos.x - contestedMine.pos.x, e.pos.y - contestedMine.pos.y) <= 8).length
+    : 0;
+  const nearbyEnemyArmyAtContestedFront = contestedMine
+    ? state.entities.filter(e => isOwnedByOpposingPlayer(e, owner) && isUnitKind(e.kind) && Math.hypot(e.pos.x - contestedMine.pos.x, e.pos.y - contestedMine.pos.y) <= 8).length
+    : 0;
+  const nearbyFriendlyArmyAtExpansionFront = expansionMine
+    ? mySoldiers.filter(e => Math.hypot(e.pos.x - expansionMine.pos.x, e.pos.y - expansionMine.pos.y) <= 8).length
+    : 0;
+  const nearbyEnemyArmyAtExpansionFront = expansionMine
+    ? state.entities.filter(e => isOwnedByOpposingPlayer(e, owner) && isUnitKind(e.kind) && Math.hypot(e.pos.x - expansionMine.pos.x, e.pos.y - expansionMine.pos.y) <= 8).length
+    : 0;
+
   return {
     myArmySize: mySoldiers.length,
     enemyArmyNearBase,
@@ -540,6 +568,10 @@ function evaluateAISnapshot(
     recentBaseThreat: ai.lastBaseThreatTick >= state.tick - ai.defenseRecallWindowTicks,
     nearbyFriendlyArmyAtFront,
     nearbyEnemyArmyAtFront,
+    nearbyFriendlyArmyAtContestedFront,
+    nearbyEnemyArmyAtContestedFront,
+    nearbyFriendlyArmyAtExpansionFront,
+    nearbyEnemyArmyAtExpansionFront,
     enemyTownHallDistance: enemyTownHall ? Math.hypot(enemyTownHall.pos.x - myTownHall.pos.x, enemyTownHall.pos.y - myTownHall.pos.y) : null,
     recentFailedPush: ai.lastFailedPushTick >= state.tick - Math.round(SIM_HZ * 20),
     recentWonLocalTrade: ai.lastWonLocalTradeTick >= state.tick - Math.round(SIM_HZ * 12),
@@ -600,6 +632,109 @@ function updateAssaultPosture(state: GameState, ai: AIController, snapshot: AISn
     return;
   }
   ai.assaultPosture = 'probe';
+}
+
+function chooseMineIntent(
+  state: GameState,
+  ai: AIController,
+  owner: 0 | 1,
+  snapshot: AISnapshot,
+  context: AIMineIntentContext,
+): AIMineIntent | null {
+  const { contestedMine, expansionMine } = context;
+  if (ai.strategicIntent === 'fortify' || ai.assaultPosture === 'regroup') return null;
+
+  const contestedFrontAdvantage = snapshot.nearbyFriendlyArmyAtContestedFront - snapshot.nearbyEnemyArmyAtContestedFront;
+  const expansionFrontAdvantage = snapshot.nearbyFriendlyArmyAtExpansionFront - snapshot.nearbyEnemyArmyAtExpansionFront;
+  const enemyTownHallNear = snapshot.enemyTownHallDistance !== null && snapshot.enemyTownHallDistance <= 28;
+  const aggressiveDoctrine = ai.raceDoctrine.pressureBias + ai.difficultyPersonality.opportunism >= 0.7;
+
+  if (snapshot.recentBaseThreat) {
+    if (contestedMine && snapshot.contestedMineFavorable && contestedFrontAdvantage >= 1) return 'guard';
+    return null;
+  }
+
+  if (snapshot.recentWonLocalTrade && contestedMine && snapshot.contestedMineFavorable && snapshot.nearbyFriendlyArmyAtContestedFront >= 2 && contestedFrontAdvantage >= 1) {
+    return aggressiveDoctrine && contestedFrontAdvantage >= 2 ? 'baitFight' : 'guard';
+  }
+
+  if (
+    expansionMine &&
+    snapshot.safeExpansionExists &&
+    ai.economicPosture === 'greed' &&
+    expansionFrontAdvantage >= 0 &&
+    (!snapshot.contestedMineFavorable || contestedFrontAdvantage <= 0)
+  ) {
+    return 'take';
+  }
+
+  if (contestedMine && snapshot.contestedMineFavorable && snapshot.nearbyFriendlyArmyAtContestedFront >= 2 && contestedFrontAdvantage >= 1) {
+    return aggressiveDoctrine && enemyTownHallNear ? 'deny' : 'guard';
+  }
+
+  if (contestedMine && snapshot.contestedMineFavorable && contestedFrontAdvantage >= 0 && ai.strategicIntent !== 'stabilize') {
+    return 'deny';
+  }
+
+  if (
+    expansionMine &&
+    snapshot.safeExpansionExists &&
+    ai.economicPosture !== 'fortify' &&
+    expansionFrontAdvantage >= 0 &&
+    (!snapshot.contestedMineFavorable || contestedFrontAdvantage < 1)
+  ) {
+    return 'take';
+  }
+
+  return null;
+}
+
+function applyMineIntentMovement(
+  state: GameState,
+  unit: Entity,
+  ai: AIController,
+  mineIntent: AIMineIntent | null,
+  contestedMine: Entity | null,
+  expansionMine: Entity | null,
+  opposingPlayerTH: Entity | undefined,
+): boolean {
+  if (!mineIntent) return false;
+
+  if (mineIntent === 'take' && expansionMine) {
+    const tx = expansionMine.pos.x;
+    const ty = expansionMine.pos.y - 1;
+    const target = preferredSpreadGoal(state, unit, tx, ty);
+    if (!moveGoalNear(unit, target.x, target.y)) issueSpreadMoveCommand(state, unit, tx, ty);
+    return true;
+  }
+
+  if (!contestedMine) return false;
+
+  if (mineIntent === 'deny') {
+    const tx = contestedMine.pos.x;
+    const ty = contestedMine.pos.y - 1;
+    const target = preferredSpreadGoal(state, unit, tx, ty);
+    if (!moveGoalNear(unit, target.x, target.y)) issueSpreadMoveCommand(state, unit, tx, ty);
+    return true;
+  }
+
+  if (mineIntent === 'guard') {
+    const tx = Math.floor((contestedMine.pos.x + (opposingPlayerTH?.pos.x ?? contestedMine.pos.x)) / 2);
+    const ty = contestedMine.pos.y - 1;
+    const target = preferredSpreadGoal(state, unit, tx, ty);
+    if (!moveGoalNear(unit, target.x, target.y)) issueSpreadMoveCommand(state, unit, tx, ty);
+    return true;
+  }
+
+  if (mineIntent === 'baitFight' && opposingPlayerTH) {
+    const tx = Math.floor((contestedMine.pos.x * 2 + opposingPlayerTH.pos.x) / 3);
+    const ty = Math.floor((contestedMine.pos.y * 2 + opposingPlayerTH.pos.y) / 3) - 1;
+    const target = preferredSpreadGoal(state, unit, tx, ty);
+    if (!moveGoalNear(unit, target.x, target.y)) issueSpreadMoveCommand(state, unit, tx, ty);
+    return true;
+  }
+
+  return false;
 }
 
 function getArmyMixPlan(ai: AIController, totalArmy: number): ArmyMixPlan {

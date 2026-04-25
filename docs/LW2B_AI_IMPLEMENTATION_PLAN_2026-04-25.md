@@ -124,6 +124,9 @@ Recommended first pass:
 ## Proposed `AIController` additions
 
 These are conceptual fields, not exact final names.
+Implemented checkpoint, 2026-04-25:
+- `mineIntent` is now real in `src/sim/ai.ts`
+- `raceDoctrine`, `difficultyPersonality`, `strategicIntent`, `economicPosture`, and `assaultPosture` are already active parts of the current controller layering
 
 ```ts
 strategicIntent: 'stabilize' | 'fortify' | 'contest' | 'expand' | 'pressure' | 'commitPush' | 'regroup' | 'contain';
@@ -238,6 +241,32 @@ This matters because current difficulty mostly changes strength, not personality
 ---
 
 ## Functional changes by implementation phase
+
+## Current implementation checkpoint, 2026-04-25
+
+Delivered so far:
+- race doctrine pass
+- difficulty personality pass
+- strategic intent / assault posture layering
+- role split / reserve logic / role-aware targeting
+- first implemented mine-intent pass with crafted tests
+
+Current mine-intent pass includes:
+- `deny`, `take`, `guard`, `baitFight` state support
+- post-intent control-layer integration rather than a new planner subsystem
+- separate contested-front and expansion-front local counts inside AI snapshot evaluation
+- movement bias integration through a dedicated mine-intent movement helper
+- crafted deterministic tests plus inclusion in main `npm test`
+
+Validation status at this checkpoint:
+- `npm test` ✅
+- `npm run build` ✅
+
+Still intentionally deferred:
+- full `expand` strategic intent
+- deeper convert-vs-contain planner logic
+- broader multi-objective pressure planning
+- movement/pathfinding redesign tied specifically to AI mine conversion
 
 ## Phase 1, safest high-value pass
 
