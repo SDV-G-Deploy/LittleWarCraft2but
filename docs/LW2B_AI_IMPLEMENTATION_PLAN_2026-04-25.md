@@ -367,11 +367,11 @@ Medium
 
 ## Phase 3, assault posture expansion
 
-Status: implemented on 2026-04-25 as role split / anchor / bounded harassment pass. See also `docs/LW2B_AI_PHASE3_ROLE_SPLIT_PASS_2026-04-25.md`.
+Status: implemented on 2026-04-25 as role split / anchor / bounded harassment / role-aware targeting pass. See also `docs/LW2B_AI_PHASE3_ROLE_SPLIT_PASS_2026-04-25.md`.
 
 Update after Phase 2:
 - a first posture layer is now already in place (`probe`, `contest`, `commit`, `contain`, `regroup`)
-- this phase has now deepened the tactical consequences of those postures through deterministic role split, frontline anchoring, ranged follow behavior, real bounded reserve handling, and a small hard-only harassment subgroup
+- this phase has now deepened the tactical consequences of those postures through deterministic role split, frontline anchoring, ranged follow behavior, real bounded reserve handling, a small hard-only harassment subgroup, role-aware target weighting, heavy-vs-line frontline split, and reserve-release hysteresis
 
 ### Goal
 Make combat movement and pressure behavior less linear.
@@ -380,11 +380,14 @@ Make combat movement and pressure behavior less linear.
 
 Implemented in this pass:
 1. deepen posture-aware assault logic rather than only adding the state layer
-2. add deterministic role split for `reserve`, `frontline`, and `rangedFollow`
+2. add deterministic role split for `reserve`, `frontlineLine`, `frontlineShock`, and `rangedFollow`
 3. add explicit frontline anchor behavior
 4. add real reserve hold-near-home movement
 5. add bounded hard-only harassment staging
-6. stop treating every assault as a pure march-to-target flow
+6. add role-aware target weighting for local combat decisions
+7. split frontline behavior between line units and heavy shock units
+8. add reserve-release hysteresis to reduce oscillation
+9. stop treating every assault as a pure march-to-target flow
 
 ### Recommended posture semantics
 
@@ -431,6 +434,10 @@ Medium
 - ranged follow respects frontline anchor behavior
 - reserve units stay home-side during assault
 - bounded harassment subgroup appears only in constrained conditions
+- harassment prefers exposed workers over low-value structures
+- ranged follow prefers nearby enemy ranged when appropriate
+- heavy shock units can lean deeper than line units
+- reserve-release hysteresis reduces immediate post-threat dumping
 - offline simulation still reaches active posture states
 - current goal spread tests remain green
 
@@ -447,9 +454,9 @@ Deepen the existing light role split without introducing full formations.
 
 ### Work items
 
-1. Improve target-selection bias per role
-2. Split frontline behavior more intelligently between melee and heavy
-3. Refine reserve sizing and reserve release conditions
+1. Deepen mine-intent and pressure-conversion behavior
+2. Improve contain-vs-convert decisions after local wins
+3. Refine reserve sizing and reserve release conditions further if needed
 4. Keep deterministic ordering by entity id
 5. Avoid growing this into a full squad/formation subsystem
 
@@ -476,9 +483,9 @@ Medium
 
 ### Tests to add
 - deterministic role assignment for same game state remains stable as role logic deepens
-- heavy/frontline split stays deterministic
+- mine-intent transitions remain deterministic
+- contain-vs-convert decisions stay stable under equivalent snapshots
 - reserve release conditions do not cause oscillation
-- harassment target preference remains bounded and deterministic
 
 ---
 

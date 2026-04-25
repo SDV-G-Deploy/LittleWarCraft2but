@@ -1,7 +1,7 @@
 # LW2B AI Phase 3 role split pass (2026-04-25)
 
 Status: implemented  
-Scope: turn assault posture into visibly different army handling with deterministic role split, frontline anchoring, ranged follow behavior, and a bounded hard-mode harassment subgroup
+Scope: turn assault posture into visibly different army handling with deterministic role split, frontline anchoring, ranged follow behavior, bounded hard-mode harassment, role-aware target selection, melee/heavy frontline differentiation, and reserve-release discipline
 
 Primary file:
 - `src/sim/ai.ts`
@@ -39,14 +39,16 @@ The point is to stop the army from reading like one blob with one target.
 
 Assault army handling now assigns units into explicit roles:
 - `reserve`
-- `frontline`
+- `frontlineLine`
+- `frontlineShock`
 - `rangedFollow`
 
 Assignment properties:
 - deterministic ordering by unit id,
 - bounded reserve count from existing home-reserve logic,
 - ranged units preferentially classified into follow role,
-- non-ranged assault units form the frontline group.
+- standard melee units form the line-holding front,
+- heavy units form the shock layer of the front.
 
 ### Effect
 
@@ -124,7 +126,30 @@ Hard AI gains a little more pressure texture without turning into noisy split-ma
 
 ---
 
-## 6. Objective-space anchor improvement
+## 6. Role-aware target selection
+
+Phase 3.2 adds weighted target choice on top of the movement/role layer.
+
+Current weighting is deterministic and role-sensitive:
+- `harassment` prefers workers, exposed ranged, and damaged soft targets,
+- `rangedFollow` prefers enemy ranged and other efficient soft targets,
+- `frontline` remains more direct but is no longer purely nearest-target driven.
+
+Signals currently used include:
+- distance,
+- missing HP,
+- recent damage state,
+- target class,
+- role-specific penalties for bad dive targets like towers.
+
+### Effect
+
+The AI no longer just arrives in a better shape.
+It also converts contact into better focus fire and pressure value.
+
+---
+
+## 7. Objective-space anchor improvement
 
 When a contested mine exists and the AI is not in full `commit`, frontline anchoring now leans more heavily toward that contested objective space.
 
@@ -138,11 +163,10 @@ Pressure near mines and map-control points becomes more readable and less base-t
 
 This pass still does **not** include:
 - full formation logic,
-- separate melee vs heavy tactical doctrines,
-- target-class weighting for harassment,
 - broad pathfinding redesign,
 - full mine-intent layer,
-- multi-squad planner behavior.
+- multi-squad planner behavior,
+- deep utility-style tactical planner.
 
 That is deliberate.
 This pass was about visible tactical readability with low system risk.
@@ -158,6 +182,10 @@ Added / extended:
 Coverage focus:
 - ranged units follow the frontline anchor instead of overrunning it,
 - hard AI can form a bounded harassment subgroup,
+- harassment prefers exposed workers over low-value structures,
+- ranged follow prefers nearby enemy ranged when appropriate,
+- heavy shock units can lean deeper than line units,
+- reserve release discipline avoids immediate full reserve dump after recent threat,
 - reserve units stay home-side during assault,
 - offline simulation still reaches active assault postures.
 
@@ -174,7 +202,9 @@ After this pass, the AI should feel:
 - more readable in frontline/backline behavior,
 - more capable of holding a home-side reserve,
 - slightly more textural on hard through small harassment staging,
-- better at expressing pressure around contested objective space.
+- better at choosing useful local targets,
+- better at expressing pressure around contested objective space,
+- less twitchy when transitioning out of defense.
 
 This is still not a full tactical AI.
 But it is a strong step toward armies that look intentional instead of merely redirected.
@@ -184,11 +214,12 @@ But it is a strong step toward armies that look intentional instead of merely re
 ## Recommended next pass
 
 Best next continuation after this pass:
-- target-class weighting for harassment and ranged preference,
-- deterministic frontline split between melee and heavy,
-- later, mine-intent deepening.
+- mine-intent and pressure-conversion deepening,
+- smarter convert-vs-contain rules after local success,
+- later, broader objective-layer pressure planning.
 
 Why this is next:
 - role split now exists,
-- anchor behavior now exists,
-- the next biggest gain is making those roles choose smarter targets, not just better movement lanes.
+- target selection is now materially better,
+- frontline heavy/line distinction now exists,
+- the next strongest gain is teaching the AI what to do with won space, not only how to move and focus within it.
