@@ -33,6 +33,7 @@ This index keeps the docs set usable after many passes.
 - `planning/NEXT_MULTIPLAYER_TESTS.md`
 - `planning/NEUTRAL_OWNERSHIP_PASS.md`
 - `planning/LW2B_REALTIME_BACKEND_OPTION_A.md`
+- `planning/LW2B_PROVIDER_MIGRATION_PREP_2026-04-25.md`
 - `LW2B_UI_DESIGN_GUIDELINES.md`
 - `LW2B_MENU_UI_IMPLEMENTATION_PLAN_2026-04-22.md`
 
