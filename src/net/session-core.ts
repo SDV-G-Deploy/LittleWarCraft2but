@@ -29,6 +29,8 @@ export interface SessionStats {
   rtcIceConnectionState: RTCIceConnectionState | null;
   rtcConnectionState: RTCPeerConnectionState | null;
   rtcIceGatheringState: RTCIceGatheringState | null;
+  localExchangeGapMs: number | null;
+  localStallLikely: boolean;
   netDebugSummary: string;
 }
 
@@ -88,6 +90,8 @@ const INBOUND_RATE_WINDOW_MS = 1000;
 const MAX_INBOUND_PACKETS_PER_WINDOW = 120;
 const MAX_WAITING_STALL_TICKS = 600;
 const ACCEPT_LOG_INTERVAL_TICKS = 40;
+const LOCAL_SIM_STALL_GAP_MS = 110;
+const LOCAL_SIM_STALL_HOLD_MS = 250;
 
 function summarizeCmdKinds(cmds: NetCmd[]): string {
   if (cmds.length === 0) return 'none';
@@ -196,13 +200,17 @@ export function createSessionCore(init: SessionCoreInit): SessionCore {
   let rtcIceConnectionState: RTCIceConnectionState | null = null;
   let rtcConnectionState: RTCPeerConnectionState | null = null;
   let rtcIceGatheringState: RTCIceGatheringState | null = null;
+  let lastExchangeAt: number | null = null;
+  let lastExchangeGapMs: number | null = null;
+  let recentLocalSimStallUntilAt = 0;
 
   function getNetDebugSummary(): string {
     const ice = rtcIceConnectionState ?? '-';
     const connState = rtcConnectionState ?? '-';
     const gather = rtcIceGatheringState ?? '-';
     const age = lastPacketReceivedAt === null ? 'pkt=none' : `pkt=${Math.max(0, Date.now() - lastPacketReceivedAt)}ms`;
-    return `ice=${ice} pc=${connState} gather=${gather} ${age}`;
+    const localGap = lastExchangeGapMs === null ? 'loop=none' : `loop=${Math.round(lastExchangeGapMs)}ms`;
+    return `ice=${ice} pc=${connState} gather=${gather} ${age} ${localGap}`;
   }
 
   function classifyError(message: string, source: 'peer' | 'conn' | 'lockstep'): FriendlyError {
@@ -347,6 +355,17 @@ export function createSessionCore(init: SessionCoreInit): SessionCore {
     },
 
     exchange(tick) {
+      const nowMs = Date.now();
+      if (lastExchangeAt !== null) {
+        const gap = Math.max(0, nowMs - lastExchangeAt);
+        lastExchangeGapMs = gap;
+        if (gap >= LOCAL_SIM_STALL_GAP_MS) {
+          recentLocalSimStallUntilAt = Math.max(recentLocalSimStallUntilAt, nowMs + LOCAL_SIM_STALL_HOLD_MS);
+          console.info(`[net:diag] local-sim-gap=${Math.round(gap)}ms tick=${tick}`);
+        }
+      }
+      lastExchangeAt = nowMs;
+
       const scheduledTick = tick + EXECUTION_DELAY_TICKS;
       const toSend = localBuf;
       localBuf = [];
@@ -389,6 +408,7 @@ export function createSessionCore(init: SessionCoreInit): SessionCore {
     },
 
     getStats() {
+      const nowMs = Date.now();
       return {
         waitingStallTicks,
         remoteAnnouncedUpToTick,
@@ -402,6 +422,8 @@ export function createSessionCore(init: SessionCoreInit): SessionCore {
         rtcIceConnectionState,
         rtcConnectionState,
         rtcIceGatheringState,
+        localExchangeGapMs: lastExchangeGapMs,
+        localStallLikely: nowMs < recentLocalSimStallUntilAt,
         netDebugSummary: getNetDebugSummary(),
       };
     },

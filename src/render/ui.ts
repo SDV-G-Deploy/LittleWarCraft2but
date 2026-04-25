@@ -339,20 +339,27 @@ function drawOnlineStrip(
   onlineStatus: { status: SessionStatus; statusMsg: string; stats: SessionStats },
 ): void {
   const { status, stats } = onlineStatus;
+  const likelyLocalStall = stats.localStallLikely && stats.waitingStallTicks > 0;
+  const remoteWaitLikely =
+    stats.waitingStallTicks >= 3
+    && !likelyLocalStall
+    && (stats.lastPacketAgeMs === null || stats.lastPacketAgeMs >= 120);
   const label =
-    status === 'ready' && stats.waitingStallTicks === 0 ? t('online_stable') :
+    status === 'ready' && !remoteWaitLikely ? t('online_stable') :
     status === 'ready' ? t('online_waiting') :
     status === 'disconnected' ? t('online_disconnected') :
     status === 'error' ? t('online_error') :
     t('online_connecting');
   const detail =
-    (status === 'error' || stats.waitingStallTicks > 0)
+    (status === 'error' || remoteWaitLikely)
       ? onlineStatus.statusMsg || stats.netDebugSummary || label
+      : likelyLocalStall
+        ? `local sim catch-up | ${stats.netDebugSummary}`
       : onlineStatus.stats.lastInboundSummary || stats.netDebugSummary || onlineStatus.statusMsg || label;
   const color =
     status === 'error' ? '#ff8888' :
     status === 'disconnected' ? '#ffb366' :
-    stats.waitingStallTicks > 0 ? '#ffe97a' :
+    remoteWaitLikely ? '#ffe97a' :
     '#88ffcc';
 
   const x = pane.x + Math.max(8, pane.w - 248);

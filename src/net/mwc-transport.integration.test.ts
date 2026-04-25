@@ -66,6 +66,8 @@ function makeSession(): {
         rtcIceConnectionState: null,
         rtcConnectionState: null,
         rtcIceGatheringState: null,
+        localExchangeGapMs: null,
+        localStallLikely: false,
         netDebugSummary: 'n/a',
       };
     },
