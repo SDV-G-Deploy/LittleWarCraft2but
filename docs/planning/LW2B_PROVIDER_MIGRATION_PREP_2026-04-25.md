@@ -100,6 +100,18 @@ Acceptance gate before canonical switch:
 - At least one RU path can create/join and finish a real match with stable command flow.
 - No regression vs current baseline for non-RU users.
 
+### Phase A baseline target (VDSina NL)
+
+Based on currently visible VDSina standard plans (`vdsina.com/pricing/standard`, checked 2026-04-25), use this as the default pilot target:
+
+- **Baseline target**: `2 vCPU / 4 GB RAM / 80 GB NVMe` (listed ~`$20.10/month`, `0.67/day`)
+- **Budget fallback (short pilot only)**: `1 vCPU / 2 GB RAM / 40 GB NVMe` (listed ~`$15.00/month`, `0.50/day`)
+
+Why this baseline is sensible for LW2B Phase A:
+- leaves comfortable headroom for the full realtime edge stack (`nginx + peerjs + ice-api + coturn + ws-relay`) plus logs and short traffic spikes,
+- keeps cost low enough for route-profile testing,
+- avoids the tighter operational margin of 1 GB class nodes.
+
 ## 4) Cutover skeleton (parallel bring-up, low-risk)
 
 ## Phase A, parallel target bring-up
