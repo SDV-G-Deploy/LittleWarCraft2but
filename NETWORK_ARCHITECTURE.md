@@ -281,25 +281,32 @@ Interpretation:
 - the initial fail-closed startup regression was introduced by a too-rigid first guardrail and was then corrected
 - the current online path is materially healthier than the pre-fix state and is suitable for the next round of live tests
 
-## Canonical deployment policy
+## Canonical deployment policy (decision update, 2026-04-25)
 
-Current production policy is now explicit:
-- `https://game.example.com` is the canonical online origin
-- realtime multiplayer should resolve on the same origin over 443
-- MultiWebCore is exposed as same-origin websocket endpoint: `wss://game.example.com/mwc`
-- GitHub Pages is secondary/fallback static hosting, not the primary multiplayer surface
+Current effective production reality is a split public topology:
+- frontend/public entrypoint: `https://w2.kislota.today/`
+- realtime backend contour under active diagnostics: `rts.kislota.today` (signaling/ICE/TURN path)
 
-Implications:
-- public player docs and defaults should point to `game.example.com`
-- nginx should route `/mwc` to the MultiWebCore runtime in the same production stack as `/peerjs` and `/api/ice`
-- LW2B `VITE_MWC_WS_URL` defaults should target `wss://game.example.com/mwc`
+This split is intentional for now, because recent diagnostics show frontend reachability and realtime reachability can fail independently.
+
+Viable canonicalization choices:
+1. Same-origin canonical (`w2` hosts both frontend and realtime paths).
+2. Split canonical (`w2` frontend + `rts` realtime backend).
+3. Split canonical with neutral backend hostname (`w2` or CDN frontend + `rtc.*` backend).
+
+Recommended safest path:
+- keep option 2 as the short-term baseline,
+- validate cross-origin behavior and regional reachability with real users,
+- then graduate to option 3 as the long-term canonical model.
+
+Do not treat domain rename alone as the fix; route/provider/backend behavior is the higher-impact lever.
 
 ## Immediate operational focus
 
-1. keep same-origin paths healthy (`/`, `/peerjs`, `/api/ice`, `/ws-relay`, `/mwc`)
-2. keep GitHub Pages as an emergency mirror/fallback only
-3. validate room create/join and in-match sync through `wss://game.example.com/mwc`
-4. continue TURN/ICE validation for hard NAT cases
+1. keep frontend and realtime health checks explicit and separate
+2. keep `w2` frontend stable, and keep realtime checks centered on the current backend endpoint
+3. validate room create/join and in-match sync through the current canonical realtime websocket path
+4. continue TURN/ICE validation for hard NAT and Russia-facing paths before further topology churn
 
 ## Non-goals for this document
 
