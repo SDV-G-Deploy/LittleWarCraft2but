@@ -186,6 +186,20 @@ type ArmyMixPlan = {
   minFrontline: number;
 };
 
+type ArmyRole = 'reserve' | 'frontline' | 'rangedFollow';
+
+type ArmyRoleAssignment = {
+  unit: Entity;
+  role: ArmyRole;
+};
+
+type ArmyRolePlan = {
+  assignments: ArmyRoleAssignment[];
+  frontlineAnchor: Vec2 | null;
+  harassmentAnchor: Vec2 | null;
+  harassmentUnitIds: Set<number>;
+};
+
 function createAIBase(difficulty: AIDifficulty): AIController {
   return {
     phase: 'economy',
@@ -364,23 +378,42 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
     case 'assault': {
       const opposingPlayerTH = es.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
       const reserveCount = getHomeReserveCount(ai, mySoldiers.length, defenseThreat.active);
-      const assaultSoldiers = mySoldiers.length > reserveCount
-        ? [...mySoldiers].sort((a, b) => a.id - b.id).slice(reserveCount)
-        : mySoldiers;
+      const armyRolePlan = assignArmyRoles(state, owner, myTH, mySoldiers, reserveCount, contestedMine, expansionMine, opposingPlayerTH, ai);
+      const assaultAssignments = armyRolePlan.assignments.filter(entry => entry.role !== 'reserve');
 
       if (ai.assaultPosture === 'regroup' && myTH) {
-        for (const s of assaultSoldiers) {
+        for (const { unit: s, role } of assaultAssignments) {
           if (s.cmd && s.cmd.type !== 'move') continue;
-          const tx = Math.floor((s.pos.x + myTH.pos.x + 1) / 2);
-          const ty = Math.floor((s.pos.y + myTH.pos.y + myTH.tileH) / 2);
+          const tx = role === 'rangedFollow' && armyRolePlan.frontlineAnchor
+            ? Math.floor((armyRolePlan.frontlineAnchor.x + myTH.pos.x + 1) / 2)
+            : Math.floor((s.pos.x + myTH.pos.x + 1) / 2);
+          const ty = role === 'rangedFollow' && armyRolePlan.frontlineAnchor
+            ? Math.floor((armyRolePlan.frontlineAnchor.y + myTH.pos.y + myTH.tileH) / 2)
+            : Math.floor((s.pos.y + myTH.pos.y + myTH.tileH) / 2);
           const target = preferredSpreadGoal(state, s, tx, ty);
           if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
         }
       } else {
-        for (const s of assaultSoldiers) {
+        for (const { unit: s, role } of assaultAssignments) {
           if (s.cmd && s.cmd.type !== 'move') continue;
 
-          const nearest = ai.difficulty === 'easy'
+          if (armyRolePlan.harassmentUnitIds.has(s.id) && armyRolePlan.harassmentAnchor) {
+            const nearestHarass = nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius + 1);
+            if (nearestHarass) {
+              issueAttackCommand(s, nearestHarass.id, state.tick, state);
+              continue;
+            }
+
+            const tx = armyRolePlan.harassmentAnchor.x;
+            const ty = armyRolePlan.harassmentAnchor.y;
+            const target = preferredSpreadGoal(state, s, tx, ty);
+            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
+            continue;
+          }
+
+          const nearest = role === 'rangedFollow'
+            ? nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius)
+            : ai.difficulty === 'easy'
             ? nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius)
             : s.kind === rc.ranged
               ? (nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius) ?? nearestPlayerEntity(state, s, owner, ai.attackRetargetRadius))
@@ -391,6 +424,11 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
             if (snapshot.nearbyFriendlyArmyAtFront >= snapshot.nearbyEnemyArmyAtFront + 2) {
               ai.lastWonLocalTradeTick = state.tick;
             }
+          } else if (role === 'rangedFollow' && armyRolePlan.frontlineAnchor) {
+            const tx = armyRolePlan.frontlineAnchor.x;
+            const ty = armyRolePlan.frontlineAnchor.y;
+            const target = preferredSpreadGoal(state, s, tx, ty);
+            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
           } else if ((ai.assaultPosture === 'contest' || ai.strategicIntent === 'contest') && contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > ai.attackRetargetRadius) {
             const tx = contestedMine.pos.x;
             const ty = contestedMine.pos.y - 1;
@@ -418,6 +456,15 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
             if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
           }
         }
+      }
+
+      for (const { unit: s, role } of armyRolePlan.assignments) {
+        if (role !== 'reserve') continue;
+        if (s.cmd && s.cmd.type !== 'move') continue;
+        const tx = myTH.pos.x + 1;
+        const ty = myTH.pos.y + myTH.tileH;
+        const target = preferredSpreadGoal(state, s, tx, ty);
+        if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
       }
 
       if (mySoldiers.length <= ai.fallbackWaveThreshold || ai.assaultPosture === 'regroup') {
@@ -967,6 +1014,90 @@ function getHomeReserveCount(ai: AIController, soldierCount: number, defenseActi
   if (ai.strategicIntent === 'pressure') return Math.max(0, baseReserve - 1);
   if (ai.strategicIntent === 'regroup') return Math.min(Math.max(0, soldierCount - 1), baseReserve + 1);
   return Math.min(Math.max(0, soldierCount - 1), baseReserve);
+}
+
+function assignArmyRoles(
+  state: GameState,
+  owner: 0 | 1,
+  myTownHall: Entity,
+  mySoldiers: Entity[],
+  reserveCount: number,
+  contestedMine: Entity | null,
+  expansionMine: Entity | null,
+  opposingPlayerTH: Entity | undefined,
+  ai: AIController,
+): ArmyRolePlan {
+  const rc = RACES[state.races[owner]];
+  const sorted = [...mySoldiers].sort((a, b) => a.id - b.id);
+  const reserveIds = new Set(sorted.slice(0, reserveCount).map(unit => unit.id));
+  const pressureTarget = ai.assaultPosture === 'contain'
+    ? contestedMine ?? expansionMine ?? opposingPlayerTH ?? myTownHall
+    : ai.assaultPosture === 'contest'
+      ? contestedMine ?? expansionMine ?? opposingPlayerTH ?? myTownHall
+      : opposingPlayerTH ?? contestedMine ?? expansionMine ?? myTownHall;
+  const frontlineUnits = sorted.filter(unit => !reserveIds.has(unit.id) && unit.kind !== rc.ranged);
+  const frontliner = frontlineUnits[0] ?? sorted.find(unit => !reserveIds.has(unit.id)) ?? null;
+  const frontlineAnchor = frontliner ? computeFrontlineAnchor(frontliner, pressureTarget, myTownHall, ai, contestedMine) : null;
+  const harassmentUnitIds = selectHarassmentUnits(ai, sorted, reserveIds, rc.ranged);
+  const harassmentAnchor = harassmentUnitIds.size > 0
+    ? computeHarassmentAnchor(myTownHall, contestedMine, expansionMine, opposingPlayerTH)
+    : null;
+
+  return {
+    frontlineAnchor,
+    harassmentAnchor,
+    harassmentUnitIds,
+    assignments: sorted.map(unit => ({
+      unit,
+      role: reserveIds.has(unit.id)
+        ? 'reserve'
+        : unit.kind === rc.ranged
+          ? 'rangedFollow'
+          : 'frontline',
+    })),
+  };
+}
+
+function computeFrontlineAnchor(frontliner: Entity, pressureTarget: Entity, myTownHall: Entity, ai: AIController, contestedMine: Entity | null): Vec2 {
+  if (ai.assaultPosture === 'regroup') {
+    return {
+      x: Math.floor((frontliner.pos.x + myTownHall.pos.x + 1) / 2),
+      y: Math.floor((frontliner.pos.y + myTownHall.pos.y + myTownHall.tileH) / 2),
+    };
+  }
+
+  if (contestedMine && ai.assaultPosture !== 'commit') {
+    return {
+      x: Math.floor((frontliner.pos.x + contestedMine.pos.x * 2) / 3),
+      y: Math.floor((frontliner.pos.y + contestedMine.pos.y * 2) / 3),
+    };
+  }
+
+  const ratio = ai.assaultPosture === 'commit' ? 0.82 : ai.assaultPosture === 'contain' ? 0.58 : ai.assaultPosture === 'contest' ? 0.64 : 0.72;
+  return {
+    x: Math.floor(frontliner.pos.x * (1 - ratio) + pressureTarget.pos.x * ratio),
+    y: Math.floor(frontliner.pos.y * (1 - ratio) + pressureTarget.pos.y * ratio),
+  };
+}
+
+function selectHarassmentUnits(ai: AIController, soldiers: Entity[], reserveIds: Set<number>, rangedKind: Entity['kind']): Set<number> {
+  if (ai.difficulty !== 'hard' || soldiers.length < Math.max(ai.attackWaveSize + 2, 6) || ai.assaultPosture === 'regroup') return new Set<number>();
+  const candidates = soldiers.filter(unit => !reserveIds.has(unit.id) && unit.kind === rangedKind).slice(0, 2);
+  return new Set(candidates.map(unit => unit.id));
+}
+
+function computeHarassmentAnchor(
+  myTownHall: Entity,
+  contestedMine: Entity | null,
+  expansionMine: Entity | null,
+  opposingPlayerTH: Entity | undefined,
+): Vec2 | null {
+  const target = contestedMine ?? expansionMine ?? opposingPlayerTH;
+  if (!target) return null;
+  return {
+    x: Math.floor((myTownHall.pos.x + target.pos.x * 2) / 3),
+    y: Math.floor((myTownHall.pos.y + target.pos.y * 2) / 3),
+  };
 }
 
 function baseAttackWaveForDifficulty(difficulty: AIDifficulty): number {

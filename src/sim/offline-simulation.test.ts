@@ -169,6 +169,8 @@ function testOfflineSimulationLongRunSmoke(): void {
   assert.ok(side1Intents.size >= 1, 'side 1 should expose strategic intent state during simulation');
   assert.ok(side0Postures.size >= 1, 'side 0 should expose assault posture state during simulation');
   assert.ok(side1Postures.size >= 1, 'side 1 should expose assault posture state during simulation');
+  assert.ok(side0Postures.has('probe') || side0Postures.has('contest') || side0Postures.has('contain') || side0Postures.has('commit'), 'side 0 should reach an active assault posture during simulation');
+  assert.ok(side1Postures.has('probe') || side1Postures.has('contest') || side1Postures.has('contain') || side1Postures.has('commit'), 'side 1 should reach an active assault posture during simulation');
 }
 
 function run(): void {

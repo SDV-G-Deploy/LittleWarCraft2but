@@ -367,20 +367,24 @@ Medium
 
 ## Phase 3, assault posture expansion
 
+Status: implemented on 2026-04-25 as role split / anchor / bounded harassment pass. See also `docs/LW2B_AI_PHASE3_ROLE_SPLIT_PASS_2026-04-25.md`.
+
 Update after Phase 2:
 - a first posture layer is now already in place (`probe`, `contest`, `commit`, `contain`, `regroup`)
-- the remaining goal for this phase is to deepen the tactical consequences of those postures rather than merely add the enum/state layer
+- this phase has now deepened the tactical consequences of those postures through deterministic role split, frontline anchoring, ranged follow behavior, real bounded reserve handling, and a small hard-only harassment subgroup
 
 ### Goal
 Make combat movement and pressure behavior less linear.
 
 ### Work items
 
-1. Add `assaultPosture`
-2. Replace the current simple assault destination ladder with posture-aware logic
-3. Add regroup/staging behavior
-4. Add contain behavior after local wins
-5. Stop treating every assault as a pure march-to-target flow
+Implemented in this pass:
+1. deepen posture-aware assault logic rather than only adding the state layer
+2. add deterministic role split for `reserve`, `frontline`, and `rangedFollow`
+3. add explicit frontline anchor behavior
+4. add real reserve hold-near-home movement
+5. add bounded hard-only harassment staging
+6. stop treating every assault as a pure march-to-target flow
 
 ### Recommended posture semantics
 
@@ -422,28 +426,32 @@ The AI stops feeling like it only knows “go there or attack nearest thing”.
 ### Risk
 Medium
 
-### Tests to add
+### Tests added / extended
 - regroup posture retargets away from deep dive
-- contain posture holds zone instead of raw base march
-- probe does not overcommit when local support is weak
+- ranged follow respects frontline anchor behavior
+- reserve units stay home-side during assault
+- bounded harassment subgroup appears only in constrained conditions
+- offline simulation still reaches active posture states
 - current goal spread tests remain green
 
 ---
 
 ## Phase 4, light squad / role split
 
+Update after implemented Phase 3:
+- a meaningful light role split is now already present
+- the remaining Phase 4 value is to deepen role quality rather than introduce the first split
+
 ### Goal
-Reduce topорное army handling without introducing full formations.
+Deepen the existing light role split without introducing full formations.
 
 ### Work items
 
-1. Partition army deterministically into roles:
-   - frontline group
-   - ranged follow group
-   - home reserve group
-   - optional harass group on hard
-2. Give each role different target-selection / destination bias
-3. Keep deterministic ordering by entity id
+1. Improve target-selection bias per role
+2. Split frontline behavior more intelligently between melee and heavy
+3. Refine reserve sizing and reserve release conditions
+4. Keep deterministic ordering by entity id
+5. Avoid growing this into a full squad/formation subsystem
 
 ### Example approach
 
@@ -467,10 +475,10 @@ It is a deterministic role split using existing command primitives.
 Medium
 
 ### Tests to add
-- deterministic role assignment for same game state
-- ranged units prefer follow positioning over raw frontline walk-in
-- reserve units stay home under threat conditions
-- harass group is bounded and only appears when allowed
+- deterministic role assignment for same game state remains stable as role logic deepens
+- heavy/frontline split stays deterministic
+- reserve release conditions do not cause oscillation
+- harassment target preference remains bounded and deterministic
 
 ---
 
