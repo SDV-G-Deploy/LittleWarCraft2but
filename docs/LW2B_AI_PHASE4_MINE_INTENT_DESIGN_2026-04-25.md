@@ -210,6 +210,12 @@ Phase 4.3 now tightens pressure-conversion after local success:
 - recent base threat now downgrades contested success into `guard` rather than allowing greed conversion
 - contested-mine pressure is less easily overridden by expansion-side `take` heuristics when mine space is still strategically active
 
+Side follow-up passes also completed on top of Phase 4:
+- unfinished owned `construction` sites are now resumed by AI through conservative worker reassignment when no active builder remains
+- collapse / finish-off behavior now activates when the enemy has no army and no workers left, so assault can close out remaining structures instead of drifting in contain/mine logic
+- finish-off targeting now has clearer cleanup ordering (`townhall` > production > tower > farm > stray construction/other)
+- closing pressure is more decisive because frontline anchoring pulls harder into remaining high-value structure targets during collapse states
+
 Validation status for the implemented pass:
 - `npm test` ✅
 - `npm run build` ✅
@@ -236,7 +242,9 @@ Validate:
 Validate:
 - at least one side exposes non-null mine-intent state in sufficiently long simulations
 - mine-intent states do not cause deadlock or command starvation
-
+- AI resumes unfinished owned construction when the original builder is gone or no longer assigned
+- AI issues finish-off commands when only enemy structures remain
+- finish-off prefers high-value structures before low-value cleanup
 Important:
 - if crafted tests are hard to write cleanly, that is a design smell
 - fix the decision surface before forcing the pass into code

@@ -251,12 +251,18 @@ Delivered so far:
 - strategic intent / assault posture layering
 - role split / reserve logic / role-aware targeting
 - first implemented mine-intent pass with crafted tests
+- side follow-up pass for unfinished construction resumption and collapse-state finish-off behavior
+- finish-off polish pass for structure cleanup ordering and anti-idle closing pressure
 
-Current mine-intent pass includes:
+Current mine-intent / closing-control pass includes:
 - `deny`, `take`, `guard`, `baitFight` state support
 - post-intent control-layer integration rather than a new planner subsystem
 - separate contested-front and expansion-front local counts inside AI snapshot evaluation
 - movement bias integration through a dedicated mine-intent movement helper
+- conservative worker reassignment for owned unfinished `construction` sites
+- collapse-state structure cleanup behavior when the enemy economy/army is gone
+- conservative construction-task memory through resume-build reassignment
+- finish-the-job conversion when only enemy structures remain
 - crafted deterministic tests plus inclusion in main `npm test`
 
 Validation status at this checkpoint:
