@@ -218,6 +218,9 @@ Best next continuation after this pass:
 - smarter convert-vs-contain rules after local success,
 - later, broader objective-layer pressure planning.
 
+Current follow-up note:
+- `docs/LW2B_AI_PHASE4_MINE_INTENT_DESIGN_2026-04-25.md`
+
 Why this is next:
 - role split now exists,
 - target selection is now materially better,

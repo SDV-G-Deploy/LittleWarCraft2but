@@ -491,12 +491,14 @@ Medium
 
 ## Phase 5, mine intent and map-pressure deepening
 
+Status: design-first continuation prepared on 2026-04-25. See `docs/LW2B_AI_PHASE4_MINE_INTENT_DESIGN_2026-04-25.md`.
+
 ### Goal
 Turn mine targeting from destination scoring into real map intent.
 
 ### Work items
 
-1. Add `mineIntent`
+1. Add compact `mineIntent`
 2. Differentiate between:
    - deny
    - take
@@ -506,7 +508,9 @@ Turn mine targeting from destination scoring into real map intent.
 4. Let race/difficulty bias influence whether a favorable mine becomes:
    - a macro conversion,
    - a fight magnet,
-   - a denial zone.
+   - a denial zone
+5. Start with a narrow implementation that only biases existing assault behavior, not a planner rewrite
+6. Prefer crafted deterministic tests before widening simulation expectations
 
 ### Intended result
 Map pressure becomes more legible and less generic.
@@ -519,6 +523,8 @@ Low to medium
 - same mine state yields stable mine-intent result
 - Humans more often convert favorable space into guard/take
 - Orcs more often convert into deny/baitFight under pressure bias
+- recent base threat suppresses greedy mine conversion
+- mine-intent states do not create command starvation or deadlock
 
 ---
 
