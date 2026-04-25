@@ -232,6 +232,12 @@ Current review-driven cautions:
 - keep `move` / `repath` / `sidestep` changes high-discipline because that remains the most sensitive simulation area
 - keep remaining neutral-semantics cleanup split into small passes, not one wide refactor
 
+## Documentation entry points
+
+- docs index: `docs/README.md`
+- current architecture/deploy source: `NETWORK_ARCHITECTURE.md`
+- active roadmap: `ROADMAP.md`
+
 ## Useful commands
 
 ```bash
