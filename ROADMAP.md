@@ -5,6 +5,8 @@ Update it when a phase is completed, reframed, or split.
 
 ## Snapshot
 
+Fast orientation: `docs/LW2B_CURRENT_STATE.md`
+
 ### Done recently
 - gameplay/UI first pass
 - forest harvesting pass completed:

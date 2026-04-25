@@ -234,9 +234,17 @@ Current review-driven cautions:
 
 ## Documentation entry points
 
+- short current-state entrypoint: `docs/LW2B_CURRENT_STATE.md`
 - docs index: `docs/README.md`
 - current architecture/deploy source: `NETWORK_ARCHITECTURE.md`
 - active roadmap: `ROADMAP.md`
+
+Suggested read order for a fresh session:
+1. `docs/LW2B_CURRENT_STATE.md`
+2. `README.md`
+3. `ROADMAP.md`
+4. `NETWORK_ARCHITECTURE.md`
+5. `docs/README.md` for active pass docs
 
 ## Useful commands
 

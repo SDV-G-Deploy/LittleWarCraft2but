@@ -2,12 +2,20 @@
 
 This index keeps the docs set usable after many passes.
 
-## Current source of truth (read first)
+## Current source of truth (read first, in order)
+- `LW2B_CURRENT_STATE.md` (short where-we-are-now entrypoint)
 - `../README.md` (project status + run/deploy notes)
 - `../ROADMAP.md` (current work plan)
 - `../NETWORK_ARCHITECTURE.md` (canonical multiplayer architecture/deploy shape)
 - `LW2B_GAMEPLAY_DOCTRINE_AND_CROSS_LAYER_INVARIANTS.md` (cross-layer gameplay guardrails)
 - `LW2B_MOVEMENT_DOCTRINE_2026-04-23.md` (active movement doctrine)
+
+## Canonical reading path
+1. `LW2B_CURRENT_STATE.md`
+2. `../README.md`
+3. `../ROADMAP.md`
+4. `../NETWORK_ARCHITECTURE.md`
+5. doctrine docs and then active pass docs
 
 ## Active implementation/design docs
 - `LW2B_CHANGELOG_2026-04-24_MOVEMENT_RECOVERY.md`
