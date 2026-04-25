@@ -19,7 +19,7 @@ import { createMouseState } from './input/mouse';
 import { STATS } from './data/units';
 import { RACES } from './data/races';
 import { buildMapById } from './data/maps';
-import type { NetSession } from './net/session';
+import type { NetSession, SessionStats } from './net/session';
 import { applyNetCmds, type NetCmd } from './net/netcmd';
 import { t } from './i18n';
 
@@ -122,6 +122,7 @@ export function startGame(
   let onlineStartupPhase: 'lobby_config_ready' | 'transport_ready' | 'simulation_ready' | 'input_unlocked' =
     net ? 'lobby_config_ready' : 'input_unlocked';
   let onlineInputUnlocked = !net;
+  let netDebugOverlayEnabled = false;
 
   /**
    * Emit a command.
@@ -273,6 +274,10 @@ export function startGame(
 
     // Global keys
     if (e.key === 'Escape') { placementMode = null; return; }
+    if (e.key === 'F3') {
+      netDebugOverlayEnabled = !netDebugOverlayEnabled;
+      return;
+    }
     if ((e.key === 'r' || e.key === 'R') && gameResult !== 'playing') {
       backToMenu(); return;
     }
@@ -820,6 +825,47 @@ export function startGame(
     ctx.textAlign = 'left';
   }
 
+  function drawNetDebugOverlay(stats: SessionStats): void {
+    const w = 308;
+    const h = 116;
+    const x = 8;
+    const y = 8;
+
+    const remoteWaitLikely =
+      stats.waitingStallTicks >= 3
+      && !stats.localStallLikely
+      && (stats.lastPacketAgeMs === null || stats.lastPacketAgeMs >= 120);
+
+    const localGapText = stats.localExchangeGapMs === null ? 'n/a' : `${Math.round(stats.localExchangeGapMs)}ms`;
+    const packetAgeText = stats.lastPacketAgeMs === null ? 'none' : `${Math.round(stats.lastPacketAgeMs)}ms`;
+    const remoteTickDrift = Math.max(0, state.tick - stats.remoteContiguousUpToTick);
+    const announcedContiguousGap = Math.max(0, stats.remoteAnnouncedUpToTick - stats.remoteContiguousUpToTick);
+    const modeLabel = stats.localStallLikely ? 'LOCAL STALL' : remoteWaitLikely ? 'REMOTE WAIT' : 'STABLE';
+    const modeColor = stats.localStallLikely ? '#ffb36b' : remoteWaitLikely ? '#ffe97a' : '#88ffcc';
+
+    ctx.fillStyle = 'rgba(10,12,18,0.76)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(140,180,255,0.65)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+
+    ctx.font = 'bold 11px monospace';
+    ctx.fillStyle = '#8ec4ff';
+    ctx.fillText('NET DEBUG (F3)', x + 8, y + 14);
+    ctx.fillStyle = modeColor;
+    ctx.textAlign = 'right';
+    ctx.fillText(modeLabel, x + w - 8, y + 14);
+
+    ctx.textAlign = 'left';
+    ctx.font = '10px monospace';
+    ctx.fillStyle = '#d7def0';
+    ctx.fillText(`local stall flag: ${stats.localStallLikely ? 'yes' : 'no'}   local gap: ${localGapText}`, x + 8, y + 32);
+    ctx.fillText(`packet age: ${packetAgeText}   waiting stall ticks: ${stats.waitingStallTicks}`, x + 8, y + 46);
+    ctx.fillText(`remote tick drift: ${remoteTickDrift}   announced-contig gap: ${announcedContiguousGap}`, x + 8, y + 60);
+    ctx.fillText(`remote contig/ann: ${stats.remoteContiguousUpToTick}/${stats.remoteAnnouncedUpToTick}`, x + 8, y + 74);
+    ctx.fillText(`delay: ${stats.currentDelayTicks}  qR:${stats.queuedRemoteTicks} qL:${stats.queuedLocalTicks} out:${stats.outboundPendingTicks}`, x + 8, y + 88);
+  }
+
   function drawGroupBadges(): void {
     let gx = 4;
     controlGroups.forEach((ids, slot) => {
@@ -879,13 +925,15 @@ export function startGame(
       if (now - commandMarkers[i].createdAt >= commandMarkers[i].ttlMs) commandMarkers.splice(i, 1);
     }
     drawCommandMarkers(ctx, cam, commandMarkers, now);
-    uiButtons = drawUi(ctx, state, selectedIds, canvas.width, viewH, myOwner, net ? {
+    const onlineStatus = net ? {
       status: net.status,
       statusMsg: lastNetChecksumLine ? `${net.statusMsg} | ${lastNetChecksumLine}` : net.statusMsg,
       stats: net.getStats(),
-    } : null, openingPlanFeedback);
+    } : null;
+    uiButtons = drawUi(ctx, state, selectedIds, canvas.width, viewH, myOwner, onlineStatus, openingPlanFeedback);
     drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, myOwner, dockLayout.minimapRect, observerMode);
     drawGroupBadges();
+    if (onlineStatus && netDebugOverlayEnabled) drawNetDebugOverlay(onlineStatus.stats);
     drawOnlineStartupOverlay();
     drawResultOverlay();
 
