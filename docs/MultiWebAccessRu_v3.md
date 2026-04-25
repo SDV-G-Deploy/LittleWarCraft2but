@@ -16,7 +16,7 @@
 ## 1. Что видно сейчас
 
 ### Текущий публичный origin
-- `https://w2.kislota.today/`
+- `https://game.example.com/`
 - same-origin online paths:
   - `/peerjs`
   - `/api/ice`
@@ -24,8 +24,8 @@
   - `/mwc`
 
 ### Найденные публичные IP и точки
-- `w2.kislota.today -> 116.203.107.226`
-- `rts.kislota.today -> 204.168.242.157` (исторический / старый realtime host)
+- `game.example.com -> 203.0.113.10`
+- `legacy-realtime.example.com -> 203.0.113.20` (исторический / старый realtime host)
 - Google STUN fallback:
   - `stun:stun.l.google.com:19302`
   - `stun:stun1.l.google.com:19302`
@@ -42,7 +42,7 @@
 - `mwc` и `ws-relay` используют same-origin WSS defaults
 
 ### Что сейчас слабое место
-1. `w2.kislota.today` выглядит размещённым на Hetzner Germany, что может быть отдельным фактором плохой доступности из РФ.
+1. `game.example.com` выглядит размещённым на Hetzner Germany, что может быть отдельным фактором плохой доступности из РФ.
 2. TURN/TLS сейчас не на `443`, а на `5349`.
 3. Google STUN всё ещё присутствует в runtime ICE config.
 4. Нужно убедиться, что клиент реально умеет уходить в fallback path, а не только имеет этот path «на бумаге».
@@ -75,21 +75,21 @@
 - **Hetzner Helsinki VPS**
 
 Целевой origin:
-- `https://w2.kislota.today/`
+- `https://game.example.com/`
 
 Целевые same-origin paths:
-- `https://w2.kislota.today/peerjs/id`
-- `https://w2.kislota.today/api/ice`
-- `wss://w2.kislota.today/ws-relay`
-- `wss://w2.kislota.today/mwc`
+- `https://game.example.com/peerjs/id`
+- `https://game.example.com/api/ice`
+- `wss://game.example.com/ws-relay`
+- `wss://game.example.com/mwc`
 
 ### 3.2. Целевой transport priority
 Для плохих сетей и РФ приоритет должен быть не «Google STUN сначала», а controlled transport-first.
 
 Желательная приоритетная схема:
-1. `turns:w2.kislota.today:443?transport=tcp`
-2. `turn:w2.kislota.today:3478?transport=tcp`
-3. `turn:w2.kislota.today:3478?transport=udp`
+1. `turns:game.example.com:443?transport=tcp`
+2. `turn:game.example.com:3478?transport=tcp`
+3. `turn:game.example.com:3478?transport=udp`
 4. optional own STUN / minimal fallback
 5. Google STUN только как хвостовой запасной вариант или убрать совсем
 
@@ -103,7 +103,7 @@
 Желательно не зависеть критически от:
 - Google STUN
 - public `0.peerjs.com`
-- старого `rts.kislota.today`
+- старого `legacy-realtime.example.com`
 
 ---
 
@@ -114,10 +114,10 @@
 - Google STUN
 - затем relay URLs
 - при `TURN_ENABLE_TLS=true` и `TURN_PREFER_TLS=true` первым relay URL идёт:
-  - `turns:w2.kislota.today:5349?transport=tcp`
+  - `turns:game.example.com:5349?transport=tcp`
 - затем:
-  - `turn:w2.kislota.today:3478?transport=tcp`
-  - `turn:w2.kislota.today:3478?transport=udp`
+  - `turn:game.example.com:3478?transport=tcp`
+  - `turn:game.example.com:3478?transport=udp`
 
 ### ws-relay
 - сервер уже есть
@@ -130,7 +130,7 @@
 - клиентский default: same-origin `wss://<host>/mwc`
 
 ### PeerJS
-- self-hosted path на `w2.kislota.today`
+- self-hosted path на `game.example.com`
 - runtime ICE API default: `./api/ice`
 - fallback ICE servers still include Google STUN
 
@@ -145,7 +145,7 @@
 
 ### Что проверить
 1. Сравнить доступность из РФ:
-   - текущего `w2.kislota.today`
+   - текущего `game.example.com`
    - GitHub Pages fallback
    - Helsinki-host IP / будущего ingress
 2. Разделить сбои по слоям:
@@ -169,7 +169,7 @@
 Сделать Helsinki новым главным live-host для LW2B, если тесты подтверждают, что он лучше по доступности.
 
 ### Что переносим
-- `w2.kislota.today`
+- `game.example.com`
 - nginx / TLS termination
 - frontend build serve
 - `/peerjs`
@@ -203,7 +203,7 @@
 `5349` нормален как стандартный TURN TLS порт, но `443` практичнее для плохих и ограниченных сетей.
 
 ### Результат фазы
-- `turns:w2.kislota.today:443?transport=tcp` становится главным relay path
+- `turns:game.example.com:443?transport=tcp` становится главным relay path
 
 ---
 
@@ -253,7 +253,7 @@
 Убрать ложные, старые и опасные зависимости.
 
 ### Что зачистить
-- `rts.kislota.today` как случайный runtime target
+- `legacy-realtime.example.com` как случайный runtime target
 - старые manual env values
 - старые build vars
 - ненужные public PeerJS fallback assumptions
@@ -268,23 +268,23 @@
 ## 6. Как должна выглядеть желаемая конечная схема
 
 ### Для доступа к сайту / игре
-- `https://w2.kislota.today/` открывается стабильно из РФ
+- `https://game.example.com/` открывается стабильно из РФ
 - есть резервный frontend entry при необходимости для диагностики, но не как основной костыль
 
 ### Для online server path
-- `https://w2.kislota.today/peerjs/id` работает
-- `https://w2.kislota.today/api/ice` работает
+- `https://game.example.com/peerjs/id` работает
+- `https://game.example.com/api/ice` работает
 - TURN работает по:
   - `443/tcp` для `turns`
   - `3478/tcp`
   - `3478/udp`
 
 ### Для MWC path
-- `wss://w2.kislota.today/mwc` стабильно доступен
+- `wss://game.example.com/mwc` стабильно доступен
 - room create / join / in-match sync проходят через same-origin WSS
 
 ### Для fallback
-- `wss://w2.kislota.today/ws-relay` стабильно доступен
+- `wss://game.example.com/ws-relay` стабильно доступен
 - клиент умеет туда уйти при провале primary path
 
 ---
@@ -316,7 +316,7 @@
 ## 8. Критерии успеха
 
 Считать задачу выполненной, когда:
-1. Игрок из РФ стабильно открывает `w2.kislota.today` и доходит до меню.
+1. Игрок из РФ стабильно открывает `game.example.com` и доходит до меню.
 2. Online path не зависит критически от Google STUN.
 3. TURN/TLS на `443` реально используется и помогает на плохих сетях.
 4. При провале primary transport клиент не умирает молча, а переходит в рабочий fallback.
@@ -332,7 +332,7 @@
 ### 9.1. Discovery и freeze текущего состояния
 
 Перед изменениями:
-1. зафиксировать текущий DNS для `w2.kislota.today`
+1. зафиксировать текущий DNS для `game.example.com`
 2. зафиксировать текущий прод-IP и хостинг-площадку
 3. снять текущие ответы и доступность:
    - `/`
@@ -343,7 +343,7 @@
    - `3478 tcp/udp`
    - `5349 tcp`
 4. сохранить текущие env / compose / nginx значения
-5. проверить, нет ли runtime-хвостов на `rts.kislota.today`
+5. проверить, нет ли runtime-хвостов на `legacy-realtime.example.com`
 
 ### 9.2. Решение по целевому ingress
 
@@ -351,7 +351,7 @@
 - **цель: весь боевой публичный ingress переносится на Helsinki**
 
 Это значит, что Helsinki должен стать домом для:
-- `w2.kislota.today`
+- `game.example.com`
 - frontend
 - `/peerjs`
 - `/api/ice`
@@ -363,7 +363,7 @@
 
 Подготовить на Helsinki:
 1. nginx / TLS termination
-2. сертификаты для `w2.kislota.today`
+2. сертификаты для `game.example.com`
 3. frontend serving
 4. reverse proxy для:
    - `/peerjs`
@@ -387,9 +387,9 @@
 ### 9.5. ICE API v3
 
 Нужно обновить `infra/ice-server.js` так, чтобы production ICE order был ближе к:
-1. `turns:w2.kislota.today:443?transport=tcp`
-2. `turn:w2.kislota.today:3478?transport=tcp`
-3. `turn:w2.kislota.today:3478?transport=udp`
+1. `turns:game.example.com:443?transport=tcp`
+2. `turn:game.example.com:3478?transport=tcp`
+3. `turn:game.example.com:3478?transport=udp`
 4. optional minimal fallback
 5. Google STUN только в хвосте или убрать в prod
 
@@ -429,13 +429,13 @@
 ### 9.8. Observability и ручная диагностика
 
 После переделки нужен короткий боевой набор проверок:
-- `https://w2.kislota.today/`
-- `https://w2.kislota.today/peerjs/id`
-- `https://w2.kislota.today/api/ice`
-- `wss://w2.kislota.today/ws-relay`
-- `wss://w2.kislota.today/mwc`
-- `w2.kislota.today:443`
-- `w2.kislota.today:3478 tcp/udp`
+- `https://game.example.com/`
+- `https://game.example.com/peerjs/id`
+- `https://game.example.com/api/ice`
+- `wss://game.example.com/ws-relay`
+- `wss://game.example.com/mwc`
+- `game.example.com:443`
+- `game.example.com:3478 tcp/udp`
 
 И желательно:
 - логировать выбранный transport path
@@ -447,7 +447,7 @@
 После переноса:
 1. зачистить старые docs, которые создают неверную live-картину
 2. убрать старые env / vars / comments, если они больше не каноничны
-3. убедиться, что `rts.kislota.today` не участвует в runtime
+3. убедиться, что `legacy-realtime.example.com` не участвует в runtime
 4. обновить operator-facing docs и test checklist
 
 ### 9.10. Порядок выполнения в следующей `/new`-сессии
@@ -466,7 +466,7 @@
 ### 9.11. Что считать completed
 
 Implementation можно считать завершённым, когда:
-- `w2.kislota.today` указывает на целевой live ingress
+- `game.example.com` указывает на целевой live ingress
 - сайт открывается стабильно
 - `/api/ice`, `/peerjs`, `/ws-relay`, `/mwc` живы
 - `turns:443` реально работает

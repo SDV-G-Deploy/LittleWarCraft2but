@@ -52,7 +52,7 @@ Current state:
 - follow-up lockstep packet/disconnect issues were fixed too
 - recent determinism-sensitive changes were verified with targeted review passes
 - a later live `SERVER` mode desync was reproduced, diagnosed, and fixed
-- self-hosted online infra is live on `w2.kislota.today`
+- self-hosted online infra is live on `game.example.com`
 - PeerJS/TURN production wiring is aligned for `SERVER` mode manual tests
 - live re-test after the desync fix stayed synchronized even with tower builds
 - focused anti-desync pass completed:
@@ -196,7 +196,7 @@ Example:
 
 After changes:
 - run `npm run build`
-- test live on `w2.kislota.today`
+- test live on `game.example.com`
 
 ## Current wood / lumber-mill verification checklist
 
@@ -258,9 +258,9 @@ npm run balance:report
 ## Entry point and deployment shape
 
 The canonical public entry point for the game is:
-- `https://w2.kislota.today/`
+- `https://game.example.com/`
 
-Architecturally, `w2.kislota.today` is not just a static page host. It is the single public origin that fronts multiplayer roles:
+Architecturally, `game.example.com` is not just a static page host. It is the single public origin that fronts multiplayer roles:
 - game client entry point (`/`)
 - PeerJS signaling endpoint (`/peerjs`)
 - runtime ICE config endpoint (`/api/ice`)
@@ -283,7 +283,7 @@ Supported Vite env vars:
 
 GitHub Pages deploy workflow wiring:
 - `.github/workflows/deploy.yml` now forwards `VITE_WS_RELAY_URL` and `VITE_MWC_WS_URL` into the Vite build
-- value precedence is `secrets.*` -> `vars.*` -> built-in defaults (`wss://w2.kislota.today/ws-relay` and `wss://w2.kislota.today/mwc`)
+- value precedence is `secrets.*` -> `vars.*` -> built-in defaults (`wss://game.example.com/ws-relay` and `wss://game.example.com/mwc`)
 
 Runtime ICE override:
 - client first tries `GET /api/ice`
@@ -321,7 +321,7 @@ Examples:
 - current network architecture notes: `NETWORK_ARCHITECTURE.md`
 
 PeerJS deployment note:
-- production self-host terminates TLS at `https://w2.kislota.today`
+- production self-host terminates TLS at `https://game.example.com`
 - nginx proxies `/peerjs/*` to PeerJS while the server keeps `path=/`
 - client must keep `VITE_PEER_PATH=/` to avoid `/peerjs/peerjs/id`
 - with the default PeerJS key (`peerjs`), client path `/` maps to requests like `/peerjs/id`
@@ -337,11 +337,11 @@ TURN note for Docker deployments:
 - in this default compose shape, true `turns:...:443` needs host-side 443 plumbing (nginx already owns 443 for HTTPS)
 
 Current production expectations:
-- `https://w2.kislota.today/` is the player-facing entry point for starting the game
-- `https://w2.kislota.today/peerjs/id` should respond successfully
-- `https://w2.kislota.today/api/ice` should return short-lived ICE config
+- `https://game.example.com/` is the player-facing entry point for starting the game
+- `https://game.example.com/peerjs/id` should respond successfully
+- `https://game.example.com/api/ice` should return short-lived ICE config
 - `SERVER` defaults should resolve to:
-  - `VITE_PEER_HOST=w2.kislota.today`
+  - `VITE_PEER_HOST=game.example.com`
   - `VITE_PEER_PORT=443`
   - `VITE_PEER_PATH=/`
   - `VITE_PEER_SECURE=true`
@@ -395,7 +395,7 @@ Determinism note:
 
 ## Network architecture documentation
 
-For the current multiplayer architecture, deployment coupling, the April 2026 live desync incident/fix, and the current canonical same-origin deployment policy (`w2.kislota.today` + `/mwc`), see:
+For the current multiplayer architecture, deployment coupling, the April 2026 live desync incident/fix, and the current canonical same-origin deployment policy (`game.example.com` + `/mwc`), see:
 - [NETWORK_ARCHITECTURE.md](./NETWORK_ARCHITECTURE.md)
 
 ## Roadmap

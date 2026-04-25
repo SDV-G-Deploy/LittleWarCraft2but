@@ -22,7 +22,7 @@ This is important because it means connectivity issues can be addressed by movin
 ## Current architecture shape
 
 Public entry point:
-- `https://w2.kislota.today/`
+- `https://game.example.com/`
 
 That public origin currently fronts multiplayer roles:
 1. game client entry point (`/`)
@@ -33,8 +33,8 @@ That public origin currently fronts multiplayer roles:
 TURN relay is also part of the same production networking stack.
 
 In practice, the current multiplayer backend is organized around one main public networking contour:
-- domain: `w2.kislota.today`
-- TURN/public IP: `116.203.107.226`
+- domain: `game.example.com`
+- TURN/public IP: `203.0.113.10`
 - infra host assumption: Hetzner-based deployment
 
 ## Main code and infra locations
@@ -121,23 +121,23 @@ This same-origin setup keeps the multiplayer bootstrap under one public origin.
 
 ### Client env
 In `.env.example` the current production-like defaults are:
-- `VITE_PEER_HOST=w2.kislota.today`
+- `VITE_PEER_HOST=game.example.com`
 - `VITE_PEER_PORT=443`
 - `VITE_PEER_PATH=/`
 - `VITE_PEER_SECURE=true`
-- `VITE_ICE_SERVERS` includes `116.203.107.226:3478`
+- `VITE_ICE_SERVERS` includes `203.0.113.10:3478`
 
 ### Infra env
 In `infra/.env.example`:
-- `PEER_DOMAIN=w2.kislota.today`
-- `TURN_REALM=w2.kislota.today`
-- `TURN_EXTERNAL_IP=116.203.107.226`
+- `PEER_DOMAIN=game.example.com`
+- `TURN_REALM=game.example.com`
+- `TURN_EXTERNAL_IP=203.0.113.10`
 
 ## Current architecture dependency points
 
 The current multiplayer path is tightly coupled to:
-- domain `w2.kislota.today`
-- public TURN IP `116.203.107.226`
+- domain `game.example.com`
+- public TURN IP `203.0.113.10`
 - the current self-hosted ASN/provider profile
 
 Those references also appear in deployment/docs paths such as:
@@ -284,21 +284,21 @@ Interpretation:
 ## Canonical deployment policy
 
 Current production policy is now explicit:
-- `https://w2.kislota.today` is the canonical online origin
+- `https://game.example.com` is the canonical online origin
 - realtime multiplayer should resolve on the same origin over 443
-- MultiWebCore is exposed as same-origin websocket endpoint: `wss://w2.kislota.today/mwc`
+- MultiWebCore is exposed as same-origin websocket endpoint: `wss://game.example.com/mwc`
 - GitHub Pages is secondary/fallback static hosting, not the primary multiplayer surface
 
 Implications:
-- public player docs and defaults should point to `w2.kislota.today`
+- public player docs and defaults should point to `game.example.com`
 - nginx should route `/mwc` to the MultiWebCore runtime in the same production stack as `/peerjs` and `/api/ice`
-- LW2B `VITE_MWC_WS_URL` defaults should target `wss://w2.kislota.today/mwc`
+- LW2B `VITE_MWC_WS_URL` defaults should target `wss://game.example.com/mwc`
 
 ## Immediate operational focus
 
 1. keep same-origin paths healthy (`/`, `/peerjs`, `/api/ice`, `/ws-relay`, `/mwc`)
 2. keep GitHub Pages as an emergency mirror/fallback only
-3. validate room create/join and in-match sync through `wss://w2.kislota.today/mwc`
+3. validate room create/join and in-match sync through `wss://game.example.com/mwc`
 4. continue TURN/ICE validation for hard NAT cases
 
 ## Non-goals for this document

@@ -8,9 +8,9 @@
     },
     {
       "urls": [
-        "turns:w2.kislota.today:5349?transport=tcp",
-        "turn:w2.kislota.today:3478?transport=tcp",
-        "turn:w2.kislota.today:3478?transport=udp"
+        "turns:game.example.com:5349?transport=tcp",
+        "turn:game.example.com:3478?transport=tcp",
+        "turn:game.example.com:3478?transport=udp"
       ],
       "username": "<unix-expiry-timestamp>:session",
       "credential": "<hmac-sha1-over-username-with-TURN_STATIC_AUTH_SECRET>"
