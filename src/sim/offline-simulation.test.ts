@@ -5,7 +5,7 @@ import { CORPSE_LIFE_TICKS, MINE_GOLD_INITIAL } from '../types';
 import { createWorld } from './world';
 import { spawnEntity } from './entities';
 import { applyNetCmds } from '../net/netcmd';
-import { createAI, tickAI } from './ai';
+import { createAI, tickAI, type AIAssaultPosture, type AIStrategicIntent } from './ai';
 import { autoAttackPass, processCommandPass, separateUnits } from './commands';
 import { computePopCaps } from './economy';
 import { tickLumberUpgrades } from './upgrades';
@@ -104,6 +104,10 @@ function testOfflineSimulationLongRunSmoke(): void {
   let side1LastDecisionTick = -1;
   let side0LastCommandTick = -1;
   let side1LastCommandTick = -1;
+  const side0Intents = new Set<AIStrategicIntent>();
+  const side1Intents = new Set<AIStrategicIntent>();
+  const side0Postures = new Set<AIAssaultPosture>();
+  const side1Postures = new Set<AIAssaultPosture>();
 
   for (let i = 0; i < totalTicks; i++) {
     state.tick++;
@@ -119,6 +123,8 @@ function testOfflineSimulationLongRunSmoke(): void {
     if (aiSide0.nextDecisionTick !== prev0) {
       side0DecisionCount++;
       side0LastDecisionTick = state.tick;
+      side0Intents.add(aiSide0.strategicIntent);
+      side0Postures.add(aiSide0.assaultPosture);
     }
 
     const prev1 = aiSide1.nextDecisionTick;
@@ -126,6 +132,8 @@ function testOfflineSimulationLongRunSmoke(): void {
     if (aiSide1.nextDecisionTick !== prev1) {
       side1DecisionCount++;
       side1LastDecisionTick = state.tick;
+      side1Intents.add(aiSide1.strategicIntent);
+      side1Postures.add(aiSide1.assaultPosture);
     }
 
     if (state.entities.some(e => e.owner === 0 && e.cmd !== null)) side0LastCommandTick = state.tick;
@@ -156,6 +164,11 @@ function testOfflineSimulationLongRunSmoke(): void {
       'side 1 AI should still make decisions late in the simulation when alive',
     );
   }
+
+  assert.ok(side0Intents.size >= 1, 'side 0 should expose strategic intent state during simulation');
+  assert.ok(side1Intents.size >= 1, 'side 1 should expose strategic intent state during simulation');
+  assert.ok(side0Postures.size >= 1, 'side 0 should expose assault posture state during simulation');
+  assert.ok(side1Postures.size >= 1, 'side 1 should expose assault posture state during simulation');
 }
 
 function run(): void {

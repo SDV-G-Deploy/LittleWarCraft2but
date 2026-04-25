@@ -1,4 +1,4 @@
-import type { AIDifficulty, Entity, EntityKind, GameState, LumberUpgradeKind, Vec2 } from '../types';
+import type { AIDifficulty, Entity, EntityKind, GameState, LumberUpgradeKind, Race, Vec2 } from '../types';
 import { MAP_H, MAP_W, SIM_HZ, isOwnedByOpposingPlayer, isUnitKind } from '../types';
 import { RACES } from '../data/races';
 import { RACE_BALANCE_PROFILES } from '../balance/races';
@@ -67,7 +67,83 @@ function preferredSpreadGoal(state: GameState, entity: Entity, tx: number, ty: n
   return spreadMoveTargets(state, entity, tx, ty)[0] ?? { x: tx, y: ty };
 }
 
-// ─── Controller state ─────────────────────────────────────────────────────────
+export type AIStrategicIntent = 'stabilize' | 'fortify' | 'contest' | 'pressure' | 'regroup' | 'contain';
+export type AIEconomicPosture = 'stable' | 'greed' | 'recover' | 'fortify';
+export type AIAssaultPosture = 'probe' | 'contest' | 'commit' | 'contain' | 'regroup';
+
+export interface AIRaceDoctrine {
+  reserveBias: number;
+  pressureBias: number;
+  towerBias: number;
+  economyGreedBias: number;
+  rangedBias: number;
+  heavyBias: number;
+  frontlineBias: number;
+}
+
+export interface AIDifficultyPersonality {
+  opportunism: number;
+  caution: number;
+  greedPunishBias: number;
+  reserveDiscipline: number;
+}
+
+export interface AISnapshot {
+  myArmySize: number;
+  enemyArmyNearBase: number;
+  myWorkersUnderThreat: number;
+  myTownHallUnderThreat: boolean;
+  contestedMineFavorable: boolean;
+  safeExpansionExists: boolean;
+  recentBaseThreat: boolean;
+  nearbyEnemyArmyAtFront: number;
+  nearbyFriendlyArmyAtFront: number;
+  enemyTownHallDistance: number | null;
+  recentFailedPush: boolean;
+  recentWonLocalTrade: boolean;
+}
+
+const AI_RACE_DOCTRINES: Record<Race, AIRaceDoctrine> = {
+  human: {
+    reserveBias: 0.28,
+    pressureBias: 0.15,
+    towerBias: 0.2,
+    economyGreedBias: 0.12,
+    rangedBias: 0.08,
+    heavyBias: -0.03,
+    frontlineBias: 0.18,
+  },
+  orc: {
+    reserveBias: 0.12,
+    pressureBias: 0.32,
+    towerBias: -0.02,
+    economyGreedBias: 0.06,
+    rangedBias: -0.05,
+    heavyBias: 0.08,
+    frontlineBias: -0.08,
+  },
+};
+
+const AI_DIFFICULTY_PERSONALITIES: Record<AIDifficulty, AIDifficultyPersonality> = {
+  easy: {
+    opportunism: 0.12,
+    caution: 0.82,
+    greedPunishBias: 0.08,
+    reserveDiscipline: 0.9,
+  },
+  medium: {
+    opportunism: 0.42,
+    caution: 0.52,
+    greedPunishBias: 0.36,
+    reserveDiscipline: 0.68,
+  },
+  hard: {
+    opportunism: 0.76,
+    caution: 0.36,
+    greedPunishBias: 0.72,
+    reserveDiscipline: 0.44,
+  },
+};
 
 export interface AIController {
   phase: 'economy' | 'military' | 'assault';
@@ -92,6 +168,16 @@ export interface AIController {
   doctrineChoice: 'fieldTempo' | 'lineHold' | 'longReach';
   baseDefenseRadius: number;
   defenseRecallWindowTicks: number;
+  strategicIntent: AIStrategicIntent;
+  economicPosture: AIEconomicPosture;
+  assaultPosture: AIAssaultPosture;
+  raceDoctrine: AIRaceDoctrine;
+  difficultyPersonality: AIDifficultyPersonality;
+  homeReserveMin: number;
+  lastIntentSwitchTick: number;
+  lastBaseThreatTick: number;
+  lastFailedPushTick: number;
+  lastWonLocalTradeTick: number;
 }
 
 type ArmyMixPlan = {
@@ -100,86 +186,46 @@ type ArmyMixPlan = {
   minFrontline: number;
 };
 
-export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
-  if (difficulty === 'easy') {
-    return {
-      phase: 'economy',
-      attackWaveSize: 99,
-      difficulty,
-      reactionDelayTicks: Math.round(SIM_HZ * 1.4),
-      nextDecisionTick: 0,
-      maxFarms: 2,
-      maxTowers: 1,
-      workerTarget: 3,
-      openingPlan: 'eco',
-      openingChoiceDelayTicks: Math.round(SIM_HZ * 8),
-      preferredRangedRatio: 0.15,
-      preferredHeavyCap: 1,
-      assaultRetargetMine: false,
-      towerMinArmy: 6,
-      fallbackWaveThreshold: 4,
-      expansionMineMinArmy: 7,
-      expansionMineReserveMin: 900,
-      attackRetargetRadius: 7,
-      attackBaseBias: 8,
-      doctrineChoice: 'lineHold',
-      baseDefenseRadius: 10,
-      defenseRecallWindowTicks: Math.round(SIM_HZ * 5),
-    };
-  }
-  if (difficulty === 'hard') {
-    return {
-      phase: 'economy',
-      attackWaveSize: 9,
-      difficulty,
-      reactionDelayTicks: Math.round(SIM_HZ * 0.55),
-      nextDecisionTick: 0,
-      maxFarms: 4,
-      maxTowers: 4,
-      workerTarget: 5,
-      openingPlan: 'pressure',
-      openingChoiceDelayTicks: Math.round(SIM_HZ * 4),
-      preferredRangedRatio: 0.6,
-      preferredHeavyCap: 3,
-      assaultRetargetMine: true,
-      towerMinArmy: 4,
-      fallbackWaveThreshold: 8,
-      expansionMineMinArmy: 3,
-      expansionMineReserveMin: 500,
-      attackRetargetRadius: 4,
-      attackBaseBias: 0,
-      doctrineChoice: 'longReach',
-      baseDefenseRadius: 12,
-      defenseRecallWindowTicks: Math.round(SIM_HZ * 6),
-    };
-  }
+function createAIBase(difficulty: AIDifficulty): AIController {
   return {
     phase: 'economy',
-    attackWaveSize: 7,
+    attackWaveSize: difficulty === 'easy' ? 99 : difficulty === 'hard' ? 9 : 7,
     difficulty,
-    reactionDelayTicks: SIM_HZ,
+    reactionDelayTicks: difficulty === 'easy' ? Math.round(SIM_HZ * 1.4) : difficulty === 'hard' ? Math.round(SIM_HZ * 0.55) : SIM_HZ,
     nextDecisionTick: 0,
-    maxFarms: 3,
-    maxTowers: 2,
-    workerTarget: 4,
-    openingPlan: 'tempo',
-    openingChoiceDelayTicks: Math.round(SIM_HZ * 6),
-    preferredRangedRatio: 0.4,
-    preferredHeavyCap: 2,
-    assaultRetargetMine: true,
-    towerMinArmy: 5,
-    fallbackWaveThreshold: 6,
-    expansionMineMinArmy: 5,
-    expansionMineReserveMin: 700,
-    attackRetargetRadius: 6,
-    attackBaseBias: 3,
-    doctrineChoice: 'fieldTempo',
-    baseDefenseRadius: 11,
-    defenseRecallWindowTicks: Math.round(SIM_HZ * 5),
+    maxFarms: difficulty === 'easy' ? 2 : difficulty === 'hard' ? 4 : 3,
+    maxTowers: difficulty === 'easy' ? 1 : difficulty === 'hard' ? 4 : 2,
+    workerTarget: difficulty === 'easy' ? 3 : difficulty === 'hard' ? 5 : 4,
+    openingPlan: difficulty === 'easy' ? 'eco' : difficulty === 'hard' ? 'pressure' : 'tempo',
+    openingChoiceDelayTicks: difficulty === 'easy' ? Math.round(SIM_HZ * 8) : difficulty === 'hard' ? Math.round(SIM_HZ * 4) : Math.round(SIM_HZ * 6),
+    preferredRangedRatio: difficulty === 'easy' ? 0.15 : difficulty === 'hard' ? 0.6 : 0.4,
+    preferredHeavyCap: difficulty === 'easy' ? 1 : difficulty === 'hard' ? 3 : 2,
+    assaultRetargetMine: difficulty !== 'easy',
+    towerMinArmy: difficulty === 'easy' ? 6 : difficulty === 'hard' ? 4 : 5,
+    fallbackWaveThreshold: difficulty === 'easy' ? 4 : difficulty === 'hard' ? 8 : 6,
+    expansionMineMinArmy: difficulty === 'easy' ? 7 : difficulty === 'hard' ? 3 : 5,
+    expansionMineReserveMin: difficulty === 'easy' ? 900 : difficulty === 'hard' ? 500 : 700,
+    attackRetargetRadius: difficulty === 'easy' ? 7 : difficulty === 'hard' ? 4 : 6,
+    attackBaseBias: difficulty === 'easy' ? 8 : difficulty === 'hard' ? 0 : 3,
+    doctrineChoice: difficulty === 'easy' ? 'lineHold' : difficulty === 'hard' ? 'longReach' : 'fieldTempo',
+    baseDefenseRadius: difficulty === 'easy' ? 10 : difficulty === 'hard' ? 12 : 11,
+    defenseRecallWindowTicks: difficulty === 'easy' ? Math.round(SIM_HZ * 5) : difficulty === 'hard' ? Math.round(SIM_HZ * 6) : Math.round(SIM_HZ * 5),
+    strategicIntent: 'stabilize',
+    economicPosture: 'stable',
+    assaultPosture: 'probe',
+    raceDoctrine: AI_RACE_DOCTRINES.human,
+    difficultyPersonality: AI_DIFFICULTY_PERSONALITIES[difficulty],
+    homeReserveMin: difficulty === 'hard' ? 1 : 2,
+    lastIntentSwitchTick: 0,
+    lastBaseThreatTick: -Infinity,
+    lastFailedPushTick: -Infinity,
+    lastWonLocalTradeTick: -Infinity,
   };
 }
 
-// ─── Main tick (runs at 1 Hz) ─────────────────────────────────────────────────
+export function createAI(difficulty: AIDifficulty = 'medium'): AIController {
+  return createAIBase(difficulty);
+}
 
 export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): void {
   if (state.tick < ai.nextDecisionTick) return;
@@ -188,23 +234,24 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
 
   const es = state.entities;
   const race = state.races[owner];
+  applyDoctrineBias(ai, race);
 
   const myTH = es.find(e => e.owner === owner && e.kind === 'townhall');
-  if (!myTH) return; // AI defeated — nothing to do
+  if (!myTH) return;
 
   const rc = RACES[race];
-  const myBarracks = es.find(e  => e.owner === owner && e.kind === 'barracks');
+  const myBarracks = es.find(e => e.owner === owner && e.kind === 'barracks');
   const myLumberMill = es.find(e => e.owner === owner && e.kind === 'lumbermill');
-  const myWorkers  = es.filter(e => e.owner === owner && e.kind === rc.worker);
+  const myWorkers = es.filter(e => e.owner === owner && e.kind === rc.worker);
   const mySoldiers = es.filter(e => e.owner === owner &&
     (e.kind === rc.soldier || e.kind === rc.ranged || e.kind === rc.heavy));
-  const farmCount  = es.filter(e => e.owner === owner && e.kind === 'farm').length;
+  const farmCount = es.filter(e => e.owner === owner && e.kind === 'farm').length;
   const towerCount = es.filter(e => e.owner === owner && e.kind === 'tower').length;
 
-  const buildingFarm     = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'farm');
+  const buildingFarm = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'farm');
   const buildingBarracks = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'barracks');
-  const buildingTower    = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'tower');
-  const buildingLumber   = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'lumbermill');
+  const buildingTower = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'tower');
+  const buildingLumber = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'lumbermill');
 
   if (!state.openingPlanSelected[owner] && state.tick >= ai.openingChoiceDelayTicks) {
     state.openingPlanSelected[owner] = ai.openingPlan;
@@ -213,11 +260,19 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
     }
   }
 
+  const contestedMine = bestContestedMine(state, owner, ai);
+  const expansionMine = bestExpansionMine(state, owner, ai);
+  const defenseThreat = assessBaseThreat(state, ai, owner, myTH, myWorkers);
+  const snapshot = evaluateAISnapshot(state, ai, owner, myTH, mySoldiers, defenseThreat, contestedMine, expansionMine);
+  updateStrategicIntent(state, ai, snapshot);
+  updateAssaultPosture(state, ai, snapshot);
+
   const woodDemand = estimateWoodDemand(state, ai, owner, myBarracks, myLumberMill, farmCount, towerCount, mySoldiers.length);
   keepGathering(state, myWorkers, woodDemand);
-  const defenseThreat = assessBaseThreat(state, ai, owner, myTH, myWorkers);
+
   if (defenseThreat.active) {
-    recallDefenders(state, myTH, mySoldiers, defenseThreat, ai.baseDefenseRadius);
+    ai.lastBaseThreatTick = state.tick;
+    recallDefenders(state, myTH, mySoldiers, defenseThreat, ai.baseDefenseRadius, ai.homeReserveMin);
   }
 
   switch (ai.phase) {
@@ -263,23 +318,23 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
 
       if (myBarracks) {
         const soldierCount = mySoldiers.filter(u => u.kind === rc.soldier).length;
-        const rangedCount  = mySoldiers.filter(u => u.kind === rc.ranged).length;
-        const heavyCount   = mySoldiers.filter(u => u.kind === rc.heavy).length;
+        const rangedCount = mySoldiers.filter(u => u.kind === rc.ranged).length;
+        const heavyCount = mySoldiers.filter(u => u.kind === rc.heavy).length;
         const totalArmy = soldierCount + rangedCount + heavyCount;
         const mixPlan = getArmyMixPlan(ai, totalArmy);
         const targetRangedCount = Math.max(0, Math.floor((totalArmy + 1) * mixPlan.rangedRatio));
         const targetHeavyCount = Math.min(ai.preferredHeavyCap, Math.max(0, Math.floor((totalArmy + 1) * mixPlan.heavyRatio)));
 
-        const heavyCost    = getResolvedCost(rc.heavy, race);
-        const rangedCost   = getResolvedCost(rc.ranged, race);
-        const soldierCost  = getResolvedCost(rc.soldier, race);
-        const canHeavy     = state.gold[owner] >= heavyCost.gold && state.wood[owner] >= heavyCost.wood;
-        const canRanged    = state.gold[owner] >= rangedCost.gold && state.wood[owner] >= rangedCost.wood;
-        const canSoldier   = state.gold[owner] >= soldierCost.gold && state.wood[owner] >= soldierCost.wood;
+        const heavyCost = getResolvedCost(rc.heavy, race);
+        const rangedCost = getResolvedCost(rc.ranged, race);
+        const soldierCost = getResolvedCost(rc.soldier, race);
+        const canHeavy = state.gold[owner] >= heavyCost.gold && state.wood[owner] >= heavyCost.wood;
+        const canRanged = state.gold[owner] >= rangedCost.gold && state.wood[owner] >= rangedCost.wood;
+        const canSoldier = state.gold[owner] >= soldierCost.gold && state.wood[owner] >= soldierCost.wood;
 
         const needFrontline = soldierCount < mixPlan.minFrontline;
-        const wantHeavy    = !needFrontline && heavyCount < targetHeavyCount && soldierCount >= mixPlan.minFrontline && canHeavy;
-        const wantRanged   = !wantHeavy && !needFrontline && rangedCount < targetRangedCount && soldierCount >= Math.max(1, mixPlan.minFrontline - 1) && canRanged;
+        const wantHeavy = !needFrontline && heavyCount < targetHeavyCount && soldierCount >= mixPlan.minFrontline && canHeavy;
+        const wantRanged = !wantHeavy && !needFrontline && rangedCount < targetRangedCount && soldierCount >= Math.max(1, mixPlan.minFrontline - 1) && canRanged;
         const nextUnit = wantHeavy ? rc.heavy : wantRanged ? rc.ranged : rc.soldier;
         const canTrainNext = wantHeavy ? canHeavy : wantRanged ? canRanged : canSoldier;
         const barracksBusy = myBarracks.cmd?.type === 'train';
@@ -308,39 +363,65 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
 
     case 'assault': {
       const opposingPlayerTH = es.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
-      const contestedMine = bestContestedMine(state, owner, ai);
-      const expansionMine = bestExpansionMine(state, owner, ai);
+      const reserveCount = getHomeReserveCount(ai, mySoldiers.length, defenseThreat.active);
+      const assaultSoldiers = mySoldiers.length > reserveCount
+        ? [...mySoldiers].sort((a, b) => a.id - b.id).slice(reserveCount)
+        : mySoldiers;
 
-      for (const s of mySoldiers) {
-        if (s.cmd && s.cmd.type !== 'move') continue;
-
-        const nearest = ai.difficulty === 'easy'
-          ? nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius)
-          : s.kind === rc.ranged
-            ? (nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius) ?? nearestPlayerEntity(state, s, owner, ai.attackRetargetRadius))
-            : nearestPlayerEntity(state, s, owner, ai.attackRetargetRadius);
-
-        if (nearest) {
-          issueAttackCommand(s, nearest.id, state.tick, state);
-        } else if (ai.assaultRetargetMine && contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > ai.attackRetargetRadius) {
-          const tx = contestedMine.pos.x;
-          const ty = contestedMine.pos.y - 1;
-          const target = preferredSpreadGoal(state, s, tx, ty);
-          if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
-        } else if (expansionMine && mySoldiers.length >= ai.expansionMineMinArmy) {
-          const tx = expansionMine.pos.x;
-          const ty = expansionMine.pos.y - 1;
-          const target = preferredSpreadGoal(state, s, tx, ty);
-          if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
-        } else if (opposingPlayerTH && ai.difficulty !== 'easy') {
-          const tx = opposingPlayerTH.pos.x + 1;
-          const ty = opposingPlayerTH.pos.y + 2;
+      if (ai.assaultPosture === 'regroup' && myTH) {
+        for (const s of assaultSoldiers) {
+          if (s.cmd && s.cmd.type !== 'move') continue;
+          const tx = Math.floor((s.pos.x + myTH.pos.x + 1) / 2);
+          const ty = Math.floor((s.pos.y + myTH.pos.y + myTH.tileH) / 2);
           const target = preferredSpreadGoal(state, s, tx, ty);
           if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
         }
+      } else {
+        for (const s of assaultSoldiers) {
+          if (s.cmd && s.cmd.type !== 'move') continue;
+
+          const nearest = ai.difficulty === 'easy'
+            ? nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius)
+            : s.kind === rc.ranged
+              ? (nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius) ?? nearestPlayerEntity(state, s, owner, ai.attackRetargetRadius))
+              : nearestPlayerEntity(state, s, owner, ai.attackRetargetRadius);
+
+          if (nearest) {
+            issueAttackCommand(s, nearest.id, state.tick, state);
+            if (snapshot.nearbyFriendlyArmyAtFront >= snapshot.nearbyEnemyArmyAtFront + 2) {
+              ai.lastWonLocalTradeTick = state.tick;
+            }
+          } else if ((ai.assaultPosture === 'contest' || ai.strategicIntent === 'contest') && contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > ai.attackRetargetRadius) {
+            const tx = contestedMine.pos.x;
+            const ty = contestedMine.pos.y - 1;
+            const target = preferredSpreadGoal(state, s, tx, ty);
+            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
+          } else if (ai.assaultPosture === 'contain' && contestedMine) {
+            const tx = Math.floor((contestedMine.pos.x + (opposingPlayerTH?.pos.x ?? contestedMine.pos.x)) / 2);
+            const ty = contestedMine.pos.y - 1;
+            const target = preferredSpreadGoal(state, s, tx, ty);
+            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
+          } else if (expansionMine && mySoldiers.length >= ai.expansionMineMinArmy && ai.strategicIntent !== 'fortify') {
+            const tx = expansionMine.pos.x;
+            const ty = expansionMine.pos.y - 1;
+            const target = preferredSpreadGoal(state, s, tx, ty);
+            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
+          } else if (opposingPlayerTH && ai.difficulty !== 'easy' && (ai.assaultPosture === 'commit' || ai.strategicIntent === 'pressure')) {
+            const tx = opposingPlayerTH.pos.x + 1;
+            const ty = opposingPlayerTH.pos.y + 2;
+            const target = preferredSpreadGoal(state, s, tx, ty);
+            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
+          } else if (contestedMine && ai.assaultRetargetMine) {
+            const tx = contestedMine.pos.x;
+            const ty = contestedMine.pos.y - 1;
+            const target = preferredSpreadGoal(state, s, tx, ty);
+            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
+          }
+        }
       }
 
-      if (mySoldiers.length <= ai.fallbackWaveThreshold) {
+      if (mySoldiers.length <= ai.fallbackWaveThreshold || ai.assaultPosture === 'regroup') {
+        ai.lastFailedPushTick = state.tick;
         const growth = ai.difficulty === 'easy' ? 1 : 2;
         const maxWave = ai.difficulty === 'hard' ? 11 : 12;
         ai.attackWaveSize = Math.min(maxWave, ai.attackWaveSize + growth);
@@ -351,21 +432,139 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
   }
 }
 
-function getArmyMixPlan(ai: AIController, totalArmy: number): ArmyMixPlan {
-  if (ai.difficulty === 'easy') {
-    if (totalArmy < 6) return { rangedRatio: 0, heavyRatio: 0, minFrontline: 4 };
-    if (totalArmy < 11) return { rangedRatio: 0.2, heavyRatio: 0.1, minFrontline: 4 };
-    return { rangedRatio: 0.28, heavyRatio: 0.18, minFrontline: 5 };
-  }
-  if (ai.difficulty === 'hard') {
-    if (totalArmy < 4) return { rangedRatio: 0.2, heavyRatio: 0.05, minFrontline: 2 };
-    if (totalArmy < 8) return { rangedRatio: 0.45, heavyRatio: 0.25, minFrontline: 2 };
-    return { rangedRatio: 0.55, heavyRatio: 0.33, minFrontline: 3 };
+function applyDoctrineBias(ai: AIController, race: Race): void {
+  const doctrine = AI_RACE_DOCTRINES[race];
+  ai.raceDoctrine = doctrine;
+  ai.homeReserveMin = Math.max(1, Math.round(1 + doctrine.reserveBias * 3 + ai.difficultyPersonality.reserveDiscipline));
+  ai.preferredRangedRatio = clamp01(baseRangedRatioForDifficulty(ai.difficulty) + doctrine.rangedBias);
+  ai.preferredHeavyCap = Math.max(1, Math.round(baseHeavyCapForDifficulty(ai.difficulty) + doctrine.heavyBias * 4));
+  ai.towerMinArmy = Math.max(3, Math.round(baseTowerMinArmyForDifficulty(ai.difficulty) - doctrine.towerBias * 3));
+  ai.workerTarget = Math.max(3, Math.round(baseWorkerTargetForDifficulty(ai.difficulty) + doctrine.economyGreedBias * 3));
+  ai.attackWaveSize = Math.max(ai.fallbackWaveThreshold + 1, Math.round(baseAttackWaveForDifficulty(ai.difficulty) - doctrine.pressureBias * 3 - ai.difficultyPersonality.opportunism * 2 + ai.difficultyPersonality.caution));
+}
+
+function evaluateAISnapshot(
+  state: GameState,
+  ai: AIController,
+  owner: 0 | 1,
+  myTownHall: Entity,
+  mySoldiers: Entity[],
+  defenseThreat: DefenseThreatInfo,
+  contestedMine: Entity | null,
+  expansionMine: Entity | null,
+): AISnapshot {
+  const enemyArmyNearBase = state.entities.filter(e =>
+    isOwnedByOpposingPlayer(e, owner) &&
+    isUnitKind(e.kind) &&
+    Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y) <= ai.baseDefenseRadius + 2,
+  ).length;
+  const myWorkersUnderThreat = state.entities.filter(e => e.owner === owner && e.kind === RACES[state.races[owner]].worker && (e.underAttackTick ?? -Infinity) >= state.tick - ai.defenseRecallWindowTicks).length;
+  const contestedMineFavorable = contestedMine !== null && (() => {
+    const enemyTownHall = state.entities.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
+    if (!enemyTownHall) return false;
+    const myDist = Math.hypot(contestedMine.pos.x - myTownHall.pos.x, contestedMine.pos.y - myTownHall.pos.y);
+    const enemyDist = Math.hypot(contestedMine.pos.x - enemyTownHall.pos.x, contestedMine.pos.y - enemyTownHall.pos.y);
+    return myDist <= enemyDist + 3;
+  })();
+
+  const frontReference = contestedMine ?? expansionMine;
+  const nearbyFriendlyArmyAtFront = frontReference
+    ? mySoldiers.filter(e => Math.hypot(e.pos.x - frontReference.pos.x, e.pos.y - frontReference.pos.y) <= 8).length
+    : 0;
+  const nearbyEnemyArmyAtFront = frontReference
+    ? state.entities.filter(e => isOwnedByOpposingPlayer(e, owner) && isUnitKind(e.kind) && Math.hypot(e.pos.x - frontReference.pos.x, e.pos.y - frontReference.pos.y) <= 8).length
+    : 0;
+  const enemyTownHall = state.entities.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
+
+  return {
+    myArmySize: mySoldiers.length,
+    enemyArmyNearBase,
+    myWorkersUnderThreat,
+    myTownHallUnderThreat: defenseThreat.active && defenseThreat.severe,
+    contestedMineFavorable,
+    safeExpansionExists: expansionMine !== null && !defenseThreat.active,
+    recentBaseThreat: ai.lastBaseThreatTick >= state.tick - ai.defenseRecallWindowTicks,
+    nearbyFriendlyArmyAtFront,
+    nearbyEnemyArmyAtFront,
+    enemyTownHallDistance: enemyTownHall ? Math.hypot(enemyTownHall.pos.x - myTownHall.pos.x, enemyTownHall.pos.y - myTownHall.pos.y) : null,
+    recentFailedPush: ai.lastFailedPushTick >= state.tick - Math.round(SIM_HZ * 20),
+    recentWonLocalTrade: ai.lastWonLocalTradeTick >= state.tick - Math.round(SIM_HZ * 12),
+  };
+}
+
+function updateStrategicIntent(state: GameState, ai: AIController, snapshot: AISnapshot): void {
+  let nextIntent: AIStrategicIntent = ai.strategicIntent;
+  let nextPosture: AIEconomicPosture = ai.economicPosture;
+
+  if (snapshot.myTownHallUnderThreat || snapshot.enemyArmyNearBase >= 3 || snapshot.myWorkersUnderThreat >= 2) {
+    nextIntent = 'fortify';
+    nextPosture = 'fortify';
+  } else if (snapshot.recentFailedPush && snapshot.myArmySize < ai.attackWaveSize + 1) {
+    nextIntent = 'regroup';
+    nextPosture = 'recover';
+  } else if (snapshot.myArmySize < ai.attackWaveSize - 1 || snapshot.recentBaseThreat) {
+    nextIntent = 'stabilize';
+    nextPosture = snapshot.recentBaseThreat ? 'recover' : 'stable';
+  } else if (snapshot.recentWonLocalTrade && snapshot.contestedMineFavorable) {
+    nextIntent = 'contain';
+    nextPosture = 'stable';
+  } else if (snapshot.contestedMineFavorable && ai.raceDoctrine.pressureBias < 0.25) {
+    nextIntent = 'contest';
+    nextPosture = 'stable';
+  } else if (snapshot.contestedMineFavorable || (snapshot.safeExpansionExists && ai.difficultyPersonality.opportunism > 0.35)) {
+    nextIntent = 'pressure';
+    nextPosture = snapshot.safeExpansionExists && ai.raceDoctrine.economyGreedBias > 0.1 ? 'greed' : 'stable';
+  } else {
+    nextIntent = ai.difficulty === 'easy' ? 'stabilize' : 'contest';
+    nextPosture = 'stable';
   }
 
-  if (totalArmy < 5) return { rangedRatio: 0.1, heavyRatio: 0, minFrontline: 3 };
-  if (totalArmy < 10) return { rangedRatio: 0.33, heavyRatio: 0.18, minFrontline: 3 };
-  return { rangedRatio: 0.42, heavyRatio: 0.25, minFrontline: 4 };
+  if (nextIntent !== ai.strategicIntent) ai.lastIntentSwitchTick = state.tick;
+  ai.strategicIntent = nextIntent;
+  ai.economicPosture = nextPosture;
+}
+
+function updateAssaultPosture(state: GameState, ai: AIController, snapshot: AISnapshot): void {
+  if (ai.strategicIntent === 'fortify') {
+    ai.assaultPosture = 'regroup';
+    return;
+  }
+  if (ai.strategicIntent === 'regroup' || snapshot.recentFailedPush) {
+    ai.assaultPosture = 'regroup';
+    return;
+  }
+  if (ai.strategicIntent === 'contain' || snapshot.recentWonLocalTrade) {
+    ai.assaultPosture = 'contain';
+    return;
+  }
+  if (ai.strategicIntent === 'pressure' && snapshot.nearbyFriendlyArmyAtFront >= snapshot.nearbyEnemyArmyAtFront) {
+    ai.assaultPosture = snapshot.nearbyFriendlyArmyAtFront >= snapshot.nearbyEnemyArmyAtFront + 2 ? 'commit' : 'probe';
+    return;
+  }
+  if (ai.strategicIntent === 'contest') {
+    ai.assaultPosture = 'contest';
+    return;
+  }
+  ai.assaultPosture = 'probe';
+}
+
+function getArmyMixPlan(ai: AIController, totalArmy: number): ArmyMixPlan {
+  const doctrine = ai.raceDoctrine;
+
+  if (ai.difficulty === 'easy') {
+    if (totalArmy < 6) return { rangedRatio: clamp01(0 + doctrine.rangedBias), heavyRatio: clamp01(0 + doctrine.heavyBias * 0.5), minFrontline: Math.max(3, Math.round(4 + doctrine.frontlineBias)) };
+    if (totalArmy < 11) return { rangedRatio: clamp01(0.2 + doctrine.rangedBias), heavyRatio: clamp01(0.1 + doctrine.heavyBias * 0.5), minFrontline: Math.max(3, Math.round(4 + doctrine.frontlineBias)) };
+    return { rangedRatio: clamp01(0.28 + doctrine.rangedBias), heavyRatio: clamp01(0.18 + doctrine.heavyBias * 0.5), minFrontline: Math.max(4, Math.round(5 + doctrine.frontlineBias)) };
+  }
+  if (ai.difficulty === 'hard') {
+    if (totalArmy < 4) return { rangedRatio: clamp01(0.2 + doctrine.rangedBias), heavyRatio: clamp01(0.05 + doctrine.heavyBias), minFrontline: Math.max(2, Math.round(2 + doctrine.frontlineBias)) };
+    if (totalArmy < 8) return { rangedRatio: clamp01(0.45 + doctrine.rangedBias), heavyRatio: clamp01(0.25 + doctrine.heavyBias), minFrontline: Math.max(2, Math.round(2 + doctrine.frontlineBias)) };
+    return { rangedRatio: clamp01(0.55 + doctrine.rangedBias), heavyRatio: clamp01(0.33 + doctrine.heavyBias), minFrontline: Math.max(2, Math.round(3 + doctrine.frontlineBias)) };
+  }
+
+  if (totalArmy < 5) return { rangedRatio: clamp01(0.1 + doctrine.rangedBias), heavyRatio: clamp01(0 + doctrine.heavyBias * 0.5), minFrontline: Math.max(2, Math.round(3 + doctrine.frontlineBias)) };
+  if (totalArmy < 10) return { rangedRatio: clamp01(0.33 + doctrine.rangedBias), heavyRatio: clamp01(0.18 + doctrine.heavyBias), minFrontline: Math.max(2, Math.round(3 + doctrine.frontlineBias)) };
+  return { rangedRatio: clamp01(0.42 + doctrine.rangedBias), heavyRatio: clamp01(0.25 + doctrine.heavyBias), minFrontline: Math.max(3, Math.round(4 + doctrine.frontlineBias)) };
 }
 
 function doctrineKind(choice: AIController['doctrineChoice']): LumberUpgradeKind {
@@ -424,8 +623,6 @@ function pickNextUpgrade(state: GameState, ai: AIController, owner: 0 | 1): Lumb
 
   return null;
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function keepGathering(state: GameState, workers: Entity[], desiredWoodWorkers: number): void {
   const activeWoodWorkers = workers.filter(w => w.cmd?.type === 'gather' && w.cmd.resourceType === 'wood').length;
@@ -573,15 +770,17 @@ function assessBaseThreat(state: GameState, ai: AIController, owner: 0 | 1, myTo
   };
 }
 
-function recallDefenders(state: GameState, myTownHall: Entity, mySoldiers: Entity[], threat: DefenseThreatInfo, defenseRadius: number): void {
+function recallDefenders(state: GameState, myTownHall: Entity, mySoldiers: Entity[], threat: DefenseThreatInfo, defenseRadius: number, reserveMin: number): void {
   if (mySoldiers.length === 0) return;
 
   const desiredFraction = threat.severe ? 1 : 0.55;
   const desiredCount = Math.max(1, Math.ceil(mySoldiers.length * desiredFraction));
+  const availableCount = Math.max(1, mySoldiers.length - Math.max(0, reserveMin));
+  const finalCount = Math.min(desiredCount, availableCount);
   const sortedByBaseDistance = [...mySoldiers]
     .sort((a, b) => Math.hypot(a.pos.x - myTownHall.pos.x, a.pos.y - myTownHall.pos.y) - Math.hypot(b.pos.x - myTownHall.pos.x, b.pos.y - myTownHall.pos.y));
 
-  for (const unit of sortedByBaseDistance.slice(0, desiredCount)) {
+  for (const unit of sortedByBaseDistance.slice(0, finalCount)) {
     const target = nearestThreat(unit, threat.targets);
     if (target && Math.hypot(unit.pos.x - target.pos.x, unit.pos.y - target.pos.y) <= defenseRadius + 2) {
       issueAttackCommand(unit, target.id, state.tick, state);
@@ -622,6 +821,8 @@ function estimateWoodDemand(state: GameState, ai: AIController, owner: 0 | 1, my
   if (myBarracks) demand += soldierCost * Math.max(1, Math.min(2, ai.attackWaveSize - soldierCount));
   if (myLumberMill && !state.upgrades[owner].doctrine) demand += DOCTRINE_COST.wood;
   if (myBarracks && soldierCount >= ai.towerMinArmy && towerCount < ai.maxTowers) demand += towerCost;
+  if (ai.economicPosture === 'fortify') demand += towerCost;
+  if (ai.economicPosture === 'greed') demand = Math.max(0, demand - Math.round(soldierCost * 0.5));
 
   if (wood < Math.max(40, demand)) return Math.min(3, Math.max(1, Math.ceil((Math.max(40, demand) - wood) / 60)));
   return wood < 120 ? 1 : 0;
@@ -757,4 +958,37 @@ function bestExpansionMine(state: GameState, owner: 0 | 1, ai: AIController): En
     }
   }
   return best;
+}
+
+function getHomeReserveCount(ai: AIController, soldierCount: number, defenseActive: boolean): number {
+  if (soldierCount <= 1) return 0;
+  const baseReserve = ai.homeReserveMin;
+  if (defenseActive || ai.strategicIntent === 'fortify') return Math.min(Math.max(0, soldierCount - 1), baseReserve + 1);
+  if (ai.strategicIntent === 'pressure') return Math.max(0, baseReserve - 1);
+  if (ai.strategicIntent === 'regroup') return Math.min(Math.max(0, soldierCount - 1), baseReserve + 1);
+  return Math.min(Math.max(0, soldierCount - 1), baseReserve);
+}
+
+function baseAttackWaveForDifficulty(difficulty: AIDifficulty): number {
+  return difficulty === 'easy' ? 99 : difficulty === 'hard' ? 9 : 7;
+}
+
+function baseWorkerTargetForDifficulty(difficulty: AIDifficulty): number {
+  return difficulty === 'easy' ? 3 : difficulty === 'hard' ? 5 : 4;
+}
+
+function baseTowerMinArmyForDifficulty(difficulty: AIDifficulty): number {
+  return difficulty === 'easy' ? 6 : difficulty === 'hard' ? 4 : 5;
+}
+
+function baseRangedRatioForDifficulty(difficulty: AIDifficulty): number {
+  return difficulty === 'easy' ? 0.15 : difficulty === 'hard' ? 0.6 : 0.4;
+}
+
+function baseHeavyCapForDifficulty(difficulty: AIDifficulty): number {
+  return difficulty === 'easy' ? 1 : difficulty === 'hard' ? 3 : 2;
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
