@@ -76,6 +76,15 @@ That means non-reserve assault units are more likely to receive:
 - a deterministic move toward a meaningful anchor,
 - or a race-appropriate hold/contain position.
 
+
+### 6. Safety follow-up: bounded harassment and objective validity
+
+A narrow gameplay follow-up tightened the new pressure-objective behavior:
+- Orc `harassWorkers` pressure is now bounded so the whole army does not abandon the front.
+- Exposed workers are preferred over safe workers parked near the enemy Town Hall.
+- Stale move commands near a pressure objective are reissued instead of being treated as already useful.
+- Stored pressure objectives are validated before being reused, so dead/missing targets are not retained indefinitely.
+
 ## Why this is intentionally not a full AI rewrite
 
 This pass does not:
@@ -104,6 +113,7 @@ Targeted:
 - `npx tsx src/sim/ai-mine-intent.test.ts`
 - `npx tsx src/sim/ai-assault-watchdog.test.ts`
 - `npx tsx src/sim/offline-simulation.test.ts`
+- follow-up initiative coverage includes bounded harassment, exposed worker selection, stale move refresh, and invalid objective replacement
 
 Full:
 - `npm test`
@@ -115,7 +125,7 @@ Focus field validation on:
 1. parity fronts near contested mines,
 2. Human contain behavior with mixed melee/ranged groups,
 3. Orc pressure behavior when direct target access is not immediate,
-4. whether harassment objectives over-pull units away from the main line,
+4. whether bounded harassment still leaves enough main-front pressure,
 5. whether any remaining inactivity is really movement/pathing related rather than AI decision related.
 
 ## Follow-up if needed

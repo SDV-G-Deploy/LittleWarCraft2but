@@ -72,9 +72,11 @@ function testHumanParityChoosesContainAndMeaningfulCommands(): void {
   assert.ok(commanded.some(u => u.cmd?.type === 'move' && (u.cmd.goal.x > 40 || Math.abs(u.cmd.goal.x - contestedMine.pos.x) <= 8)), 'human should issue positional contain movement instead of idling');
 }
 
-function testOrcParityChoosesProbePressureAndMeaningfulCommands(): void {
-  const { state, contestedMine } = seedParityState(['human', 'orc'], 1);
+function testOrcParityHarassmentStaysBounded(): void {
+  const { state } = seedParityState(['human', 'orc'], 1);
   seedOrcParityArmy(state);
+  spawnEntity(state, 'grunt', 1, { x: 29, y: 29 });
+  spawnEntity(state, 'troll', 1, { x: 25, y: 28 });
 
   const ai = createAI('hard');
   ai.phase = 'assault';
@@ -82,14 +84,33 @@ function testOrcParityChoosesProbePressureAndMeaningfulCommands(): void {
   tickAI(state, ai, 1);
 
   assert.equal(ai.assaultPosture, 'probe');
-  assert.ok(ai.raceDoctrine.harassBias > 0);
   assert.equal(ai.lastPressureObjective?.type, 'harassWorkers');
 
-  const units = combatUnits(state, 1);
-  assert.ok(units.length >= 3);
-  const commanded = units.filter(u => u.cmd && (u.cmd.type === 'move' || u.cmd.type === 'attack'));
-  assert.ok(commanded.length >= units.length - 1, 'orc parity front should actively command nearly all assault units');
-  assert.ok(commanded.some(u => u.cmd?.type === 'move' && (u.cmd.goal.x < contestedMine.pos.x || u.cmd.goal.y > contestedMine.pos.y)), 'orc should issue forward pressure / harassment movement instead of static holds');
+  const orcUnits = combatUnits(state, 1);
+  const farHarassMoves = orcUnits.filter(u => u.cmd?.type === 'move' && u.cmd.goal.x <= 15 && u.cmd.goal.y >= 40);
+  const frontlineMoves = orcUnits.filter(u => u.cmd?.type === 'move' && (u.cmd.goal.x >= 20 || u.cmd.goal.y <= 30));
+  assert.ok(farHarassMoves.length < orcUnits.length, 'orc worker harassment should not pull the entire army off the front');
+  assert.ok(frontlineMoves.length >= 1, 'main orc force should keep a front pressure objective');
+}
+
+function testExposedWorkerPreferredOverSafeWorker(): void {
+  const { state } = seedParityState(['human', 'orc'], 1);
+  seedOrcParityArmy(state);
+  const enemyTownHall = state.entities.find(e => e.owner === 0 && e.kind === 'townhall');
+  assert.ok(enemyTownHall);
+  const safeWorker = state.entities.find(e => e.owner === 0 && e.kind === 'worker');
+  assert.ok(safeWorker);
+  safeWorker.pos = { x: enemyTownHall.pos.x + 1, y: enemyTownHall.pos.y + 1 };
+  const exposedWorker = spawnEntity(state, 'worker', 0, { x: 18, y: 45 });
+  exposedWorker.cmd = { type: 'gather', targetId: 3, resourceType: 'gold', phase: 'returning', waitTicks: 0 };
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  ai.homeReserveMin = 0;
+  tickAI(state, ai, 1);
+
+  assert.equal(ai.lastPressureObjective?.type, 'harassWorkers');
+  assert.equal(ai.lastPressureObjective?.targetId, exposedWorker.id, 'exposed worker should be preferred over safe worker near town hall');
 }
 
 function testRaceDivergenceOnSameParitySetup(): void {
@@ -111,30 +132,49 @@ function testRaceDivergenceOnSameParitySetup(): void {
   assert.notEqual(humanAI.raceDoctrine.guardBias > humanAI.raceDoctrine.harassBias, orcAI.raceDoctrine.guardBias > orcAI.raceDoctrine.harassBias, 'human and orc doctrine should point to different parity behaviors');
 }
 
-function testNoCommandStarvationOnStaleParityCommands(): void {
+function testStaleMoveNearPressureObjectiveGetsReissued(): void {
   const { state } = seedParityState(['human', 'orc'], 1);
   seedOrcParityArmy(state);
-
   const ai = createAI('hard');
   ai.phase = 'assault';
   ai.homeReserveMin = 0;
+  ai.attackRetargetRadius = 0;
 
-  const units = combatUnits(state, 1);
-  units[0].cmd = null;
-  units[1].cmd = { type: 'move', goal: { x: units[1].pos.x, y: units[1].pos.y }, path: [], stepTick: 0, attackMove: false, lastPos: { ...units[1].pos }, lastProgressTick: 0, repathCount: 0, blockedAllyStreak: 0, blockedAllyTile: null };
-  units[2].cmd = { type: 'move', goal: { x: units[2].pos.x + 1, y: units[2].pos.y + 1 }, path: [{ x: units[2].pos.x + 1, y: units[2].pos.y + 1 }], stepTick: 0, attackMove: false, lastPos: { ...units[2].pos }, lastProgressTick: 0, repathCount: 3, blockedAllyStreak: 8, blockedAllyTile: null };
-
+  const unit = combatUnits(state, 1).find(u => u.kind === 'troll');
+  assert.ok(unit);
+  unit.pos = { x: 9, y: 47 };
+  unit.cmd = { type: 'move', goal: { x: 9, y: 48 }, path: [], stepTick: 0, attackMove: false, lastPos: { ...unit.pos }, lastProgressTick: 0, repathCount: 3, blockedAllyStreak: 8, blockedAllyTile: null };
   tickAI(state, ai, 1);
 
-  const commanded = units.filter(u => u.cmd && (u.cmd.type === 'move' || u.cmd.type === 'attack'));
-  assert.ok(commanded.length >= units.length - 1, 'stale/null assault commands should be replaced for nearly all assault units in parity state');
+  assert.ok(unit.cmd);
+  assert.equal(unit.cmd?.type, 'move');
+  assert.ok((unit.cmd?.path.length ?? 0) > 0 || (unit.cmd?.blockedAllyStreak ?? 0) < 8, 'stale move near objective should be refreshed, not kept in stale blocked state');
+}
+
+function testInvalidPressureObjectiveDoesNotPersistForever(): void {
+  const { state } = seedParityState(['human', 'orc'], 1);
+  seedOrcParityArmy(state);
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  ai.homeReserveMin = 0;
+  tickAI(state, ai, 1);
+
+  const targetId = ai.lastPressureObjective?.targetId;
+  assert.ok(targetId !== null && targetId !== undefined);
+  state.entities = state.entities.filter(e => e.id !== targetId);
+  state.tick += ai.reactionDelayTicks;
+  tickAI(state, ai, 1);
+
+  assert.notEqual(ai.lastPressureObjective?.targetId, targetId, 'dead/invalid pressure objective should be dropped or replaced on reevaluation');
 }
 
 function run(): void {
   testHumanParityChoosesContainAndMeaningfulCommands();
-  testOrcParityChoosesProbePressureAndMeaningfulCommands();
+  testOrcParityHarassmentStaysBounded();
+  testExposedWorkerPreferredOverSafeWorker();
   testRaceDivergenceOnSameParitySetup();
-  testNoCommandStarvationOnStaleParityCommands();
+  testStaleMoveNearPressureObjectiveGetsReissued();
+  testInvalidPressureObjectiveDoesNotPersistForever();
   console.log('ai initiative tests passed');
 }
 
