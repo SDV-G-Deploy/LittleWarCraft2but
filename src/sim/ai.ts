@@ -935,6 +935,7 @@ function choosePressureObjective(
   const enemyBarracks = state.entities.filter(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'barracks').sort((a, b) => a.id - b.id)[0];
   const frontParity = snapshot.nearbyFriendlyArmyAtFront - snapshot.nearbyEnemyArmyAtFront;
   const exposedWorker = chooseExposedWorkerTarget(state, owner, contestedMine, expansionMine);
+  const wantsHarass = ai.raceDoctrine.harassBias >= 0.18 && frontParity >= -1;
 
   let candidate: AIPressureObjective | null = null;
 
@@ -947,7 +948,7 @@ function choosePressureObjective(
         y: contestedMine.pos.y - 1,
       },
     };
-  } else if (ai.raceDoctrine.harassBias >= 0.18 && exposedWorker && frontParity >= -1) {
+  } else if (wantsHarass && exposedWorker) {
     candidate = {
       type: 'harassWorkers',
       targetId: exposedWorker.id,
@@ -962,6 +963,12 @@ function choosePressureObjective(
         y: contestedMine.pos.y - 1,
       },
     };
+  } else if (enemyTownHall && ai.strategicIntent === 'pressure') {
+    candidate = {
+      type: 'enemyApproach',
+      targetId: enemyTownHall.id,
+      anchor: { x: enemyTownHall.pos.x + 1, y: enemyTownHall.pos.y + 2 },
+    };
   } else if (ai.raceDoctrine.pressureBias >= 0.25 && enemyBarracks && frontParity >= -1) {
     candidate = {
       type: 'pressureProduction',
@@ -973,12 +980,6 @@ function choosePressureObjective(
       type: 'expansionMine',
       targetId: expansionMine.id,
       anchor: { x: expansionMine.pos.x, y: expansionMine.pos.y - 1 },
-    };
-  } else if (enemyTownHall && ai.strategicIntent === 'pressure') {
-    candidate = {
-      type: 'enemyApproach',
-      targetId: enemyTownHall.id,
-      anchor: { x: enemyTownHall.pos.x + 1, y: enemyTownHall.pos.y + 2 },
     };
   }
 
@@ -994,7 +995,14 @@ function isPressureObjectiveStillValid(state: GameState, owner: 0 | 1, objective
   const target = state.entities.find(e => e.id === objective.targetId);
   if (!target) return false;
 
-  if (objective.type === 'harassWorkers') return isOwnedByOpposingPlayer(target, owner) && (target.kind === 'worker' || target.kind === 'peon');
+  if (objective.type === 'harassWorkers') {
+    if (!isOwnedByOpposingPlayer(target, owner) || (target.kind !== 'worker' && target.kind !== 'peon')) return false;
+    const enemyTownHall = state.entities.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
+    if (!enemyTownHall) return false;
+    const exposure = scoreWorkerExposure(target, enemyTownHall);
+    const distToTownHall = Math.hypot(target.pos.x - enemyTownHall.pos.x, target.pos.y - enemyTownHall.pos.y);
+    return exposure >= WORKER_EXPOSURE_SCORE_THRESHOLD || distToTownHall > WORKER_DEEP_SAFE_TOWNHALL_RADIUS;
+  }
   if (objective.type === 'pressureProduction') return isOwnedByOpposingPlayer(target, owner) && target.kind === 'barracks';
   if (objective.type === 'enemyApproach') return isOwnedByOpposingPlayer(target, owner) && target.kind === 'townhall';
   if (objective.type === 'contestedMine' || objective.type === 'expansionMine' || objective.type === 'containFront') return target.kind === 'goldmine';
@@ -1079,24 +1087,50 @@ function chooseExposedWorkerTarget(
   expansionMine: Entity | null,
 ): Entity | null {
   const enemyTownHall = state.entities.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
-  const reference = contestedMine ?? expansionMine ?? enemyTownHall;
-  if (!enemyTownHall || !reference) return null;
+  if (!enemyTownHall) return null;
 
   let best: Entity | null = null;
   let bestScore = -Infinity;
   for (const worker of state.entities) {
     if (!isOwnedByOpposingPlayer(worker, owner) || (worker.kind !== 'worker' && worker.kind !== 'peon')) continue;
-
-    const distToTownHall = Math.hypot(worker.pos.x - enemyTownHall.pos.x, worker.pos.y - enemyTownHall.pos.y);
-    const distToReference = Math.hypot(worker.pos.x - reference.pos.x, worker.pos.y - reference.pos.y);
-    const nearRouteBonus = worker.cmd?.type === 'gather' ? 2 : 0;
-    const score = distToTownHall * 0.8 - distToReference * 0.45 + nearRouteBonus;
-    if (score > bestScore || (score === bestScore && best && worker.id < best.id)) {
+    const score = scoreWorkerExposure(worker, enemyTownHall, contestedMine, expansionMine);
+    if (score < WORKER_EXPOSURE_SCORE_THRESHOLD) continue;
+    if (score > bestScore || (score === bestScore && best !== null && worker.id < best.id)) {
       best = worker;
       bestScore = score;
     }
   }
   return best;
+}
+
+const WORKER_EXPOSURE_SCORE_THRESHOLD = 3.5;
+const WORKER_DEEP_SAFE_TOWNHALL_RADIUS = 4.5;
+
+function scoreWorkerExposure(
+  worker: Entity,
+  enemyTownHall: Entity,
+  contestedMine?: Entity | null,
+  expansionMine?: Entity | null,
+): number {
+  const reference = contestedMine ?? expansionMine ?? enemyTownHall;
+
+  const distToTownHall = Math.hypot(worker.pos.x - enemyTownHall.pos.x, worker.pos.y - enemyTownHall.pos.y);
+  const distToReference = Math.hypot(worker.pos.x - reference.pos.x, worker.pos.y - reference.pos.y);
+  const routeMid = { x: (enemyTownHall.pos.x + reference.pos.x) / 2, y: (enemyTownHall.pos.y + reference.pos.y) / 2 };
+  const distToRouteMid = Math.hypot(worker.pos.x - routeMid.x, worker.pos.y - routeMid.y);
+
+  let score = 0;
+  score += (distToTownHall - 5) * 1.15;
+  score += Math.max(0, 14 - distToReference) * 0.42;
+  score -= Math.max(0, distToRouteMid - 8) * 0.25;
+
+  if (distToTownHall <= WORKER_DEEP_SAFE_TOWNHALL_RADIUS) score -= 5;
+  if (worker.cmd?.type === 'gather') {
+    score += 0.45;
+    if (worker.cmd.phase === 'returning') score += 0.35;
+  }
+
+  return score;
 }
 
 function getArmyMixPlan(ai: AIController, totalArmy: number): ArmyMixPlan {

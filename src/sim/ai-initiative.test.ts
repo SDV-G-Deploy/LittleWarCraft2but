@@ -93,6 +93,28 @@ function testOrcParityHarassmentStaysBounded(): void {
   assert.ok(frontlineMoves.length >= 1, 'main orc force should keep a front pressure objective');
 }
 
+function testSafeWorkerNearTownHallIsNotHarassed(): void {
+  const { state } = seedParityState(['human', 'orc'], 1);
+  seedOrcParityArmy(state);
+  const enemyTownHall = state.entities.find(e => e.owner === 0 && e.kind === 'townhall');
+  assert.ok(enemyTownHall);
+  const workers = state.entities.filter(e => e.owner === 0 && e.kind === 'worker');
+  for (const worker of workers) {
+    worker.pos = { x: enemyTownHall.pos.x + 1, y: enemyTownHall.pos.y + 1 };
+    worker.cmd = { type: 'gather', targetId: 3, resourceType: 'gold', phase: 'toresource', waitTicks: 0 };
+  }
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  ai.homeReserveMin = 0;
+  tickAI(state, ai, 1);
+
+  assert.notEqual(ai.lastPressureObjective?.type, 'harassWorkers', 'safe worker near town hall should not trigger harassment objective');
+  const units = combatUnits(state, 1);
+  const activeMainFront = units.filter(u => u.cmd && (u.cmd.type === 'move' || u.cmd.type === 'attack'));
+  assert.ok(activeMainFront.length >= Math.max(1, units.length - 2), 'orc should still issue active non-harass front pressure commands');
+}
+
 function testExposedWorkerPreferredOverSafeWorker(): void {
   const { state } = seedParityState(['human', 'orc'], 1);
   seedOrcParityArmy(state);
@@ -111,6 +133,70 @@ function testExposedWorkerPreferredOverSafeWorker(): void {
 
   assert.equal(ai.lastPressureObjective?.type, 'harassWorkers');
   assert.equal(ai.lastPressureObjective?.targetId, exposedWorker.id, 'exposed worker should be preferred over safe worker near town hall');
+}
+
+function testStoredHarassObjectiveDropsWhenWorkerReturnsToSafety(): void {
+  const { state } = seedParityState(['human', 'orc'], 1);
+  seedOrcParityArmy(state);
+  const enemyTownHall = state.entities.find(e => e.owner === 0 && e.kind === 'townhall');
+  assert.ok(enemyTownHall);
+
+  const exposedWorker = state.entities.find(e => e.owner === 0 && e.kind === 'worker');
+  assert.ok(exposedWorker);
+  exposedWorker.pos = { x: 18, y: 45 };
+  exposedWorker.cmd = { type: 'gather', targetId: 3, resourceType: 'gold', phase: 'returning', waitTicks: 0 };
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  ai.homeReserveMin = 0;
+  tickAI(state, ai, 1);
+
+  assert.equal(ai.lastPressureObjective?.type, 'harassWorkers');
+  assert.equal(ai.lastPressureObjective?.targetId, exposedWorker.id);
+
+  exposedWorker.pos = { x: enemyTownHall.pos.x + 1, y: enemyTownHall.pos.y + 1 };
+  state.tick += ai.reactionDelayTicks;
+  tickAI(state, ai, 1);
+
+  assert.notEqual(ai.lastPressureObjective?.targetId, exposedWorker.id, 'harass objective should be dropped/pivoted when target returns to town hall safety');
+}
+
+function testOrcFallbackRemainsActiveWithoutExposedWorkers(): void {
+  const { state } = seedParityState(['human', 'orc'], 1);
+  seedOrcParityArmy(state);
+  const enemyTownHall = state.entities.find(e => e.owner === 0 && e.kind === 'townhall');
+  assert.ok(enemyTownHall);
+  const workers = state.entities.filter(e => e.owner === 0 && e.kind === 'worker');
+  for (const worker of workers) {
+    worker.pos = { x: enemyTownHall.pos.x + 1, y: enemyTownHall.pos.y + 1 };
+  }
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  ai.homeReserveMin = 0;
+  tickAI(state, ai, 1);
+
+  assert.notEqual(ai.lastPressureObjective?.type, 'harassWorkers');
+  const units = combatUnits(state, 1);
+  const mainForce = units.filter(u => u.kind !== 'troll').concat(units.filter(u => u.kind === 'troll').slice(0, 1));
+  const activeMainForce = mainForce.filter(u => u.cmd && (u.cmd.type === 'move' || u.cmd.type === 'attack'));
+  assert.ok(activeMainForce.length >= Math.max(1, mainForce.length - 2), 'main orc force should keep active front pressure, not idle');
+}
+
+function testHumanParityDoesNotChooseHarassWorkers(): void {
+  const { state } = seedParityState(['orc', 'human'], 1);
+  seedHumanParityArmy(state);
+  spawnEntity(state, 'peon', 0, { x: 18, y: 45 });
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  ai.homeReserveMin = 0;
+  tickAI(state, ai, 1);
+
+  assert.notEqual(ai.lastPressureObjective?.type, 'harassWorkers', 'human parity should remain positional instead of switching to worker harassment');
+  const units = combatUnits(state, 1);
+  const commanded = units.filter(u => u.cmd && (u.cmd.type === 'move' || u.cmd.type === 'attack'));
+  assert.ok(commanded.length >= Math.max(1, units.length - 1), 'human parity should still issue active positional pressure commands');
 }
 
 function testRaceDivergenceOnSameParitySetup(): void {
@@ -171,7 +257,11 @@ function testInvalidPressureObjectiveDoesNotPersistForever(): void {
 function run(): void {
   testHumanParityChoosesContainAndMeaningfulCommands();
   testOrcParityHarassmentStaysBounded();
+  testSafeWorkerNearTownHallIsNotHarassed();
   testExposedWorkerPreferredOverSafeWorker();
+  testStoredHarassObjectiveDropsWhenWorkerReturnsToSafety();
+  testOrcFallbackRemainsActiveWithoutExposedWorkers();
+  testHumanParityDoesNotChooseHarassWorkers();
   testRaceDivergenceOnSameParitySetup();
   testStaleMoveNearPressureObjectiveGetsReissued();
   testInvalidPressureObjectiveDoesNotPersistForever();

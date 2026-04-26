@@ -81,8 +81,11 @@ That means non-reserve assault units are more likely to receive:
 
 A narrow gameplay follow-up tightened the new pressure-objective behavior:
 - Orc `harassWorkers` pressure is now bounded so the whole army does not abandon the front.
-- Exposed workers are preferred over safe workers parked near the enemy Town Hall.
+- Harassment now requires a real exposed worker target via deterministic exposure scoring.
+- Safe workers parked near the enemy Town Hall are ignored.
 - Stale move commands near a pressure objective are reissued instead of being treated as already useful.
+- Stored `harassWorkers` objectives are dropped when the target retreats back into Town Hall safety.
+- If Orc harassment is invalid/unavailable, pressure falls back to active main-front objectives.
 - Stored pressure objectives are validated before being reused, so dead/missing targets are not retained indefinitely.
 
 ## Why this is intentionally not a full AI rewrite
