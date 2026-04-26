@@ -2,6 +2,11 @@
 
 Status: landed in code, awaiting field validation
 
+Note:
+- this status means the pass exists in code history
+- it does not by itself guarantee that the current HEAD is CI-green
+- verify current build/test state separately
+
 Related commit:
 - `6d56efa` — `ai: add conservative assault stale watchdogs and fallback move`
 

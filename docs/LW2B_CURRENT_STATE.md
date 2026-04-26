@@ -4,7 +4,9 @@ Short entrypoint for "where we are now" without re-reading all historical passes
 
 ## One-line state
 
-Core gameplay/movement recovery is stabilized, build is green, and online topology is currently split in practice: `w2.kislota.today` is the public frontend while realtime infra is being treated as a separately movable backend contour (currently `rts.kislota.today` in active diagnostics).
+Core gameplay/movement recovery is stabilized, and online topology is currently split in practice: `w2.kislota.today` is the public frontend while realtime infra is being treated as a separately movable backend contour (currently `rts.kislota.today` in active diagnostics).
+
+CI/build truth should be treated as external runtime state, not as something guaranteed by this document.
 
 ## What is currently true
 
@@ -12,6 +14,7 @@ Core gameplay/movement recovery is stabilized, build is green, and online topolo
 - AI goal spread and worker return-retarget fixes are landed.
 - MultiWebCore transport path has an end-to-end validation pass.
 - Effective production reality is transitional split-topology: frontend reachability and realtime reachability are tracked separately.
+- Docs describe intended/current known project shape, but current CI truth must be checked in GitHub Actions or local build/test runs.
 
 ## Public online topology decision note (2026-04-25)
 
@@ -37,7 +40,7 @@ Recommended safest path now:
 
 ## Latest gameplay/AI pass
 
-- Conservative AI assault watchdog + fallback move pass landed in `6d56efa`.
+- Conservative AI assault watchdog + fallback move pass landed in code at `6d56efa`.
 - Scope: stale assault command reevaluation, fallback movement, safer regroup reissue behavior.
 - Reference: `docs/LW2B_AI_ASSAULT_WATCHDOG_PASS_2026-04-26.md`
 

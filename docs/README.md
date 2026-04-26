@@ -10,6 +10,11 @@ This index keeps the docs set usable after many passes.
 - `LW2B_GAMEPLAY_DOCTRINE_AND_CROSS_LAYER_INVARIANTS.md` (cross-layer gameplay guardrails)
 - `LW2B_MOVEMENT_DOCTRINE_2026-04-23.md` (active movement doctrine)
 
+Important reading rule:
+- docs are narrative/project context, not a guarantee that the current HEAD still builds
+- CI truth lives in GitHub Actions and local verification (`npm run build`, relevant tests)
+- when docs mention a pass as landed, read that as "landed in code/doc history", not automatically "current branch is green"
+
 ## Canonical reading path
 1. `LW2B_CURRENT_STATE.md`
 2. `../README.md`
