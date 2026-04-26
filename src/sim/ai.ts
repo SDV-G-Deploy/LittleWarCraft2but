@@ -381,8 +381,9 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
 
   resumeOwnedConstruction(state, owner, myWorkers, defenseThreat);
 
+  const econCollapse = evaluateEconCollapse(state, owner, race, myTH, myWorkers, mySoldiers);
   const woodDemand = estimateWoodDemand(state, ai, owner, myBarracks, myLumberMill, farmCount, towerCount, mySoldiers.length);
-  keepGathering(state, myWorkers, woodDemand);
+  keepGathering(state, myWorkers, woodDemand, econCollapse.econCollapsed);
 
   switch (ai.phase) {
     case 'economy': {
@@ -457,14 +458,14 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
         }
       }
       const towerCost = getResolvedCost('tower', race);
-      if (!buildingTower && towerCount < ai.maxTowers && myBarracks && myLumberMill && mySoldiers.length >= ai.towerMinArmy && state.gold[owner] >= towerCost.gold && state.wood[owner] >= towerCost.wood) {
+      if (!econCollapse.econCollapsed && !buildingTower && towerCount < ai.maxTowers && myBarracks && myLumberMill && mySoldiers.length >= ai.towerMinArmy && state.gold[owner] >= towerCost.gold && state.wood[owner] >= towerCost.wood) {
         const w = freeWorker(myWorkers);
         if (w) {
           const pos = findTowerBuildSpot(state, myTH, owner);
           if (pos) issueBuildCommand(state, w, 'tower', pos, state.tick);
         }
       }
-      if (mySoldiers.length >= ai.attackWaveSize) {
+      if (mySoldiers.length >= ai.attackWaveSize || (econCollapse.lastArmyMode && !defenseThreat.severe)) {
         ai.phase = 'assault';
       }
       break;
@@ -601,7 +602,7 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
         if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
       }
 
-      if (mySoldiers.length <= ai.fallbackWaveThreshold || ai.assaultPosture === 'regroup') {
+      if ((mySoldiers.length <= ai.fallbackWaveThreshold && !econCollapse.lastArmyMode) || ai.assaultPosture === 'regroup') {
         ai.lastFailedPushTick = state.tick;
         const growth = ai.difficulty === 'easy' ? 1 : 2;
         const maxWave = ai.difficulty === 'hard' ? 11 : 12;
@@ -1209,9 +1210,9 @@ function pickNextUpgrade(state: GameState, ai: AIController, owner: 0 | 1): Lumb
   return null;
 }
 
-function keepGathering(state: GameState, workers: Entity[], desiredWoodWorkers: number): void {
-  const activeWoodWorkers = workers.filter(w => w.cmd?.type === 'gather' && w.cmd.resourceType === 'wood').length;
-  let woodAssignmentsNeeded = Math.max(0, Math.min(desiredWoodWorkers, workers.length) - activeWoodWorkers);
+function keepGathering(state: GameState, workers: Entity[], desiredWoodWorkers: number, forceGoldOnly = false): void {
+  const activeWoodWorkers = forceGoldOnly ? 0 : workers.filter(w => w.cmd?.type === 'gather' && w.cmd.resourceType === 'wood').length;
+  let woodAssignmentsNeeded = forceGoldOnly ? 0 : Math.max(0, Math.min(desiredWoodWorkers, workers.length) - activeWoodWorkers);
 
   for (const w of workers) {
     if (w.cmd && w.cmd.type !== 'gather') continue;
@@ -1219,8 +1220,13 @@ function keepGathering(state: GameState, workers: Entity[], desiredWoodWorkers: 
       const gatherCmd = w.cmd;
       if (gatherCmd.resourceType === 'gold') {
         const mine = state.entities.find(e => e.id === gatherCmd.targetId);
-        if (mine && (mine.goldReserve ?? 0) > 0 && woodAssignmentsNeeded <= 0) continue;
+        if (mine && (mine.goldReserve ?? 0) > 0 && (woodAssignmentsNeeded <= 0 || forceGoldOnly)) continue;
       } else {
+        if (forceGoldOnly) {
+          const mine = nearestMine(state, w);
+          if (mine) issueGatherCommand(state, w, mine.id, state.tick);
+          continue;
+        }
         const tx = gatherCmd.targetId % MAP_W;
         const ty = Math.floor(gatherCmd.targetId / MAP_W);
         const tile = state.tiles[ty]?.[tx];
@@ -1323,6 +1329,40 @@ type DefenseThreatInfo = {
   targets: Entity[];
   defendPoint: Vec2;
 };
+
+type EconCollapseState = {
+  econCollapsed: boolean;
+  lastArmyMode: boolean;
+};
+
+function evaluateEconCollapse(
+  state: GameState,
+  owner: 0 | 1,
+  race: Race,
+  myTownHall: Entity,
+  myWorkers: Entity[],
+  mySoldiers: Entity[],
+): EconCollapseState {
+  if (!myTownHall) return { econCollapsed: false, lastArmyMode: false };
+
+  const workerCount = myWorkers.length;
+  const armyCount = mySoldiers.length;
+  const gold = state.gold[owner];
+  const goldWorkers = myWorkers.filter(w => w.cmd?.type === 'gather' && w.cmd.resourceType === 'gold').length;
+  const workerCost = getResolvedCost(RACES[race].worker, race).gold;
+  const soldierCost = getResolvedCost(RACES[race].soldier, race).gold;
+
+  const recovered = workerCount >= 2 || (goldWorkers > 0 && gold >= workerCost);
+  const econCollapsed = !recovered && (
+    (workerCount === 0 && gold < workerCost)
+    || (workerCount <= 1 && goldWorkers === 0 && gold < soldierCost && armyCount <= 2)
+  );
+
+  return {
+    econCollapsed,
+    lastArmyMode: econCollapsed && armyCount >= 2,
+  };
+}
 
 function assessBaseThreat(state: GameState, ai: AIController, owner: 0 | 1, myTownHall: Entity, myWorkers: Entity[]): DefenseThreatInfo {
   const recentWindowStart = state.tick - ai.defenseRecallWindowTicks;
