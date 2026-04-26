@@ -113,6 +113,14 @@ export interface AIRaceDoctrine {
   rangedBias: number;
   heavyBias: number;
   frontlineBias: number;
+  probeBias: number;
+  guardBias: number;
+  containBias: number;
+  harassBias: number;
+  commitBias: number;
+  parityPressureBias: number;
+  rangedPreservationBias: number;
+  objectivePivotPatienceTicks: number;
 }
 
 export interface AIDifficultyPersonality {
@@ -158,6 +166,14 @@ const AI_RACE_DOCTRINES: Record<Race, AIRaceDoctrine> = {
     rangedBias: 0.08,
     heavyBias: -0.03,
     frontlineBias: 0.18,
+    probeBias: -0.08,
+    guardBias: 0.28,
+    containBias: 0.24,
+    harassBias: -0.1,
+    commitBias: -0.08,
+    parityPressureBias: 0.06,
+    rangedPreservationBias: 0.24,
+    objectivePivotPatienceTicks: Math.round(SIM_HZ * 12),
   },
   orc: {
     reserveBias: 0.12,
@@ -167,6 +183,14 @@ const AI_RACE_DOCTRINES: Record<Race, AIRaceDoctrine> = {
     rangedBias: -0.05,
     heavyBias: 0.08,
     frontlineBias: -0.08,
+    probeBias: 0.22,
+    guardBias: -0.04,
+    containBias: -0.08,
+    harassBias: 0.26,
+    commitBias: 0.18,
+    parityPressureBias: 0.22,
+    rangedPreservationBias: -0.04,
+    objectivePivotPatienceTicks: Math.round(SIM_HZ * 8),
   },
 };
 
@@ -190,6 +214,14 @@ const AI_DIFFICULTY_PERSONALITIES: Record<AIDifficulty, AIDifficultyPersonality>
     reserveDiscipline: 0.44,
   },
 };
+
+export type AIPressureObjectiveType = 'homeGuard' | 'contestedMine' | 'expansionMine' | 'containFront' | 'enemyApproach' | 'harassWorkers' | 'pressureProduction';
+
+export interface AIPressureObjective {
+  type: AIPressureObjectiveType;
+  targetId: number | null;
+  anchor: Vec2;
+}
 
 export interface AIController {
   phase: 'economy' | 'military' | 'assault';
@@ -226,6 +258,9 @@ export interface AIController {
   lastBaseThreatTick: number;
   lastFailedPushTick: number;
   lastWonLocalTradeTick: number;
+  lastPressureObjective: AIPressureObjective | null;
+  lastPressureObjectiveTick: number;
+  lastObjectivePivotTick: number;
 }
 
 type ArmyMixPlan = {
@@ -286,6 +321,9 @@ function createAIBase(difficulty: AIDifficulty): AIController {
     lastBaseThreatTick: -Infinity,
     lastFailedPushTick: -Infinity,
     lastWonLocalTradeTick: -Infinity,
+    lastPressureObjective: null,
+    lastPressureObjectiveTick: -Infinity,
+    lastObjectivePivotTick: -Infinity,
   };
 }
 
@@ -333,6 +371,7 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
   updateStrategicIntent(state, ai, snapshot);
   updateAssaultPosture(state, ai, snapshot);
   ai.mineIntent = chooseMineIntent(state, ai, owner, snapshot, { contestedMine, expansionMine });
+  const pressureObjective = choosePressureObjective(state, ai, owner, myTH, snapshot, contestedMine, expansionMine);
 
   if (defenseThreat.active) {
     ai.lastBaseThreatTick = state.tick;
@@ -494,6 +533,8 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
               if (!moveGoalNear(s, target.x, target.y)) issuedUseful = issueSpreadMoveCommand(state, s, tx, ty);
             } else if (applyMineIntentMovement(state, s, ai, ai.mineIntent, contestedMine, expansionMine, opposingPlayerTH)) {
               issuedUseful = true;
+            } else if (applyPressureObjectiveMovement(state, s, ai, pressureObjective, role)) {
+              issuedUseful = true;
             } else if (role === 'frontlineShock' && opposingPlayerTH && (ai.assaultPosture === 'commit' || ai.strategicIntent === 'pressure')) {
               const tx = opposingPlayerTH.pos.x + 1;
               const ty = opposingPlayerTH.pos.y + 2;
@@ -528,16 +569,22 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
           }
 
           if (!issuedUseful && myTH) {
-            const fallbackX = armyRolePlan.frontlineAnchor?.x
+            const fallbackX = pressureObjective?.anchor.x
+              ?? armyRolePlan.frontlineAnchor?.x
               ?? contestedMine?.pos.x
               ?? opposingPlayerTH?.pos.x
               ?? myTH.pos.x + 1;
-            const fallbackY = armyRolePlan.frontlineAnchor?.y
+            const fallbackY = pressureObjective?.anchor.y
+              ?? armyRolePlan.frontlineAnchor?.y
               ?? (contestedMine ? contestedMine.pos.y - 1 : undefined)
               ?? (opposingPlayerTH ? opposingPlayerTH.pos.y + 2 : undefined)
               ?? myTH.pos.y + myTH.tileH;
             const fallbackTarget = preferredSpreadGoal(state, s, fallbackX, fallbackY);
-            if (!moveGoalNear(s, fallbackTarget.x, fallbackTarget.y)) {
+            if (moveGoalNear(s, fallbackTarget.x, fallbackTarget.y)) {
+              const nudgedX = Math.max(0, Math.min(MAP_W - 1, fallbackX + (role === 'rangedFollow' ? -1 : 1)));
+              const nudgedY = Math.max(0, Math.min(MAP_H - 1, fallbackY + (role === 'rangedFollow' ? -1 : 0)));
+              issueSpreadMoveCommand(state, s, nudgedX, nudgedY);
+            } else {
               issueSpreadMoveCommand(state, s, fallbackX, fallbackY);
             }
           }
@@ -735,19 +782,28 @@ function updateAssaultPosture(state: GameState, ai: AIController, snapshot: AISn
     ai.assaultPosture = 'regroup';
     return;
   }
-  if (ai.strategicIntent === 'contain' || snapshot.recentWonLocalTrade) {
+
+  const frontParity = snapshot.nearbyFriendlyArmyAtFront - snapshot.nearbyEnemyArmyAtFront;
+  const parityPressure = ai.raceDoctrine.parityPressureBias + ai.difficultyPersonality.opportunism - ai.difficultyPersonality.caution * 0.35;
+
+  if (ai.strategicIntent === 'contain' || snapshot.recentWonLocalTrade || ai.raceDoctrine.containBias >= 0.18 && frontParity >= 0) {
     ai.assaultPosture = 'contain';
     return;
   }
   if (ai.strategicIntent === 'pressure' && snapshot.nearbyFriendlyArmyAtFront >= snapshot.nearbyEnemyArmyAtFront) {
-    ai.assaultPosture = snapshot.nearbyFriendlyArmyAtFront >= snapshot.nearbyEnemyArmyAtFront + 2 ? 'commit' : 'probe';
+    const canCommit = snapshot.nearbyFriendlyArmyAtFront >= snapshot.nearbyEnemyArmyAtFront + 2 || (frontParity >= 1 && ai.raceDoctrine.commitBias >= 0.15);
+    ai.assaultPosture = canCommit ? 'commit' : 'probe';
+    return;
+  }
+  if (ai.strategicIntent === 'pressure' && frontParity >= -1 && parityPressure >= 0.25) {
+    ai.assaultPosture = ai.raceDoctrine.probeBias >= 0.15 ? 'probe' : 'contain';
     return;
   }
   if (ai.strategicIntent === 'contest') {
-    ai.assaultPosture = 'contest';
+    ai.assaultPosture = frontParity >= 0 && ai.raceDoctrine.guardBias >= 0.2 ? 'contain' : 'contest';
     return;
   }
-  ai.assaultPosture = 'probe';
+  ai.assaultPosture = ai.raceDoctrine.probeBias > 0.1 ? 'probe' : 'contest';
 }
 
 function chooseMineIntent(
@@ -859,6 +915,129 @@ function applyMineIntentMovement(
   }
 
   return false;
+}
+
+function choosePressureObjective(
+  state: GameState,
+  ai: AIController,
+  owner: 0 | 1,
+  myTownHall: Entity,
+  snapshot: AISnapshot,
+  contestedMine: Entity | null,
+  expansionMine: Entity | null,
+): AIPressureObjective | null {
+  if (ai.assaultPosture === 'regroup') {
+    return rememberPressureObjective(state, ai, { type: 'homeGuard', targetId: myTownHall.id, anchor: { x: myTownHall.pos.x + 1, y: myTownHall.pos.y + myTownHall.tileH } }, true);
+  }
+
+  const enemyTownHall = state.entities.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
+  const enemyBarracks = state.entities.filter(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'barracks').sort((a, b) => a.id - b.id)[0];
+  const enemyWorkers = state.entities.filter(e => isOwnedByOpposingPlayer(e, owner) && (e.kind === 'worker' || e.kind === 'peon')).sort((a, b) => a.id - b.id);
+  const frontParity = snapshot.nearbyFriendlyArmyAtFront - snapshot.nearbyEnemyArmyAtFront;
+
+  let candidate: AIPressureObjective | null = null;
+
+  if (ai.raceDoctrine.guardBias >= 0.2 && contestedMine && snapshot.contestedMineFavorable && frontParity >= -1) {
+    candidate = {
+      type: ai.assaultPosture === 'contain' ? 'containFront' : 'contestedMine',
+      targetId: contestedMine.id,
+      anchor: {
+        x: enemyTownHall ? Math.floor((contestedMine.pos.x + enemyTownHall.pos.x) / 2) : contestedMine.pos.x,
+        y: contestedMine.pos.y - 1,
+      },
+    };
+  } else if (ai.raceDoctrine.harassBias >= 0.18 && enemyWorkers.length > 0 && frontParity >= -1) {
+    const worker = enemyWorkers[0];
+    candidate = {
+      type: 'harassWorkers',
+      targetId: worker.id,
+      anchor: { x: worker.pos.x, y: Math.max(0, worker.pos.y - 1) },
+    };
+  } else if (ai.assaultPosture === 'contain' && contestedMine) {
+    candidate = {
+      type: 'containFront',
+      targetId: contestedMine.id,
+      anchor: {
+        x: enemyTownHall ? Math.floor((contestedMine.pos.x + enemyTownHall.pos.x) / 2) : contestedMine.pos.x,
+        y: contestedMine.pos.y - 1,
+      },
+    };
+  } else if (ai.raceDoctrine.pressureBias >= 0.25 && enemyBarracks && frontParity >= -1) {
+    candidate = {
+      type: 'pressureProduction',
+      targetId: enemyBarracks.id,
+      anchor: { x: enemyBarracks.pos.x, y: enemyBarracks.pos.y + enemyBarracks.tileH },
+    };
+  } else if (expansionMine && snapshot.safeExpansionExists && ai.economicPosture === 'greed') {
+    candidate = {
+      type: 'expansionMine',
+      targetId: expansionMine.id,
+      anchor: { x: expansionMine.pos.x, y: expansionMine.pos.y - 1 },
+    };
+  } else if (enemyTownHall && ai.strategicIntent === 'pressure') {
+    candidate = {
+      type: 'enemyApproach',
+      targetId: enemyTownHall.id,
+      anchor: { x: enemyTownHall.pos.x + 1, y: enemyTownHall.pos.y + 2 },
+    };
+  }
+
+  return rememberPressureObjective(state, ai, candidate, false);
+}
+
+function rememberPressureObjective(
+  state: GameState,
+  ai: AIController,
+  candidate: AIPressureObjective | null,
+  forcePivot: boolean,
+): AIPressureObjective | null {
+  if (!candidate) return null;
+
+  const previous = ai.lastPressureObjective;
+  const sameObjective = !!previous && previous.type === candidate.type && previous.targetId === candidate.targetId
+    && previous.anchor.x === candidate.anchor.x && previous.anchor.y === candidate.anchor.y;
+
+  if (sameObjective) {
+    ai.lastPressureObjectiveTick = state.tick;
+    return previous;
+  }
+
+  const patience = ai.raceDoctrine.objectivePivotPatienceTicks;
+  const canPivot = forcePivot || ai.lastObjectivePivotTick === -Infinity || state.tick - ai.lastObjectivePivotTick >= patience;
+  if (!canPivot && previous) return previous;
+
+  ai.lastPressureObjective = candidate;
+  ai.lastPressureObjectiveTick = state.tick;
+  ai.lastObjectivePivotTick = state.tick;
+  return candidate;
+}
+
+function applyPressureObjectiveMovement(
+  state: GameState,
+  unit: Entity,
+  ai: AIController,
+  pressureObjective: AIPressureObjective | null,
+  role: ArmyRole,
+): boolean {
+  if (!pressureObjective) return false;
+
+  let tx = pressureObjective.anchor.x;
+  let ty = pressureObjective.anchor.y;
+
+  if (pressureObjective.type === 'harassWorkers') {
+    if (role === 'rangedFollow' && ai.raceDoctrine.rangedPreservationBias >= 0.2) {
+      tx = Math.max(0, tx - 2);
+      ty = Math.max(0, ty - 1);
+    }
+  } else if (pressureObjective.type === 'containFront' && ai.raceDoctrine.guardBias >= 0.2) {
+    if (role === 'rangedFollow') ty = Math.max(0, ty - 1);
+  } else if (pressureObjective.type === 'pressureProduction' && role === 'rangedFollow' && ai.raceDoctrine.rangedPreservationBias >= 0.2) {
+    tx = Math.max(0, tx - 1);
+  }
+
+  const target = preferredSpreadGoal(state, unit, tx, ty);
+  if (moveGoalNear(unit, target.x, target.y)) return true;
+  return issueSpreadMoveCommand(state, unit, tx, ty);
 }
 
 function getArmyMixPlan(ai: AIController, totalArmy: number): ArmyMixPlan {
