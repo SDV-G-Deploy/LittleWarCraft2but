@@ -22,6 +22,14 @@ Important reading rule:
 4. `../NETWORK_ARCHITECTURE.md`
 5. doctrine docs and then active pass docs
 
+## Agent guardrail for implementation passes
+When working as a coding agent or `codex_alt` on LW2B:
+- never treat doc wording like "build green", "landed", or "current state" as proof that HEAD is healthy
+- before or immediately after a code-changing pass, verify with `npm run build`
+- if command/state types changed, also run the most relevant targeted tests, and prefer `npm test` before pushing when the surface is wider
+- if a docs-only commit describes a recent code pass, do not assume that commit preserved CI; check actual build/test truth separately
+- prefer narrow code claims in docs: "landed in code at commit X" over branch-wide health claims
+
 ## Active implementation/design docs
 - `LW2B_CHANGELOG_2026-04-24_MOVEMENT_RECOVERY.md`
 - `LW2B_COMBAT_STABILIZATION_PASS_2026-04-24.md`
