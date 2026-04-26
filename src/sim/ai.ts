@@ -1,5 +1,5 @@
 import type { AIDifficulty, Entity, EntityKind, GameState, LumberUpgradeKind, Race, Vec2 } from '../types';
-import { MAP_H, MAP_W, SIM_HZ, isOwnedByOpposingPlayer, isUnitKind } from '../types';
+import { MAP_H, MAP_W, SIM_HZ, canAttack, isOwnedByOpposingPlayer, isUnitKind } from '../types';
 import { RACES } from '../data/races';
 import { RACE_BALANCE_PROFILES } from '../balance/races';
 import { getResolvedCost, getResolvedTileSize } from '../balance/resolver';
@@ -15,6 +15,39 @@ import { issueMoveCommand } from './commands';
 function moveGoalNear(entity: Entity, tx: number, ty: number): boolean {
   return entity.cmd?.type === 'move' &&
     Math.max(Math.abs(entity.cmd.goal.x - tx), Math.abs(entity.cmd.goal.y - ty)) <= 1;
+}
+
+const AI_ATTACK_STALE_TICKS = SIM_HZ * 6;
+const AI_ATTACK_STALE_DISTANCE_BIAS = 6;
+const AI_MOVE_STALE_BLOCKED_STREAK = 8;
+
+function isAttackCommandStale(state: GameState, entity: Entity, owner: 0 | 1, attackRetargetRadius: number): boolean {
+  if (!entity.cmd || entity.cmd.type !== 'attack') return false;
+  const cmd = entity.cmd;
+  const target = state.entities.find(e => e.id === cmd.targetId);
+  if (!target) return true;
+  if (target.kind === 'goldmine' || target.kind === 'barrier') return true;
+  if (!canAttack(entity.owner, target.owner)) return true;
+
+  const distance = Math.hypot(entity.pos.x - target.pos.x, entity.pos.y - target.pos.y);
+  const staleDistance = Math.max(attackRetargetRadius + AI_ATTACK_STALE_DISTANCE_BIAS, 8);
+  if (distance <= staleDistance) return false;
+
+  return state.tick - cmd.chasePathTick >= AI_ATTACK_STALE_TICKS;
+}
+
+function isMoveCommandStale(entity: Entity): boolean {
+  if (!entity.cmd || entity.cmd.type !== 'move') return false;
+  const cmd = entity.cmd;
+  if (cmd.path.length === 0) return true;
+  return cmd.repathCount >= 3 && cmd.blockedAllyStreak >= AI_MOVE_STALE_BLOCKED_STREAK;
+}
+
+function commandNeedsAssaultReevaluation(state: GameState, entity: Entity, owner: 0 | 1, attackRetargetRadius: number): boolean {
+  if (!entity.cmd) return true;
+  if (entity.cmd.type === 'move') return isMoveCommandStale(entity);
+  if (entity.cmd.type === 'attack') return isAttackCommandStale(state, entity, owner, attackRetargetRadius);
+  return false;
 }
 
 function buildLocalRingOffsets(maxRadius: number): Vec2[] {
@@ -406,7 +439,8 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
 
       if (ai.assaultPosture === 'regroup' && myTH) {
         for (const { unit: s, role } of assaultAssignments) {
-          if (s.cmd && s.cmd.type !== 'move') continue;
+          if (!commandNeedsAssaultReevaluation(state, s, owner, ai.attackRetargetRadius)) continue;
+          const staleMove = isMoveCommandStale(s);
           const tx = role === 'rangedFollow' && armyRolePlan.frontlineAnchor
             ? Math.floor((armyRolePlan.frontlineAnchor.x + myTH.pos.x + 1) / 2)
             : Math.floor((s.pos.x + myTH.pos.x + 1) / 2);
@@ -414,81 +448,98 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
             ? Math.floor((armyRolePlan.frontlineAnchor.y + myTH.pos.y + myTH.tileH) / 2)
             : Math.floor((s.pos.y + myTH.pos.y + myTH.tileH) / 2);
           const target = preferredSpreadGoal(state, s, tx, ty);
-          if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
+          if (staleMove || !moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
         }
       } else {
         for (const { unit: s, role } of assaultAssignments) {
-          if (s.cmd && s.cmd.type !== 'move') continue;
+          if (!commandNeedsAssaultReevaluation(state, s, owner, ai.attackRetargetRadius)) continue;
+
+          let issuedUseful = false;
 
           if (armyRolePlan.harassmentUnitIds.has(s.id) && armyRolePlan.harassmentAnchor) {
             const nearestHarass = chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius + 1, 'harassment');
             if (nearestHarass) {
               issueAttackCommand(s, nearestHarass.id, state.tick, state);
-              continue;
+              issuedUseful = true;
+            } else {
+              const tx = armyRolePlan.harassmentAnchor.x;
+              const ty = armyRolePlan.harassmentAnchor.y;
+              const target = preferredSpreadGoal(state, s, tx, ty);
+              if (!moveGoalNear(s, target.x, target.y)) issuedUseful = issueSpreadMoveCommand(state, s, tx, ty);
             }
+          } else {
+            const nearest = finishOff
+              ? nearestEnemyStructure(state, s, owner, ai.attackRetargetRadius + 10)
+              : role === 'rangedFollow'
+                ? chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius, 'rangedFollow')
+                : ai.difficulty === 'easy'
+                  ? nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius)
+                  : chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius + (role === 'frontlineShock' ? 1 : 0), 'frontline');
 
-            const tx = armyRolePlan.harassmentAnchor.x;
-            const ty = armyRolePlan.harassmentAnchor.y;
-            const target = preferredSpreadGoal(state, s, tx, ty);
-            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
-            continue;
+            if (nearest) {
+              issueAttackCommand(s, nearest.id, state.tick, state);
+              issuedUseful = true;
+              if (snapshot.nearbyFriendlyArmyAtFront >= snapshot.nearbyEnemyArmyAtFront + 2) {
+                ai.lastWonLocalTradeTick = state.tick;
+              }
+            } else if (finishOff && opposingPlayerTH) {
+              const tx = opposingPlayerTH.pos.x + 1;
+              const ty = opposingPlayerTH.pos.y + 2;
+              const target = preferredSpreadGoal(state, s, tx, ty);
+              if (!moveGoalNear(s, target.x, target.y)) issuedUseful = issueSpreadMoveCommand(state, s, tx, ty);
+            } else if (role === 'rangedFollow' && armyRolePlan.frontlineAnchor) {
+              const tx = armyRolePlan.frontlineAnchor.x;
+              const ty = armyRolePlan.frontlineAnchor.y;
+              const target = preferredSpreadGoal(state, s, tx, ty);
+              if (!moveGoalNear(s, target.x, target.y)) issuedUseful = issueSpreadMoveCommand(state, s, tx, ty);
+            } else if (applyMineIntentMovement(state, s, ai, ai.mineIntent, contestedMine, expansionMine, opposingPlayerTH)) {
+              issuedUseful = true;
+            } else if (role === 'frontlineShock' && opposingPlayerTH && (ai.assaultPosture === 'commit' || ai.strategicIntent === 'pressure')) {
+              const tx = opposingPlayerTH.pos.x + 1;
+              const ty = opposingPlayerTH.pos.y + 2;
+              const target = preferredSpreadGoal(state, s, tx, ty);
+              if (!moveGoalNear(s, target.x, target.y)) issuedUseful = issueSpreadMoveCommand(state, s, tx, ty);
+            } else if ((ai.assaultPosture === 'contest' || ai.strategicIntent === 'contest') && contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > ai.attackRetargetRadius) {
+              const tx = contestedMine.pos.x;
+              const ty = contestedMine.pos.y - 1;
+              const target = preferredSpreadGoal(state, s, tx, ty);
+              if (!moveGoalNear(s, target.x, target.y)) issuedUseful = issueSpreadMoveCommand(state, s, tx, ty);
+            } else if (ai.assaultPosture === 'contain' && contestedMine) {
+              const tx = Math.floor((contestedMine.pos.x + (opposingPlayerTH?.pos.x ?? contestedMine.pos.x)) / 2);
+              const ty = contestedMine.pos.y - 1;
+              const target = preferredSpreadGoal(state, s, tx, ty);
+              if (!moveGoalNear(s, target.x, target.y)) issuedUseful = issueSpreadMoveCommand(state, s, tx, ty);
+            } else if (expansionMine && mySoldiers.length >= ai.expansionMineMinArmy && ai.strategicIntent !== 'fortify') {
+              const tx = expansionMine.pos.x;
+              const ty = expansionMine.pos.y - 1;
+              const target = preferredSpreadGoal(state, s, tx, ty);
+              if (!moveGoalNear(s, target.x, target.y)) issuedUseful = issueSpreadMoveCommand(state, s, tx, ty);
+            } else if (opposingPlayerTH && ai.difficulty !== 'easy' && (ai.assaultPosture === 'commit' || ai.strategicIntent === 'pressure')) {
+              const tx = opposingPlayerTH.pos.x + 1;
+              const ty = opposingPlayerTH.pos.y + 2;
+              const target = preferredSpreadGoal(state, s, tx, ty);
+              if (!moveGoalNear(s, target.x, target.y)) issuedUseful = issueSpreadMoveCommand(state, s, tx, ty);
+            } else if (contestedMine && ai.assaultRetargetMine) {
+              const tx = contestedMine.pos.x;
+              const ty = contestedMine.pos.y - 1;
+              const target = preferredSpreadGoal(state, s, tx, ty);
+              if (!moveGoalNear(s, target.x, target.y)) issuedUseful = issueSpreadMoveCommand(state, s, tx, ty);
+            }
           }
 
-          const nearest = finishOff
-            ? nearestEnemyStructure(state, s, owner, ai.attackRetargetRadius + 10)
-            : role === 'rangedFollow'
-              ? chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius, 'rangedFollow')
-              : ai.difficulty === 'easy'
-                ? nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius)
-                : chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius + (role === 'frontlineShock' ? 1 : 0), 'frontline');
-
-          if (nearest) {
-            issueAttackCommand(s, nearest.id, state.tick, state);
-            if (snapshot.nearbyFriendlyArmyAtFront >= snapshot.nearbyEnemyArmyAtFront + 2) {
-              ai.lastWonLocalTradeTick = state.tick;
+          if (!issuedUseful && myTH) {
+            const fallbackX = armyRolePlan.frontlineAnchor?.x
+              ?? contestedMine?.pos.x
+              ?? opposingPlayerTH?.pos.x
+              ?? myTH.pos.x + 1;
+            const fallbackY = armyRolePlan.frontlineAnchor?.y
+              ?? (contestedMine ? contestedMine.pos.y - 1 : undefined)
+              ?? (opposingPlayerTH ? opposingPlayerTH.pos.y + 2 : undefined)
+              ?? myTH.pos.y + myTH.tileH;
+            const fallbackTarget = preferredSpreadGoal(state, s, fallbackX, fallbackY);
+            if (!moveGoalNear(s, fallbackTarget.x, fallbackTarget.y)) {
+              issueSpreadMoveCommand(state, s, fallbackX, fallbackY);
             }
-          } else if (finishOff && opposingPlayerTH) {
-            const tx = opposingPlayerTH.pos.x + 1;
-            const ty = opposingPlayerTH.pos.y + 2;
-            const target = preferredSpreadGoal(state, s, tx, ty);
-            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
-          } else if (role === 'rangedFollow' && armyRolePlan.frontlineAnchor) {
-            const tx = armyRolePlan.frontlineAnchor.x;
-            const ty = armyRolePlan.frontlineAnchor.y;
-            const target = preferredSpreadGoal(state, s, tx, ty);
-            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
-          } else if (applyMineIntentMovement(state, s, ai, ai.mineIntent, contestedMine, expansionMine, opposingPlayerTH)) {
-            continue;
-          } else if (role === 'frontlineShock' && opposingPlayerTH && (ai.assaultPosture === 'commit' || ai.strategicIntent === 'pressure')) {
-            const tx = opposingPlayerTH.pos.x + 1;
-            const ty = opposingPlayerTH.pos.y + 2;
-            const target = preferredSpreadGoal(state, s, tx, ty);
-            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
-          } else if ((ai.assaultPosture === 'contest' || ai.strategicIntent === 'contest') && contestedMine && Math.hypot(s.pos.x - contestedMine.pos.x, s.pos.y - contestedMine.pos.y) > ai.attackRetargetRadius) {
-            const tx = contestedMine.pos.x;
-            const ty = contestedMine.pos.y - 1;
-            const target = preferredSpreadGoal(state, s, tx, ty);
-            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
-          } else if (ai.assaultPosture === 'contain' && contestedMine) {
-            const tx = Math.floor((contestedMine.pos.x + (opposingPlayerTH?.pos.x ?? contestedMine.pos.x)) / 2);
-            const ty = contestedMine.pos.y - 1;
-            const target = preferredSpreadGoal(state, s, tx, ty);
-            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
-          } else if (expansionMine && mySoldiers.length >= ai.expansionMineMinArmy && ai.strategicIntent !== 'fortify') {
-            const tx = expansionMine.pos.x;
-            const ty = expansionMine.pos.y - 1;
-            const target = preferredSpreadGoal(state, s, tx, ty);
-            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
-          } else if (opposingPlayerTH && ai.difficulty !== 'easy' && (ai.assaultPosture === 'commit' || ai.strategicIntent === 'pressure')) {
-            const tx = opposingPlayerTH.pos.x + 1;
-            const ty = opposingPlayerTH.pos.y + 2;
-            const target = preferredSpreadGoal(state, s, tx, ty);
-            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
-          } else if (contestedMine && ai.assaultRetargetMine) {
-            const tx = contestedMine.pos.x;
-            const ty = contestedMine.pos.y - 1;
-            const target = preferredSpreadGoal(state, s, tx, ty);
-            if (!moveGoalNear(s, target.x, target.y)) issueSpreadMoveCommand(state, s, tx, ty);
           }
         }
       }
