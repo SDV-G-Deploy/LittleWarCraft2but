@@ -73,7 +73,9 @@ function testAssaultFinalFallbackMoveWhenNoUsefulCommandIssued(): void {
   tickAI(state, ai, 1);
 
   assert.equal(grunt.cmd?.type, 'move');
-  assert.ok(grunt.cmd.path.length > 0, 'fallback move should issue a concrete path');
+  const moveCmd = grunt.cmd as Extract<GameState['entities'][number]['cmd'], { type: 'move' }> | null;
+  assert.ok(moveCmd, 'expected fallback move command');
+  assert.ok(moveCmd.path.length > 0, 'fallback move should issue a concrete path');
 }
 
 function testConservativeStaleAttackWatchdogForFarTarget(): void {
