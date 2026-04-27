@@ -140,11 +140,73 @@ function testConservativeMoveWatchdogReissuesRegroupMove(): void {
   assert.equal(grunt.cmd?.stepTick, state.tick, 'stale move in regroup should be reissued immediately');
 }
 
+function testAttackWatchdogTreatsNoSpatialProgressAsStale(): void {
+  const state = makeState();
+  seedMatch(state);
+  state.tick = 1000;
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  ai.assaultPosture = 'commit';
+  ai.strategicIntent = 'pressure';
+  ai.attackRetargetRadius = 4;
+  ai.homeReserveMin = 0;
+
+  const grunt = spawnEntity(state, 'grunt', 1, { x: 18, y: 18 });
+  const farEnemy = spawnEntity(state, 'worker', 0, { x: 53, y: 53 });
+  const nearbyEnemy = spawnEntity(state, 'footman', 0, { x: 22, y: 19 });
+
+  grunt.cmd = {
+    type: 'attack',
+    targetId: farEnemy.id,
+    cooldownTick: 0,
+    chasePath: [],
+    chasePathTick: state.tick - 1,
+    chaseStepTick: state.tick - 1,
+    chaseProgressSampleTick: state.tick - 80,
+    chaseProgressSamplePos: { x: 18, y: 18 },
+    chaseProgressSampleDist: Math.hypot(53 - 18, 53 - 18),
+  };
+
+  tickAI(state, ai, 1);
+
+  const cmd = grunt.cmd;
+  assert.ok(cmd, 'stale attack should be reevaluated into a fresh command');
+  if (cmd.type === 'attack') {
+    assert.equal(cmd.targetId, nearbyEnemy.id, 'no-progress stale attack should be reassigned to a local threat');
+    assert.notEqual(cmd.targetId, farEnemy.id, 'stale no-progress command must not remain locked on far target');
+  } else {
+    assert.equal(cmd.type, 'move', 'when no local target is selected, stale attack should still be reevaluated into movement');
+  }
+}
+
+function testNoTownhallAssaultContinuity(): void {
+  const state = makeState();
+  const map = buildMapById(1);
+  state.tick = 900;
+
+  spawnEntity(state, 'townhall', 0, map.playerStart);
+  const enemyWorker = spawnEntity(state, 'worker', 0, { x: map.playerStart.x + 5, y: map.playerStart.y + 3 });
+  const grunt = spawnEntity(state, 'grunt', 1, { x: map.playerStart.x + 8, y: map.playerStart.y + 5 });
+
+  const ai = createAI('hard');
+  ai.phase = 'military';
+  ai.assaultPosture = 'regroup';
+
+  tickAI(state, ai, 1);
+
+  assert.equal(ai.phase, 'assault', 'AI should stay operational in no-townhall army-only mode');
+  assert.equal(grunt.cmd?.type, 'attack');
+  assert.equal(grunt.cmd?.targetId, enemyWorker.id, 'remaining army should continue assaulting enemy units/structures');
+}
+
 function run(): void {
   testStaleAttackTargetDoesNotBlockReevaluation();
   testAssaultFinalFallbackMoveWhenNoUsefulCommandIssued();
   testConservativeStaleAttackWatchdogForFarTarget();
   testConservativeMoveWatchdogReissuesRegroupMove();
+  testAttackWatchdogTreatsNoSpatialProgressAsStale();
+  testNoTownhallAssaultContinuity();
   console.log('ai assault watchdog tests passed');
 }
 

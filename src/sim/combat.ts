@@ -34,6 +34,9 @@ export function issueAttackCommand(entity: Entity, targetId: number, currentTick
     chasePath: [],
     chasePathTick: currentTick, // align movement cadence to now, not epoch
     chaseStepTick: currentTick,
+    chaseProgressSampleTick: currentTick,
+    chaseProgressSamplePos: { x: entity.pos.x, y: entity.pos.y },
+    chaseProgressSampleDist: target ? distBetweenEntities(entity, target) : undefined,
     chaseGoal: undefined,
   };
   return true;
@@ -385,6 +388,13 @@ function pushAttackVisual(state: GameState, attacker: Entity, target: Entity): v
   state.recentProjectileEvents.push(projectile);
 }
 
+function updateAttackProgressTelemetry(state: GameState, attacker: Entity, target: Entity): void {
+  if (!attacker.cmd || attacker.cmd.type !== 'attack') return;
+  attacker.cmd.chaseProgressSampleTick = state.tick;
+  attacker.cmd.chaseProgressSamplePos = { x: attacker.pos.x, y: attacker.pos.y };
+  attacker.cmd.chaseProgressSampleDist = distBetweenEntities(attacker, target);
+}
+
 // ─── Process ─────────────────────────────────────────────────────────────────
 
 export function processAttack(state: GameState, entity: Entity): void {
@@ -456,6 +466,8 @@ export function processAttack(state: GameState, entity: Entity): void {
       killEntity(state, target.id);
       clearAttackState();
       entity.cmd = null;
+    } else {
+      updateAttackProgressTelemetry(state, entity, target);
     }
   } else {
     if (isStaticAttacker) {
@@ -513,6 +525,9 @@ export function processAttack(state: GameState, entity: Entity): void {
 
       if (stepResult === 'moved' || stepResult === 'sidestep' || stepResult === 'repathed' || stepResult === 'blocked') {
         cmd.chaseStepTick = state.tick;
+        if (stepResult === 'moved' || stepResult === 'sidestep') {
+          updateAttackProgressTelemetry(state, entity, target);
+        }
       }
     }
   }

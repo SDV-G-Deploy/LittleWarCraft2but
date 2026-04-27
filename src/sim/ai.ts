@@ -20,6 +20,8 @@ function moveGoalNear(entity: Entity, tx: number, ty: number): boolean {
 
 const AI_ATTACK_STALE_TICKS = SIM_HZ * 6;
 const AI_ATTACK_STALE_DISTANCE_BIAS = 6;
+const AI_ATTACK_PROGRESS_STALE_WINDOW_TICKS = SIM_HZ * 3;
+const AI_ATTACK_MIN_PROGRESS_DISTANCE = 1;
 const AI_MOVE_STALE_BLOCKED_STREAK = 8;
 const AI_EMERGENCY_TOWER_SALVAGE_REFUND_PCT = 0.4;
 const AI_EMERGENCY_TOWER_SALVAGE_COOLDOWN_TICKS = SIM_HZ * 30;
@@ -38,6 +40,23 @@ function isAttackCommandStale(state: GameState, entity: Entity, owner: 0 | 1, at
   const distance = Math.hypot(entity.pos.x - target.pos.x, entity.pos.y - target.pos.y);
   const staleDistance = Math.max(attackRetargetRadius + AI_ATTACK_STALE_DISTANCE_BIAS, 8);
   if (distance <= staleDistance) return false;
+
+  const sampleTick = cmd.chaseProgressSampleTick;
+  const samplePos = cmd.chaseProgressSamplePos;
+  const sampleDist = cmd.chaseProgressSampleDist;
+  if (
+    typeof sampleTick === 'number' &&
+    samplePos &&
+    typeof sampleDist === 'number' &&
+    state.tick - sampleTick >= AI_ATTACK_PROGRESS_STALE_WINDOW_TICKS
+  ) {
+    const movedDistance = Math.hypot(entity.pos.x - samplePos.x, entity.pos.y - samplePos.y);
+    const currentDist = Math.hypot(entity.pos.x - target.pos.x, entity.pos.y - target.pos.y);
+    const distImprovement = sampleDist - currentDist;
+    if (movedDistance < AI_ATTACK_MIN_PROGRESS_DISTANCE || distImprovement <= 0) {
+      return true;
+    }
+  }
 
   return state.tick - cmd.chasePathTick >= AI_ATTACK_STALE_TICKS;
 }
@@ -348,16 +367,15 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
   const es = state.entities;
   const race = state.races[owner];
   applyDoctrineBias(ai, race);
-
-  const myTH = es.find(e => e.owner === owner && e.kind === 'townhall');
-  if (!myTH) return;
-
   const rc = RACES[race];
+  const myTH = es.find(e => e.owner === owner && e.kind === 'townhall');
   const myBarracks = es.find(e => e.owner === owner && e.kind === 'barracks');
   const myLumberMill = es.find(e => e.owner === owner && e.kind === 'lumbermill');
   const myWorkers = es.filter(e => e.owner === owner && e.kind === rc.worker);
   const mySoldiers = es.filter(e => e.owner === owner &&
     (e.kind === rc.soldier || e.kind === rc.ranged || e.kind === rc.heavy));
+  const myUnits = es.filter(e => e.owner === owner && isUnitKind(e.kind));
+  const enemyTownHall = es.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
   const farmCount = es.filter(e => e.owner === owner && e.kind === 'farm').length;
   const myTowers = es.filter(e => e.owner === owner && e.kind === 'tower');
   const towerCount = myTowers.length;
@@ -372,6 +390,30 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
     for (const e of es) {
       if (e.owner === owner && (e.kind === 'townhall' || e.kind === 'barracks')) e.openingPlan = ai.openingPlan;
     }
+  }
+
+  if (!myTH) {
+    if (mySoldiers.length === 0) return;
+
+    ai.phase = 'assault';
+    ai.assaultPosture = ai.assaultPosture === 'regroup' ? 'probe' : ai.assaultPosture;
+
+    for (const s of mySoldiers) {
+      if (!commandNeedsAssaultReevaluation(state, s, owner, ai.attackRetargetRadius)) continue;
+
+      const nearest = chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius + 8, 'frontline', true)
+        ?? nearestEnemyStructure(state, s, owner, Infinity)
+        ?? nearestPlayerEntity(state, s, owner, Infinity);
+      if (nearest) {
+        issueAttackCommand(s, nearest.id, state.tick, state);
+        continue;
+      }
+
+      if (enemyTownHall) {
+        issueSpreadMoveCommand(state, s, enemyTownHall.pos.x + 1, enemyTownHall.pos.y + 2);
+      }
+    }
+    return;
   }
 
   const contestedMine = bestContestedMine(state, owner, ai);

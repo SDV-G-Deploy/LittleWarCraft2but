@@ -155,6 +155,9 @@ export type Command =
       chasePath: Vec2[];
       chasePathTick: number;
       chaseStepTick: number;
+      chaseProgressSampleTick?: number;
+      chaseProgressSamplePos?: Vec2;
+      chaseProgressSampleDist?: number;
       chaseGoal?: Vec2;
       contactSlot?: Vec2;
       contactSlotTick?: number;
