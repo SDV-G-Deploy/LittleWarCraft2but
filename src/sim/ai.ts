@@ -23,6 +23,9 @@ const AI_ATTACK_STALE_DISTANCE_BIAS = 6;
 const AI_MOVE_STALE_BLOCKED_STREAK = 8;
 const AI_EMERGENCY_TOWER_SALVAGE_REFUND_PCT = 0.4;
 const AI_EMERGENCY_TOWER_SALVAGE_COOLDOWN_TICKS = SIM_HZ * 30;
+const AI_TOWER_DANGER_ENEMY_RADIUS = 8;
+const AI_TOWER_DANGER_ENEMY_THREAT_RADIUS = 4;
+const AI_TOWER_DANGER_FRIENDLY_RADIUS = 7;
 
 function isAttackCommandStale(state: GameState, entity: Entity, owner: 0 | 1, attackRetargetRadius: number): boolean {
   if (!entity.cmd || entity.cmd.type !== 'attack') return false;
@@ -482,7 +485,9 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
         const w = freeWorker(myWorkers);
         if (w) {
           const pos = findTowerBuildSpot(state, myTH, owner);
-          if (pos) issueBuildCommand(state, w, 'tower', pos, state.tick);
+          if (pos && !shouldBlockTowerBuildUnderImmediatePressure(state, owner, myTH, pos)) {
+            issueBuildCommand(state, w, 'tower', pos, state.tick);
+          }
         }
       }
       if (mySoldiers.length >= ai.attackWaveSize || (econCollapse.lastArmyMode && !defenseThreat.severe)) {
@@ -1602,6 +1607,42 @@ function nearestThreat(unit: Entity, threats: Entity[]): Entity | null {
     }
   }
   return best;
+}
+
+function isCombatUnit(kind: EntityKind): boolean {
+  return isUnitKind(kind) && kind !== 'worker' && kind !== 'peon';
+}
+
+function shouldBlockTowerBuildUnderImmediatePressure(state: GameState, owner: 0 | 1, myTownHall: Entity, buildPos: Vec2): boolean {
+  let nearbyEnemyCombat = 0;
+  let immediateEnemyThreat = 0;
+  let nearbyFriendlyCombat = 0;
+
+  for (const e of state.entities) {
+    if (!isCombatUnit(e.kind)) continue;
+    const distToSite = Math.hypot(e.pos.x - buildPos.x, e.pos.y - buildPos.y);
+
+    if (e.owner === owner) {
+      if (distToSite <= AI_TOWER_DANGER_FRIENDLY_RADIUS) nearbyFriendlyCombat++;
+      continue;
+    }
+    if (!isOwnedByOpposingPlayer(e, owner)) continue;
+
+    if (distToSite <= AI_TOWER_DANGER_ENEMY_RADIUS) nearbyEnemyCombat++;
+    if (distToSite <= AI_TOWER_DANGER_ENEMY_THREAT_RADIUS) immediateEnemyThreat++;
+  }
+
+  if (nearbyEnemyCombat === 0) return false;
+
+  const townHallDistance = Math.hypot(buildPos.x - myTownHall.pos.x, buildPos.y - myTownHall.pos.y);
+  const somewhatForwardTower = townHallDistance >= 6;
+  const enemyDominatesLocalFight = nearbyEnemyCombat >= nearbyFriendlyCombat + 2;
+
+  if (immediateEnemyThreat >= 2 && nearbyFriendlyCombat <= nearbyEnemyCombat) return true;
+  if (enemyDominatesLocalFight) return true;
+  if (somewhatForwardTower && nearbyEnemyCombat >= nearbyFriendlyCombat + 1 && immediateEnemyThreat >= 1) return true;
+
+  return false;
 }
 
 function estimateWoodDemand(state: GameState, ai: AIController, owner: 0 | 1, myBarracks: Entity | undefined, myLumberMill: Entity | undefined, farmCount: number, towerCount: number, soldierCount: number): number {

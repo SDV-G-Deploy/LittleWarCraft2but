@@ -37,6 +37,10 @@ function countOwnedTowers(state: GameState): number {
   return state.entities.filter(e => e.owner === 1 && e.kind === 'tower').length;
 }
 
+function countOwnedTowerConstructionSites(state: GameState, owner: 0 | 1): number {
+  return state.entities.filter(e => e.owner === owner && e.kind === 'construction' && e.constructionOf === 'tower').length;
+}
+
 function testSurvivingWorkerForcedToGoldInCollapse(): void {
   const state = makeState();
   const { myWorker } = seedBase(state);
@@ -295,6 +299,79 @@ function testNonDeadlockedPathDoesNotEmergencySalvage(): void {
   assert.equal(ai.lastEmergencyTowerSalvageTick, -Infinity);
 }
 
+function seedHumanMilitaryTowerState(): { state: GameState; ai: ReturnType<typeof createAI>; humanTownHall: Entity; humanWorker: Entity; humanBarracks: Entity } {
+  const state = makeState();
+  const map = buildMapById(1);
+
+  const humanTownHall = spawnEntity(state, 'townhall', 0, map.playerStart);
+  const humanWorker = spawnEntity(state, 'worker', 0, { x: map.playerStart.x + 1, y: map.playerStart.y + 3 });
+  const humanBarracks = spawnEntity(state, 'barracks', 0, { x: map.playerStart.x + 4, y: map.playerStart.y + 1 });
+  spawnEntity(state, 'lumbermill', 0, { x: map.playerStart.x - 5, y: map.playerStart.y + 1 });
+
+  spawnEntity(state, 'townhall', 1, map.aiStart);
+  spawnEntity(state, 'peon', 1, { x: map.aiStart.x + 1, y: map.aiStart.y + 3 });
+
+  for (const pos of map.goldMines) {
+    const mine = spawnEntity(state, 'goldmine', NEUTRAL, pos);
+    mine.goldReserve = MINE_GOLD_INITIAL;
+  }
+
+  state.tick = 560;
+  state.gold[0] = 999;
+  state.wood[0] = 999;
+  state.popCap[0] = 50;
+
+  const ai = createAI('hard');
+  ai.phase = 'military';
+  ai.maxFarms = 0;
+  ai.maxTowers = 2;
+  ai.towerMinArmy = 0;
+  ai.attackWaveSize = 99;
+
+  return { state, ai, humanTownHall, humanWorker, humanBarracks };
+}
+
+function testHumanSkipsTowerBuildWhenEnemyCombatDominatesNearby(): void {
+  const { state, ai, humanTownHall, humanWorker } = seedHumanMilitaryTowerState();
+  spawnEntity(state, 'footman', 0, { x: humanTownHall.pos.x + 1, y: humanTownHall.pos.y + 4 });
+
+  spawnEntity(state, 'grunt', 1, { x: humanTownHall.pos.x + 3, y: humanTownHall.pos.y + 2 });
+  spawnEntity(state, 'grunt', 1, { x: humanTownHall.pos.x + 4, y: humanTownHall.pos.y + 3 });
+  spawnEntity(state, 'grunt', 1, { x: humanTownHall.pos.x + 5, y: humanTownHall.pos.y + 2 });
+
+  tickAI(state, ai, 0);
+
+  assert.notEqual(humanWorker.cmd?.type, 'build', 'human AI should skip suicidal tower build intent under immediate local enemy dominance');
+  assert.equal(countOwnedTowerConstructionSites(state, 0), 0, 'danger gate should prevent starting any new tower construction site');
+}
+
+function testHumanStillBuildsTowerWhenAreaIsDefensible(): void {
+  const { state, ai, humanTownHall, humanWorker } = seedHumanMilitaryTowerState();
+  spawnEntity(state, 'footman', 0, { x: humanTownHall.pos.x + 2, y: humanTownHall.pos.y + 2 });
+  spawnEntity(state, 'footman', 0, { x: humanTownHall.pos.x + 3, y: humanTownHall.pos.y + 2 });
+  spawnEntity(state, 'footman', 0, { x: humanTownHall.pos.x + 2, y: humanTownHall.pos.y + 3 });
+
+  spawnEntity(state, 'grunt', 1, { x: humanTownHall.pos.x + 7, y: humanTownHall.pos.y + 2 });
+
+  tickAI(state, ai, 0);
+
+  assert.equal(humanWorker.cmd?.type, 'build');
+  assert.equal(humanWorker.cmd?.building, 'tower', 'tower behavior should remain available for defensible local setups');
+}
+
+function testTowerDangerGateDoesNotChangeNormalNonTowerProduction(): void {
+  const { state, ai, humanTownHall, humanBarracks } = seedHumanMilitaryTowerState();
+  spawnEntity(state, 'footman', 0, { x: humanTownHall.pos.x + 1, y: humanTownHall.pos.y + 4 });
+
+  spawnEntity(state, 'grunt', 1, { x: humanTownHall.pos.x + 3, y: humanTownHall.pos.y + 2 });
+  spawnEntity(state, 'grunt', 1, { x: humanTownHall.pos.x + 4, y: humanTownHall.pos.y + 3 });
+  spawnEntity(state, 'grunt', 1, { x: humanTownHall.pos.x + 5, y: humanTownHall.pos.y + 2 });
+
+  tickAI(state, ai, 0);
+
+  assert.equal(humanBarracks.cmd?.type, 'train', 'non-tower production should continue normally when tower intent is blocked');
+}
+
 function run(): void {
   testSurvivingWorkerForcedToGoldInCollapse();
   testTowerBuildSuppressedInCollapseState();
@@ -306,6 +383,9 @@ function run(): void {
   testEmergencySalvageCooldownPreventsRapidMultiTowerLoop();
   testRecoveryFirstBehaviorOverRecklessPushAfterSalvage();
   testNonDeadlockedPathDoesNotEmergencySalvage();
+  testHumanSkipsTowerBuildWhenEnemyCombatDominatesNearby();
+  testHumanStillBuildsTowerWhenAreaIsDefensible();
+  testTowerDangerGateDoesNotChangeNormalNonTowerProduction();
   console.log('ai econ collapse tests passed');
 }
 
