@@ -33,6 +33,10 @@ function firstTreeId(state: GameState): number {
   throw new Error('expected at least one tree tile');
 }
 
+function countOwnedTowers(state: GameState): number {
+  return state.entities.filter(e => e.owner === 1 && e.kind === 'tower').length;
+}
+
 function testSurvivingWorkerForcedToGoldInCollapse(): void {
   const state = makeState();
   const { myWorker } = seedBase(state);
@@ -157,12 +161,151 @@ function testSevereBaseThreatOverridesLastArmyPush(): void {
   assert.equal(ai.phase, 'military', 'severe home threat should override last-army push and force regroup/fallback');
 }
 
+function testDeadlockedAIEmergencySalvagesTowerAndStartsWorkerRecovery(): void {
+  const state = makeState();
+  const { myTownHall } = seedBase(state);
+  state.tick = 440;
+  state.gold[1] = 0;
+  state.wood[1] = 0;
+
+  state.entities = state.entities.filter(e => !(e.owner === 1 && e.kind === 'peon'));
+  spawnEntity(state, 'tower', 1, { x: myTownHall.pos.x + 6, y: myTownHall.pos.y });
+  spawnEntity(state, 'grunt', 1, { x: 42, y: 10 });
+  spawnEntity(state, 'grunt', 1, { x: 43, y: 10 });
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  tickAI(state, ai, 1);
+
+  assert.equal(countOwnedTowers(state), 0, 'deadlocked AI should salvage one tower for recovery gold');
+  assert.equal(ai.phase, 'economy', 'after salvage, AI should pivot to economy recovery');
+  assert.equal(myTownHall.cmd?.type, 'train');
+  assert.equal(myTownHall.cmd?.unit, 'peon');
+  assert.ok(state.gold[1] >= 0 && state.gold[1] <= 5, `expected salvage-funded worker train to consume almost all gold, got ${state.gold[1]}`);
+  assert.ok(state.wood[1] >= 40, `salvage should refund conservative wood too, got ${state.wood[1]}`);
+}
+
+function testEmergencySalvageBlockedUnderSevereHomeThreat(): void {
+  const state = makeState();
+  const { myTownHall } = seedBase(state);
+  state.tick = 460;
+  state.gold[1] = 0;
+  state.wood[1] = 0;
+
+  state.entities = state.entities.filter(e => !(e.owner === 1 && e.kind === 'peon'));
+  spawnEntity(state, 'tower', 1, { x: myTownHall.pos.x + 5, y: myTownHall.pos.y });
+  spawnEntity(state, 'grunt', 1, { x: 42, y: 10 });
+  spawnEntity(state, 'grunt', 1, { x: 43, y: 10 });
+  spawnEntity(state, 'footman', 0, { x: myTownHall.pos.x + 1, y: myTownHall.pos.y + 1 });
+  spawnEntity(state, 'footman', 0, { x: myTownHall.pos.x + 2, y: myTownHall.pos.y + 1 });
+  spawnEntity(state, 'footman', 0, { x: myTownHall.pos.x + 1, y: myTownHall.pos.y + 2 });
+  spawnEntity(state, 'footman', 0, { x: myTownHall.pos.x + 2, y: myTownHall.pos.y + 2 });
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  tickAI(state, ai, 1);
+
+  assert.equal(countOwnedTowers(state), 1, 'AI should not salvage tower while base threat is severe');
+}
+
+function testEmergencySalvageCooldownPreventsRapidMultiTowerLoop(): void {
+  const state = makeState();
+  const { myTownHall } = seedBase(state);
+  state.tick = 480;
+  state.gold[1] = 0;
+  state.wood[1] = 0;
+
+  state.entities = state.entities.filter(e => !(e.owner === 1 && e.kind === 'peon'));
+  spawnEntity(state, 'tower', 1, { x: myTownHall.pos.x + 6, y: myTownHall.pos.y });
+  spawnEntity(state, 'tower', 1, { x: myTownHall.pos.x + 7, y: myTownHall.pos.y });
+  spawnEntity(state, 'grunt', 1, { x: 42, y: 10 });
+  spawnEntity(state, 'grunt', 1, { x: 43, y: 10 });
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  ai.reactionDelayTicks = 1;
+  tickAI(state, ai, 1);
+  const afterFirstTickTowers = countOwnedTowers(state);
+
+  state.tick += 1;
+  tickAI(state, ai, 1);
+
+  assert.equal(afterFirstTickTowers, 1, 'first salvage should remove at most one tower');
+  assert.equal(countOwnedTowers(state), 1, 'cooldown should block immediate second salvage loop');
+}
+
+function testRecoveryFirstBehaviorOverRecklessPushAfterSalvage(): void {
+  const state = makeState();
+  const { myTownHall } = seedBase(state);
+  state.tick = 500;
+  state.gold[1] = 0;
+  state.wood[1] = 0;
+
+  state.entities = state.entities.filter(e => !(e.owner === 1 && e.kind === 'peon'));
+  spawnEntity(state, 'tower', 1, { x: myTownHall.pos.x + 6, y: myTownHall.pos.y });
+  spawnEntity(state, 'grunt', 1, { x: 42, y: 10 });
+  spawnEntity(state, 'grunt', 1, { x: 43, y: 10 });
+  spawnEntity(state, 'grunt', 1, { x: 44, y: 10 });
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  ai.attackWaveSize = 2;
+  tickAI(state, ai, 1);
+
+  assert.equal(ai.phase, 'economy', 'recovery should be prioritized after salvage enables worker rebuild');
+  assert.equal(myTownHall.cmd?.type, 'train');
+  assert.equal(myTownHall.cmd?.unit, 'peon');
+}
+
+function testNonDeadlockedPathDoesNotEmergencySalvage(): void {
+  const state = makeState();
+  const { myTownHall, myWorker } = seedBase(state);
+  state.tick = 520;
+  state.gold[1] = 0;
+  state.wood[1] = 0;
+
+  const secondWorker = spawnEntity(state, 'peon', 1, { x: myTownHall.pos.x + 2, y: myTownHall.pos.y + 3 });
+  const mine = state.entities.find(e => e.kind === 'goldmine');
+  assert.ok(mine);
+
+  myWorker.cmd = {
+    type: 'gather',
+    targetId: mine.id,
+    resourceType: 'gold',
+    phase: 'toresource',
+    waitTicks: 0,
+  };
+  secondWorker.cmd = {
+    type: 'gather',
+    targetId: mine.id,
+    resourceType: 'gold',
+    phase: 'toresource',
+    waitTicks: 0,
+  };
+
+  spawnEntity(state, 'tower', 1, { x: myTownHall.pos.x + 6, y: myTownHall.pos.y });
+  spawnEntity(state, 'grunt', 1, { x: 42, y: 10 });
+  spawnEntity(state, 'grunt', 1, { x: 43, y: 10 });
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  tickAI(state, ai, 1);
+
+  assert.equal(countOwnedTowers(state), 1, 'non-deadlocked economy should not trigger emergency tower salvage');
+  assert.equal(ai.lastEmergencyTowerSalvageTick, -Infinity);
+}
+
 function run(): void {
   testSurvivingWorkerForcedToGoldInCollapse();
   testTowerBuildSuppressedInCollapseState();
   testLastArmyModeCanEnterAndStayInAssaultBelowWaveThreshold();
   testCollapseModeClearsWhenEconomyRecovers();
   testSevereBaseThreatOverridesLastArmyPush();
+  testDeadlockedAIEmergencySalvagesTowerAndStartsWorkerRecovery();
+  testEmergencySalvageBlockedUnderSevereHomeThreat();
+  testEmergencySalvageCooldownPreventsRapidMultiTowerLoop();
+  testRecoveryFirstBehaviorOverRecklessPushAfterSalvage();
+  testNonDeadlockedPathDoesNotEmergencySalvage();
   console.log('ai econ collapse tests passed');
 }
 

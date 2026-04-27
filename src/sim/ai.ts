@@ -11,6 +11,7 @@ import {
 } from './economy';
 import { issueAttackCommand } from './combat';
 import { issueMoveCommand } from './commands';
+import { killEntity } from './entities';
 
 function moveGoalNear(entity: Entity, tx: number, ty: number): boolean {
   return entity.cmd?.type === 'move' &&
@@ -20,6 +21,8 @@ function moveGoalNear(entity: Entity, tx: number, ty: number): boolean {
 const AI_ATTACK_STALE_TICKS = SIM_HZ * 6;
 const AI_ATTACK_STALE_DISTANCE_BIAS = 6;
 const AI_MOVE_STALE_BLOCKED_STREAK = 8;
+const AI_EMERGENCY_TOWER_SALVAGE_REFUND_PCT = 0.4;
+const AI_EMERGENCY_TOWER_SALVAGE_COOLDOWN_TICKS = SIM_HZ * 30;
 
 function isAttackCommandStale(state: GameState, entity: Entity, owner: 0 | 1, attackRetargetRadius: number): boolean {
   if (!entity.cmd || entity.cmd.type !== 'attack') return false;
@@ -261,6 +264,7 @@ export interface AIController {
   lastPressureObjective: AIPressureObjective | null;
   lastPressureObjectiveTick: number;
   lastObjectivePivotTick: number;
+  lastEmergencyTowerSalvageTick: number;
 }
 
 type ArmyMixPlan = {
@@ -325,6 +329,7 @@ function createAIBase(difficulty: AIDifficulty): AIController {
     lastPressureObjective: null,
     lastPressureObjectiveTick: -Infinity,
     lastObjectivePivotTick: -Infinity,
+    lastEmergencyTowerSalvageTick: -Infinity,
   };
 }
 
@@ -351,7 +356,8 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
   const mySoldiers = es.filter(e => e.owner === owner &&
     (e.kind === rc.soldier || e.kind === rc.ranged || e.kind === rc.heavy));
   const farmCount = es.filter(e => e.owner === owner && e.kind === 'farm').length;
-  const towerCount = es.filter(e => e.owner === owner && e.kind === 'tower').length;
+  const myTowers = es.filter(e => e.owner === owner && e.kind === 'tower');
+  const towerCount = myTowers.length;
 
   const buildingFarm = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'farm');
   const buildingBarracks = myWorkers.some(w => w.cmd?.type === 'build' && w.cmd.building === 'barracks');
@@ -370,6 +376,7 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
   const defenseThreat = assessBaseThreat(state, ai, owner, myTH, myWorkers);
   const snapshot = evaluateAISnapshot(state, ai, owner, myTH, mySoldiers, defenseThreat, contestedMine, expansionMine);
   const econCollapse = evaluateEconCollapse(state, owner, race, myTH, myWorkers, mySoldiers);
+  const recovery = evaluateRecoveryPriority(state, owner, race, myWorkers, econCollapse);
   updateStrategicIntent(state, ai, snapshot);
   updateAssaultPosture(state, ai, snapshot);
   const endgamePressureOverride = evaluateEndgamePressureOverride(state, owner, ai, snapshot, defenseThreat, econCollapse, myWorkers, mySoldiers);
@@ -382,6 +389,18 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
   }
 
   resumeOwnedConstruction(state, owner, myWorkers, defenseThreat);
+
+  if (shouldAttemptEmergencyTowerSalvage(state, ai, owner, myTH, myTowers, myWorkers, mySoldiers, defenseThreat, econCollapse, recovery)) {
+    const salvageTower = pickEmergencySalvageTower(myTowers, myTH);
+    if (salvageTower) {
+      emergencySalvageTower(state, owner, salvageTower);
+      ai.lastEmergencyTowerSalvageTick = state.tick;
+    }
+  }
+
+  if (recovery.prioritizeRecovery && state.gold[owner] >= recovery.workerCost && myWorkers.length <= 1) {
+    ai.phase = 'economy';
+  }
 
   const woodDemand = estimateWoodDemand(state, ai, owner, myBarracks, myLumberMill, farmCount, towerCount, mySoldiers.length);
   keepGathering(state, myWorkers, woodDemand, econCollapse.econCollapsed);
@@ -1366,6 +1385,11 @@ type EndgamePressureOverride = {
   reserveCap: number | null;
 };
 
+type RecoveryPriorityState = {
+  prioritizeRecovery: boolean;
+  workerCost: number;
+};
+
 function evaluateEconCollapse(
   state: GameState,
   owner: 0 | 1,
@@ -1395,6 +1419,78 @@ function evaluateEconCollapse(
     lastArmyMode: econCollapsed && armyCount >= 2,
     workerStarved,
   };
+}
+
+function evaluateRecoveryPriority(
+  state: GameState,
+  owner: 0 | 1,
+  race: Race,
+  myWorkers: Entity[],
+  econCollapse: EconCollapseState,
+): RecoveryPriorityState {
+  const workerCost = getResolvedCost(RACES[race].worker, race).gold;
+  const gold = state.gold[owner];
+  const goldWorkers = myWorkers.filter(w => w.cmd?.type === 'gather' && w.cmd.resourceType === 'gold').length;
+  const workerCount = myWorkers.length;
+  const canRebuildWorker = gold >= workerCost;
+  const prioritizeRecovery = econCollapse.econCollapsed
+    && workerCount <= 1
+    && (canRebuildWorker || goldWorkers === 0);
+  return { prioritizeRecovery, workerCost };
+}
+
+function shouldAttemptEmergencyTowerSalvage(
+  state: GameState,
+  ai: AIController,
+  owner: 0 | 1,
+  myTownHall: Entity,
+  towers: Entity[],
+  myWorkers: Entity[],
+  mySoldiers: Entity[],
+  defenseThreat: DefenseThreatInfo,
+  econCollapse: EconCollapseState,
+  recovery: RecoveryPriorityState,
+): boolean {
+  if (towers.length === 0) return false;
+  if (!econCollapse.econCollapsed) return false;
+  if (state.tick - ai.lastEmergencyTowerSalvageTick < AI_EMERGENCY_TOWER_SALVAGE_COOLDOWN_TICKS) return false;
+  if (defenseThreat.severe) return false;
+
+  const goldWorkers = myWorkers.filter(w => w.cmd?.type === 'gather' && w.cmd.resourceType === 'gold').length;
+  const noEconomyPath = myWorkers.length === 0 || goldWorkers === 0;
+  if (!noEconomyPath) return false;
+  if (state.gold[owner] >= recovery.workerCost) return false;
+
+  const nearbyEnemyPressure = state.entities.filter(e =>
+    isOwnedByOpposingPlayer(e, owner)
+    && isUnitKind(e.kind)
+    && Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y) <= ai.baseDefenseRadius + 2,
+  ).length;
+  if (nearbyEnemyPressure >= 3 && towers.length <= 1) return false;
+
+  const tinyArmy = mySoldiers.length <= 3;
+  if (nearbyEnemyPressure >= 2 && tinyArmy) return false;
+
+  return recovery.prioritizeRecovery;
+}
+
+function pickEmergencySalvageTower(towers: Entity[], myTownHall: Entity): Entity | null {
+  if (towers.length === 0) return null;
+  const sorted = [...towers].sort((a, b) => {
+    const da = Math.hypot(a.pos.x - myTownHall.pos.x, a.pos.y - myTownHall.pos.y);
+    const db = Math.hypot(b.pos.x - myTownHall.pos.x, b.pos.y - myTownHall.pos.y);
+    if (db !== da) return db - da;
+    return a.id - b.id;
+  });
+  return sorted[0] ?? null;
+}
+
+function emergencySalvageTower(state: GameState, owner: 0 | 1, tower: Entity): void {
+  const race = state.races[owner];
+  const refund = getResolvedCost('tower', race);
+  state.gold[owner] += Math.floor(refund.gold * AI_EMERGENCY_TOWER_SALVAGE_REFUND_PCT);
+  state.wood[owner] += Math.floor(refund.wood * AI_EMERGENCY_TOWER_SALVAGE_REFUND_PCT);
+  killEntity(state, tower.id);
 }
 
 function isNonTerminalFrontObjectiveType(type: AIPressureObjectiveType): boolean {
