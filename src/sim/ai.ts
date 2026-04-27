@@ -369,10 +369,12 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
   const expansionMine = bestExpansionMine(state, owner, ai);
   const defenseThreat = assessBaseThreat(state, ai, owner, myTH, myWorkers);
   const snapshot = evaluateAISnapshot(state, ai, owner, myTH, mySoldiers, defenseThreat, contestedMine, expansionMine);
+  const econCollapse = evaluateEconCollapse(state, owner, race, myTH, myWorkers, mySoldiers);
   updateStrategicIntent(state, ai, snapshot);
   updateAssaultPosture(state, ai, snapshot);
+  const endgamePressureOverride = evaluateEndgamePressureOverride(state, owner, ai, snapshot, defenseThreat, econCollapse, myWorkers, mySoldiers);
   ai.mineIntent = chooseMineIntent(state, ai, owner, snapshot, { contestedMine, expansionMine });
-  const pressureObjective = choosePressureObjective(state, ai, owner, myTH, snapshot, contestedMine, expansionMine);
+  const pressureObjective = choosePressureObjective(state, ai, owner, myTH, snapshot, contestedMine, expansionMine, endgamePressureOverride);
 
   if (defenseThreat.active) {
     ai.lastBaseThreatTick = state.tick;
@@ -381,7 +383,6 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
 
   resumeOwnedConstruction(state, owner, myWorkers, defenseThreat);
 
-  const econCollapse = evaluateEconCollapse(state, owner, race, myTH, myWorkers, mySoldiers);
   const woodDemand = estimateWoodDemand(state, ai, owner, myBarracks, myLumberMill, farmCount, towerCount, mySoldiers.length);
   keepGathering(state, myWorkers, woodDemand, econCollapse.econCollapsed);
 
@@ -474,7 +475,7 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
     case 'assault': {
       const opposingPlayerTH = es.find(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'townhall');
       const finishOff = enemyCollapsed(snapshot) && mySoldiers.length >= Math.max(2, snapshot.enemyStructureCount);
-      const reserveCount = getHomeReserveCount(ai, mySoldiers.length, defenseThreat.active, state.tick);
+      const reserveCount = getHomeReserveCount(ai, mySoldiers.length, defenseThreat.active, state.tick, endgamePressureOverride.reserveCap);
       const armyRolePlan = assignArmyRoles(state, owner, myTH, mySoldiers, reserveCount, contestedMine, expansionMine, opposingPlayerTH, ai, finishOff);
       const assaultAssignments = armyRolePlan.assignments.filter(entry => entry.role !== 'reserve');
 
@@ -498,7 +499,7 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
           let issuedUseful = false;
 
           if (armyRolePlan.harassmentUnitIds.has(s.id) && armyRolePlan.harassmentAnchor) {
-            const nearestHarass = chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius + 1, 'harassment');
+            const nearestHarass = chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius + 1, 'harassment', endgamePressureOverride.relaxTowerAversion);
             if (nearestHarass) {
               issueAttackCommand(s, nearestHarass.id, state.tick, state);
               issuedUseful = true;
@@ -512,10 +513,10 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
             const nearest = finishOff
               ? nearestEnemyStructure(state, s, owner, ai.attackRetargetRadius + 10)
               : role === 'rangedFollow'
-                ? chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius, 'rangedFollow')
+                ? chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius, 'rangedFollow', endgamePressureOverride.relaxTowerAversion)
                 : ai.difficulty === 'easy'
                   ? nearestPlayerUnit(state, s, owner, ai.attackRetargetRadius)
-                  : chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius + (role === 'frontlineShock' ? 1 : 0), 'frontline');
+                  : chooseWeightedTarget(state, s, owner, ai.attackRetargetRadius + (role === 'frontlineShock' ? 1 : 0), 'frontline', endgamePressureOverride.relaxTowerAversion);
 
             if (nearest) {
               issueAttackCommand(s, nearest.id, state.tick, state);
@@ -535,8 +536,8 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
               if (!moveGoalNear(s, target.x, target.y)) issuedUseful = issueSpreadMoveCommand(state, s, tx, ty);
             } else if (applyMineIntentMovement(state, s, ai, ai.mineIntent, contestedMine, expansionMine, opposingPlayerTH)) {
               issuedUseful = true;
-            } else if (applyPressureObjectiveMovement(state, s, ai, pressureObjective, role, armyRolePlan.harassmentUnitIds, armyRolePlan.frontlineAnchor, armyRolePlan.mainPressureAnchor)) {
-              issuedUseful = true;
+              } else if (applyPressureObjectiveMovement(state, s, ai, pressureObjective, role, armyRolePlan.harassmentUnitIds, armyRolePlan.frontlineAnchor, armyRolePlan.mainPressureAnchor)) {
+                issuedUseful = true;
             } else if (role === 'frontlineShock' && opposingPlayerTH && (ai.assaultPosture === 'commit' || ai.strategicIntent === 'pressure')) {
               const tx = opposingPlayerTH.pos.x + 1;
               const ty = opposingPlayerTH.pos.y + 2;
@@ -927,6 +928,7 @@ function choosePressureObjective(
   snapshot: AISnapshot,
   contestedMine: Entity | null,
   expansionMine: Entity | null,
+  endgameOverride: EndgamePressureOverride,
 ): AIPressureObjective | null {
   if (ai.assaultPosture === 'regroup') {
     return rememberPressureObjective(state, ai, owner, { type: 'homeGuard', targetId: myTownHall.id, anchor: { x: myTownHall.pos.x + 1, y: myTownHall.pos.y + myTownHall.tileH } }, true);
@@ -940,7 +942,21 @@ function choosePressureObjective(
 
   let candidate: AIPressureObjective | null = null;
 
-  if (ai.raceDoctrine.guardBias >= 0.2 && contestedMine && snapshot.contestedMineFavorable && frontParity >= -1) {
+  if (endgameOverride.active && enemyTownHall) {
+    candidate = {
+      type: 'enemyApproach',
+      targetId: enemyTownHall.id,
+      anchor: { x: enemyTownHall.pos.x + 1, y: enemyTownHall.pos.y + 2 },
+    };
+  } else if (endgameOverride.active && enemyBarracks) {
+    candidate = {
+      type: 'pressureProduction',
+      targetId: enemyBarracks.id,
+      anchor: { x: enemyBarracks.pos.x, y: enemyBarracks.pos.y + enemyBarracks.tileH },
+    };
+  }
+
+  if (!candidate && ai.raceDoctrine.guardBias >= 0.2 && contestedMine && snapshot.contestedMineFavorable && frontParity >= -1) {
     candidate = {
       type: ai.assaultPosture === 'contain' ? 'containFront' : 'contestedMine',
       targetId: contestedMine.id,
@@ -949,13 +965,13 @@ function choosePressureObjective(
         y: contestedMine.pos.y - 1,
       },
     };
-  } else if (wantsHarass && exposedWorker) {
+  } else if (!candidate && wantsHarass && exposedWorker) {
     candidate = {
       type: 'harassWorkers',
       targetId: exposedWorker.id,
       anchor: { x: exposedWorker.pos.x, y: Math.max(0, exposedWorker.pos.y - 1) },
     };
-  } else if (ai.assaultPosture === 'contain' && contestedMine) {
+  } else if (!candidate && ai.assaultPosture === 'contain' && contestedMine) {
     candidate = {
       type: 'containFront',
       targetId: contestedMine.id,
@@ -964,19 +980,19 @@ function choosePressureObjective(
         y: contestedMine.pos.y - 1,
       },
     };
-  } else if (enemyTownHall && ai.strategicIntent === 'pressure') {
+  } else if (!candidate && enemyTownHall && ai.strategicIntent === 'pressure') {
     candidate = {
       type: 'enemyApproach',
       targetId: enemyTownHall.id,
       anchor: { x: enemyTownHall.pos.x + 1, y: enemyTownHall.pos.y + 2 },
     };
-  } else if (ai.raceDoctrine.pressureBias >= 0.25 && enemyBarracks && frontParity >= -1) {
+  } else if (!candidate && ai.raceDoctrine.pressureBias >= 0.25 && enemyBarracks && frontParity >= -1) {
     candidate = {
       type: 'pressureProduction',
       targetId: enemyBarracks.id,
       anchor: { x: enemyBarracks.pos.x, y: enemyBarracks.pos.y + enemyBarracks.tileH },
     };
-  } else if (expansionMine && snapshot.safeExpansionExists && ai.economicPosture === 'greed') {
+  } else if (!candidate && expansionMine && snapshot.safeExpansionExists && ai.economicPosture === 'greed') {
     candidate = {
       type: 'expansionMine',
       targetId: expansionMine.id,
@@ -984,7 +1000,7 @@ function choosePressureObjective(
     };
   }
 
-  return rememberPressureObjective(state, ai, owner, candidate, false);
+  return rememberPressureObjective(state, ai, owner, candidate, endgameOverride.forceTerminalPivot);
 }
 
 function isPressureObjectiveStillValid(state: GameState, owner: 0 | 1, objective: AIPressureObjective): boolean {
@@ -1019,7 +1035,14 @@ function rememberPressureObjective(
 ): AIPressureObjective | null {
   const previous = ai.lastPressureObjective;
   if (previous && !isPressureObjectiveStillValid(state, owner, previous)) ai.lastPressureObjective = null;
-  if (!candidate) return ai.lastPressureObjective;
+  if (!candidate) {
+    if (forcePivot && ai.lastPressureObjective && isNonTerminalFrontObjectiveType(ai.lastPressureObjective.type)) {
+      ai.lastPressureObjective = null;
+      ai.lastObjectivePivotTick = state.tick;
+      return null;
+    }
+    return ai.lastPressureObjective;
+  }
 
   const validPrevious = ai.lastPressureObjective;
   const sameObjective = !!validPrevious && validPrevious.type === candidate.type && validPrevious.targetId === candidate.targetId
@@ -1333,6 +1356,14 @@ type DefenseThreatInfo = {
 type EconCollapseState = {
   econCollapsed: boolean;
   lastArmyMode: boolean;
+  workerStarved: boolean;
+};
+
+type EndgamePressureOverride = {
+  active: boolean;
+  forceTerminalPivot: boolean;
+  relaxTowerAversion: boolean;
+  reserveCap: number | null;
 };
 
 function evaluateEconCollapse(
@@ -1343,7 +1374,7 @@ function evaluateEconCollapse(
   myWorkers: Entity[],
   mySoldiers: Entity[],
 ): EconCollapseState {
-  if (!myTownHall) return { econCollapsed: false, lastArmyMode: false };
+  if (!myTownHall) return { econCollapsed: false, lastArmyMode: false, workerStarved: false };
 
   const workerCount = myWorkers.length;
   const armyCount = mySoldiers.length;
@@ -1353,6 +1384,7 @@ function evaluateEconCollapse(
   const soldierCost = getResolvedCost(RACES[race].soldier, race).gold;
 
   const recovered = workerCount >= 2 || (goldWorkers > 0 && gold >= workerCost);
+  const workerStarved = workerCount <= 1 && (goldWorkers === 0 || gold < workerCost);
   const econCollapsed = !recovered && (
     (workerCount === 0 && gold < workerCost)
     || (workerCount <= 1 && goldWorkers === 0 && gold < soldierCost && armyCount <= 2)
@@ -1361,6 +1393,50 @@ function evaluateEconCollapse(
   return {
     econCollapsed,
     lastArmyMode: econCollapsed && armyCount >= 2,
+    workerStarved,
+  };
+}
+
+function isNonTerminalFrontObjectiveType(type: AIPressureObjectiveType): boolean {
+  return type === 'contestedMine' || type === 'containFront' || type === 'expansionMine';
+}
+
+function evaluateEndgamePressureOverride(
+  state: GameState,
+  owner: 0 | 1,
+  ai: AIController,
+  snapshot: AISnapshot,
+  defenseThreat: DefenseThreatInfo,
+  econCollapse: EconCollapseState,
+  myWorkers: Entity[],
+  mySoldiers: Entity[],
+): EndgamePressureOverride {
+  if (defenseThreat.severe || ai.assaultPosture === 'regroup') {
+    return { active: false, forceTerminalPivot: false, relaxTowerAversion: false, reserveCap: null };
+  }
+
+  const economyStrained = econCollapse.econCollapsed || econCollapse.workerStarved;
+  const smallArmy = mySoldiers.length >= 2 && mySoldiers.length <= 5;
+  const enemyStructuresAlive = snapshot.enemyStructureCount > 0;
+  const enemyArmyLight = snapshot.enemyArmySize <= 3;
+  const enemyTowerCount = state.entities.filter(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'tower').length;
+  const lowStructureEndgame = enemyTowerCount > 0 || snapshot.enemyStructureCount <= 4;
+  const staleFrontObjective = !!(ai.lastPressureObjective && isNonTerminalFrontObjectiveType(ai.lastPressureObjective.type));
+  const objectiveStaleTicks = state.tick - ai.lastPressureObjectiveTick;
+  const objectiveLikelyStale = staleFrontObjective && objectiveStaleTicks >= Math.round(SIM_HZ * 10);
+
+  const active = economyStrained && smallArmy && enemyStructuresAlive && enemyArmyLight && lowStructureEndgame && objectiveLikelyStale;
+  if (!active) return { active: false, forceTerminalPivot: false, relaxTowerAversion: false, reserveCap: null };
+
+  const frontParity = snapshot.nearbyFriendlyArmyAtFront - snapshot.nearbyEnemyArmyAtFront;
+  const notBadlyBehind = frontParity >= -1;
+  const reserveCap = mySoldiers.length >= 3 && mySoldiers.length <= 5 ? 1 : 0;
+
+  return {
+    active: true,
+    forceTerminalPivot: true,
+    relaxTowerAversion: notBadlyBehind,
+    reserveCap,
   };
 }
 
@@ -1549,6 +1625,7 @@ function chooseWeightedTarget(
   owner: 0 | 1,
   maxDistance: number,
   role: TargetSelectionRole,
+  relaxTowerAversion: boolean,
 ): Entity | null {
   let best: Entity | null = null;
   let bestScore = -Infinity;
@@ -1558,7 +1635,7 @@ function chooseWeightedTarget(
     const distance = Math.hypot(e.pos.x - unit.pos.x, e.pos.y - unit.pos.y);
     if (distance > maxDistance) continue;
 
-    const score = scoreTargetForRole(state, unit, e, distance, role);
+    const score = scoreTargetForRole(state, unit, e, distance, role, relaxTowerAversion);
     if (score > bestScore || (score === bestScore && best && e.id < best.id)) {
       best = e;
       bestScore = score;
@@ -1574,6 +1651,7 @@ function scoreTargetForRole(
   target: Entity,
   distance: number,
   role: TargetSelectionRole,
+  relaxTowerAversion: boolean,
 ): number {
   let score = -distance * (role === 'harassment' ? 0.55 : role === 'rangedFollow' ? 0.65 : 0.8);
 
@@ -1594,11 +1672,11 @@ function scoreTargetForRole(
   } else if (role === 'rangedFollow') {
     if (target.kind === 'archer' || target.kind === 'troll') score += 6;
     if (target.kind === 'worker' || target.kind === 'peon') score += 3;
-    if (target.kind === 'tower') score -= 5;
+    if (target.kind === 'tower') score -= relaxTowerAversion ? 2.5 : 5;
   } else {
     if (target.kind === 'worker' || target.kind === 'peon') score += 1;
     if (target.kind === 'archer' || target.kind === 'troll') score += 2;
-    if (target.kind === 'tower') score -= 1.5;
+    if (target.kind === 'tower') score -= relaxTowerAversion ? 0.25 : 1.5;
     if (target.kind === 'townhall') score += 2;
   }
 
@@ -1650,15 +1728,19 @@ function bestExpansionMine(state: GameState, owner: 0 | 1, ai: AIController): En
   return best;
 }
 
-function getHomeReserveCount(ai: AIController, soldierCount: number, defenseActive: boolean, tick: number): number {
+function getHomeReserveCount(ai: AIController, soldierCount: number, defenseActive: boolean, tick: number, reserveCapOverride: number | null = null): number {
   if (soldierCount <= 1) return 0;
   const baseReserve = ai.homeReserveMin;
   if (defenseActive) ai.reserveReleaseUntilTick = tick + Math.round(SIM_HZ * 10);
-  if (!defenseActive && tick <= ai.reserveReleaseUntilTick) return Math.max(0, Math.min(soldierCount - 1, baseReserve - 1));
-  if (defenseActive || ai.strategicIntent === 'fortify') return Math.min(Math.max(0, soldierCount - 1), baseReserve + 1);
-  if (ai.strategicIntent === 'pressure') return Math.max(0, baseReserve - 1);
-  if (ai.strategicIntent === 'regroup') return Math.min(Math.max(0, soldierCount - 1), baseReserve + 1);
-  return Math.min(Math.max(0, soldierCount - 1), baseReserve);
+  let reserve = 0;
+  if (!defenseActive && tick <= ai.reserveReleaseUntilTick) reserve = Math.max(0, Math.min(soldierCount - 1, baseReserve - 1));
+  else if (defenseActive || ai.strategicIntent === 'fortify') reserve = Math.min(Math.max(0, soldierCount - 1), baseReserve + 1);
+  else if (ai.strategicIntent === 'pressure') reserve = Math.max(0, baseReserve - 1);
+  else if (ai.strategicIntent === 'regroup') reserve = Math.min(Math.max(0, soldierCount - 1), baseReserve + 1);
+  else reserve = Math.min(Math.max(0, soldierCount - 1), baseReserve);
+
+  if (reserveCapOverride !== null) reserve = Math.min(reserve, Math.max(0, Math.min(soldierCount - 1, reserveCapOverride)));
+  return reserve;
 }
 
 function assignArmyRoles(
