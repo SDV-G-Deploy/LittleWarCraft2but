@@ -329,6 +329,12 @@ export function processCommand(state: GameState, entity: Entity): void {
 
       // Attack-move: intercept any enemy that enters sight range while walking
       if (cmd.attackMove) {
+        const recentAttacker = acquireRecentAttackerTarget(state, entity);
+        if (recentAttacker) {
+          issueAttackCommand(entity, recentAttacker.id, state.tick, state);
+          return;
+        }
+
         const best = acquireNearestTarget(state, entity, (target) => {
           if (target.kind === 'goldmine') return false;
           if (isRangedUnit(entity.kind) && !isUnitKind(target.kind)) return false;

@@ -3,6 +3,7 @@ import { buildMapById } from '../data/maps';
 import { createWorld } from './world';
 import { spawnEntity } from './entities';
 import { autoAttackPass } from './commands';
+import { issueMoveCommand, processCommandPass } from './commands';
 import { processAttack, issueAttackCommand } from './combat';
 import type { Command, GameState } from '../types';
 
@@ -36,8 +37,37 @@ function testIdleMeleeRetaliatesAgainstRecentRangedAttackerOutsideSight(): void 
   assert.equal(retaliationCmd.targetId, troll.id, 'idle melee should retaliate against recent ranged attacker even outside normal sight');
 }
 
+function testAttackMoveRetaliatesAgainstRecentRangedAttackerOutsideSight(): void {
+  const state = makeState();
+  state.tick = 100;
+
+  const footman = spawnEntity(state, 'footman', 0, { x: 20, y: 20 });
+  const troll = spawnEntity(state, 'troll', 1, { x: 24, y: 20 });
+
+  footman.sightRadius = 3;
+  troll.sightRadius = 6;
+
+  assert.equal(issueMoveCommand(state, footman, 30, 20, true), true);
+  assert.equal(footman.cmd?.type, 'move');
+  assert.equal(footman.cmd?.attackMove, true);
+
+  assert.equal(issueAttackCommand(troll, footman.id, state.tick, state), true);
+  processAttack(state, troll);
+
+  assert.equal(footman.lastAttackerId, troll.id);
+  assert.equal(footman.lastAttackedByTick, state.tick);
+
+  processCommandPass(state);
+
+  const retaliationCmd = footman.cmd as Command | null;
+  assert.ok(retaliationCmd && retaliationCmd.type === 'attack');
+  if (!retaliationCmd || retaliationCmd.type !== 'attack') throw new Error('expected attack-move retaliation command');
+  assert.equal(retaliationCmd.targetId, troll.id, 'attack-move unit should retaliate against recent ranged attacker even outside normal sight');
+}
+
 function run(): void {
   testIdleMeleeRetaliatesAgainstRecentRangedAttackerOutsideSight();
+  testAttackMoveRetaliatesAgainstRecentRangedAttackerOutsideSight();
   console.log('defensive retaliation tests passed');
 }
 
