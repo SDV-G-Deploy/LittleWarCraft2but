@@ -1573,6 +1573,12 @@ function evaluateEndgamePressureOverride(
   mySoldiers: Entity[],
 ): EndgamePressureOverride {
   const enemyCrippled = snapshot.enemyArmySize <= 1 && snapshot.enemyWorkerCount === 0 && snapshot.enemyStructureCount > 0;
+  const staleFrontObjective = !!(ai.lastPressureObjective && isNonTerminalFrontObjectiveType(ai.lastPressureObjective.type));
+  const objectiveStaleTicks = state.tick - ai.lastPressureObjectiveTick;
+  const pivotStaleTicks = state.tick - ai.lastObjectivePivotTick;
+  const objectiveLikelyStale = staleFrontObjective
+    && objectiveStaleTicks >= Math.round(SIM_HZ * 10)
+    && pivotStaleTicks >= Math.round(SIM_HZ * 10);
   if (defenseThreat.severe || (ai.assaultPosture === 'regroup' && !enemyCrippled)) {
     return { active: false, forceTerminalPivot: false, relaxTowerAversion: false, reserveCap: null };
   }
@@ -1583,11 +1589,8 @@ function evaluateEndgamePressureOverride(
   const enemyArmyLight = snapshot.enemyArmySize <= 3;
   const enemyTowerCount = state.entities.filter(e => isOwnedByOpposingPlayer(e, owner) && e.kind === 'tower').length;
   const lowStructureEndgame = enemyTowerCount > 0 || snapshot.enemyStructureCount <= 4;
-  const staleFrontObjective = !!(ai.lastPressureObjective && isNonTerminalFrontObjectiveType(ai.lastPressureObjective.type));
-  const objectiveStaleTicks = state.tick - ai.lastPressureObjectiveTick;
-  const objectiveLikelyStale = staleFrontObjective && objectiveStaleTicks >= Math.round(SIM_HZ * 10);
 
-  const active = enemyCrippled || (economyStrained && smallArmy && enemyStructuresAlive && enemyArmyLight && lowStructureEndgame && objectiveLikelyStale);
+  const active = (enemyCrippled && objectiveLikelyStale) || (economyStrained && smallArmy && enemyStructuresAlive && enemyArmyLight && lowStructureEndgame && objectiveLikelyStale);
   if (!active) return { active: false, forceTerminalPivot: false, relaxTowerAversion: false, reserveCap: null };
 
   const frontParity = snapshot.nearbyFriendlyArmyAtFront - snapshot.nearbyEnemyArmyAtFront;
