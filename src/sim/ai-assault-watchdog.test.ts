@@ -200,6 +200,26 @@ function testNoTownhallAssaultContinuity(): void {
   assert.equal(grunt.cmd?.targetId, enemyWorker.id, 'remaining army should continue assaulting enemy units/structures');
 }
 
+function testNoTownhallRangedUnitCanContinueAssaultingEnemyStructures(): void {
+  const state = makeState();
+  const map = buildMapById(1);
+  state.tick = 920;
+
+  spawnEntity(state, 'townhall', 0, map.playerStart);
+  const enemyFarm = spawnEntity(state, 'farm', 0, { x: map.playerStart.x + 5, y: map.playerStart.y + 3 });
+  const troll = spawnEntity(state, 'troll', 1, { x: map.playerStart.x + 9, y: map.playerStart.y + 5 });
+
+  const ai = createAI('hard');
+  ai.phase = 'military';
+  ai.assaultPosture = 'regroup';
+
+  tickAI(state, ai, 1);
+
+  assert.equal(ai.phase, 'assault', 'AI should stay operational in no-townhall army-only mode for ranged remnants too');
+  assert.equal(troll.cmd?.type, 'attack');
+  assert.equal(troll.cmd?.targetId, enemyFarm.id, 'ranged remnants should keep pressuring enemy structures instead of idling behind melee');
+}
+
 function run(): void {
   testStaleAttackTargetDoesNotBlockReevaluation();
   testAssaultFinalFallbackMoveWhenNoUsefulCommandIssued();
@@ -207,6 +227,7 @@ function run(): void {
   testConservativeMoveWatchdogReissuesRegroupMove();
   testAttackWatchdogTreatsNoSpatialProgressAsStale();
   testNoTownhallAssaultContinuity();
+  testNoTownhallRangedUnitCanContinueAssaultingEnemyStructures();
   console.log('ai assault watchdog tests passed');
 }
 
