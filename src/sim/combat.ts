@@ -9,6 +9,7 @@ import { killEntity } from './entities';
 import { isTileBlockedByEntity } from './entities';
 import { findPath } from './pathfinding';
 import { findFlowFieldPath } from './nav/flow-field';
+import { findCombatFlowFieldPath } from './nav/combat-flow-field';
 import { createFlowFieldCache } from './nav/flow-field-cache';
 import { tryAdvancePathWithAvoidance } from './movement';
 import { recordCombatChaseRepath, recordMeleeSlotReassign, recordNearTargetHoldTick } from './movement-kpi';
@@ -274,6 +275,11 @@ function findCombatChasePath(
   entity: Entity,
   goal: { x: number; y: number },
 ): { x: number; y: number }[] | null {
+  const combatAwarePath = findCombatFlowFieldPath(state, entity.id, entity.owner, entity.pos.x, entity.pos.y, goal.x, goal.y);
+  if (combatAwarePath && (combatAwarePath.length > 0 || (entity.pos.x === goal.x && entity.pos.y === goal.y))) {
+    return combatAwarePath;
+  }
+
   const flowPath = findFlowFieldPath(state, entity.pos.x, entity.pos.y, goal.x, goal.y, combatFlowFieldCache);
   if (flowPath && (flowPath.length > 0 || (entity.pos.x === goal.x && entity.pos.y === goal.y))) {
     return flowPath;
@@ -523,6 +529,7 @@ export function processAttack(state: GameState, entity: Entity): void {
         chaseGoal,
         undefined,
         tryRepath,
+        { preferSidestepBeforeRepathOnAllyBlock: true },
       );
 
       if (stepResult === 'moved' || stepResult === 'sidestep' || stepResult === 'repathed' || stepResult === 'blocked') {

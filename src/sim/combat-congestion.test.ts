@@ -159,11 +159,30 @@ function testMeleeAssignmentsRefreshWithinTickAfterFrontlinerStepsForward(): voi
   assert.deepEqual(rear.cmd?.chaseGoal, { x: 38, y: 40 }, 'rear unit should retarget fresh staging slot opened earlier in this tick');
 }
 
+function testCombatPathingPrefersDetourAroundIdleFriendlyBackliner(): void {
+  const state = makeState();
+  state.tick = 1;
+
+  const target = spawnEntity(state, 'grunt', 1, { x: 40, y: 40 });
+  spawnEntity(state, 'archer', 0, { x: 38, y: 40 });
+  const rear = spawnEntity(state, 'footman', 0, { x: 37, y: 40 });
+
+  assert.equal(issueAttackCommand(rear, target.id, state.tick, state), true);
+
+  state.tick += ticksPerStep(rear.kind, rear.owner === 0 ? state.races[0] : rear.owner === 1 ? state.races[1] : null);
+  processAttack(state, rear);
+
+  assert.equal(rear.cmd?.type, 'attack');
+  assert.notDeepEqual(rear.pos, { x: 37, y: 40 }, 'rear melee should make progress instead of freezing behind idle allied backliner');
+  assert.notDeepEqual(rear.pos, { x: 38, y: 40 }, 'rear melee should not try to occupy the allied backliner tile directly');
+}
+
 function run(): void {
   testBlockedChaseRespectsMovementCadence();
   testMeleeManyVsOneUsesDistinctContactAndStagingSlots();
   testRearMeleeHoldsWhenNoFrontlineSlotsAreAvailable();
   testMeleeAssignmentsRefreshWithinTickAfterFrontlinerStepsForward();
+  testCombatPathingPrefersDetourAroundIdleFriendlyBackliner();
   console.log('combat congestion tests passed');
 }
 
