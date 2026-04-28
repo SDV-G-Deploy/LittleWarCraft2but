@@ -34,15 +34,17 @@ Recommended safest path now:
 ## Active focus
 
 1. Validate and tune gameplay variety using the current map-pressure package.
-2. Validate the 2026-04-26 AI assault watchdog pass aimed at reducing AFK combat units during assault/regroup.
+2. Run short live AI-vs-AI verification after the 2026-04-28 terminal pressure / anti-hoarding pass.
 3. Keep determinism-sensitive changes narrow and reviewable.
 4. Advance simulation-mode design/implementation in small passes without disturbing online paths.
 
 ## Latest gameplay/AI pass
 
-- Conservative AI assault watchdog + fallback move pass landed in code at `6d56efa`.
-- Scope: stale assault command reevaluation, fallback movement, safer regroup reissue behavior.
-- Reference: `docs/LW2B_AI_ASSAULT_WATCHDOG_PASS_2026-04-26.md`
+- Terminal pressure / anti-hoarding Branch A pass landed in code at `fca40fd` and was stabilized at `97a5dff`.
+- Scope: earlier finish-off commit, tighter reserve release in crippled-enemy states, stronger terminal objective preference, then narrowed endgame override gating to preserve non-endgame contested/front behavior.
+- References:
+  - `docs/LW2B_AI_TERMINAL_PRESSURE_AND_ANTI_HOARDING_PASS_2026-04-28.md`
+  - `docs/LW2B_AI_ENDGAME_RECOVERY_AND_RALLY_HOTFIX_2026-04-28.md`
 
 ## Explicit non-focus (for now)
 

@@ -31,6 +31,8 @@ When working as a coding agent or `codex_alt` on LW2B:
 - prefer narrow code claims in docs: "landed in code at commit X" over branch-wide health claims
 
 ## Active implementation/design docs
+- `LW2B_AI_TERMINAL_PRESSURE_AND_ANTI_HOARDING_PASS_2026-04-28.md`
+- `LW2B_AI_ENDGAME_RECOVERY_AND_RALLY_HOTFIX_2026-04-28.md`
 - `LW2B_CHANGELOG_2026-04-24_MOVEMENT_RECOVERY.md`
 - `LW2B_COMBAT_STABILIZATION_PASS_2026-04-24.md`
 - `LW2B_WORKER_MOVEMENT_PASS_2026-04-24.md`
