@@ -459,6 +459,8 @@ export function processAttack(state: GameState, entity: Entity): void {
     pushAttackVisual(state, entity, target);
     target.hp      -= netDmg;
     target.underAttackTick = state.tick;
+    target.lastAttackerId = entity.id;
+    target.lastAttackedByTick = state.tick;
     cmd.cooldownTick = state.tick + getResolvedAttackTicks(entity.kind, usesRaceProfile(entity.owner) ? state.races[entity.owner] : null);
 
     if (target.hp <= 0) {

@@ -187,6 +187,8 @@ export interface Entity {
   pressureCommittedUntilTick?: number; // early forward-commit window for pressure opener units
   constructionOf?: EntityKind;  // 'construction' entities: target building kind
   underAttackTick?: number;     // recent damage marker for UI / harassment readability
+  lastAttackerId?: number;      // most recent hostile attacker for defensive retaliation
+  lastAttackedByTick?: number;  // tick of the most recent hostile hit for defensive retaliation
   statHpMax?: number;           // optional runtime max HP override for race-specific variants
   statArmor?: number;           // optional runtime armor override for race-specific variants
 }

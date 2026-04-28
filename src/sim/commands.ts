@@ -21,6 +21,8 @@ const MOVE_REPATH_LIMIT = 5;
 const MOVE_FALLBACK_RADIUS = 3;
 const MOVE_REPATH_COOLDOWN_TICKS = 8;
 const MOVE_GOAL_PATH_TRIALS = 3;
+const DEFENSIVE_RETALIATION_MEMORY_TICKS = 3 * 20;
+const DEFENSIVE_RETALIATION_RADIUS_BONUS = 4;
 const flowFieldCache = createFlowFieldCache();
 
 function clampGoalToMap(tx: number, ty: number): Vec2 {
@@ -189,6 +191,24 @@ function acquireNearestTarget(
   return best;
 }
 
+function acquireRecentAttackerTarget(state: GameState, unit: Entity): Entity | null {
+  if (typeof unit.lastAttackedByTick !== 'number' || typeof unit.lastAttackerId !== 'number') return null;
+  if (state.tick - unit.lastAttackedByTick > DEFENSIVE_RETALIATION_MEMORY_TICKS) return null;
+
+  const attacker = getEntity(state, unit.lastAttackerId);
+  if (!attacker) return null;
+  if (!areHostile(unit.owner, attacker.owner)) return null;
+  if (attacker.kind === 'goldmine') return null;
+  if (isRangedUnit(unit.kind) && !isUnitKind(attacker.kind)) return null;
+
+  const retaliationRadius = Math.max(unit.sightRadius + DEFENSIVE_RETALIATION_RADIUS_BONUS, 6);
+  const dx = attacker.pos.x - unit.pos.x;
+  const dy = attacker.pos.y - unit.pos.y;
+  if (dx * dx + dy * dy > retaliationRadius * retaliationRadius) return null;
+
+  return attacker;
+}
+
 /**
  * Push stacked units apart. Call once per sim tick.
  * Only nudges stationary units — units already walking sort themselves out.
@@ -264,6 +284,12 @@ export function autoAttackPass(state: GameState): void {
       && getResolvedRange(entity.kind, usesRaceProfile(entity.owner) ? state.races[entity.owner] : null) > 1;
     if (!isUnit && !isArmedBuilding) continue;
     if (entity.cmd !== null) continue; // already has orders
+
+    const recentAttacker = acquireRecentAttackerTarget(state, entity);
+    if (recentAttacker) {
+      issueAttackCommand(entity, recentAttacker.id, state.tick, state);
+      continue;
+    }
 
     const best = acquireNearestTarget(state, entity, (target) => {
       if (target.kind === 'goldmine') return false;
