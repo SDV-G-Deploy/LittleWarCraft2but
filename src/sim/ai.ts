@@ -814,7 +814,13 @@ function updateStrategicIntent(state: GameState, ai: AIController, snapshot: AIS
   let nextIntent: AIStrategicIntent = ai.strategicIntent;
   let nextPosture: AIEconomicPosture = ai.economicPosture;
 
-  if (snapshot.myTownHallUnderThreat || snapshot.enemyArmyNearBase >= 3 || snapshot.myWorkersUnderThreat >= 2) {
+  const enemyCrippled = snapshot.enemyArmySize <= 1 && snapshot.enemyWorkerCount === 0 && snapshot.enemyStructureCount > 0;
+  const myFunctionalArmy = snapshot.myArmySize >= 3;
+
+  if (enemyCrippled && myFunctionalArmy && !snapshot.myTownHallUnderThreat) {
+    nextIntent = 'pressure';
+    nextPosture = 'stable';
+  } else if (snapshot.myTownHallUnderThreat || snapshot.enemyArmyNearBase >= 3 || snapshot.myWorkersUnderThreat >= 2) {
     nextIntent = 'fortify';
     nextPosture = 'fortify';
   } else if (snapshot.recentFailedPush && snapshot.myArmySize < ai.attackWaveSize + 1) {
@@ -843,6 +849,12 @@ function updateStrategicIntent(state: GameState, ai: AIController, snapshot: AIS
 }
 
 function updateAssaultPosture(state: GameState, ai: AIController, snapshot: AISnapshot): void {
+  const enemyCrippled = snapshot.enemyArmySize <= 1 && snapshot.enemyWorkerCount === 0 && snapshot.enemyStructureCount > 0;
+  if (enemyCrippled && snapshot.myArmySize >= 3 && !snapshot.myTownHallUnderThreat) {
+    ai.assaultPosture = 'commit';
+    return;
+  }
+
   if (ai.strategicIntent === 'fortify') {
     ai.assaultPosture = 'regroup';
     return;
@@ -1453,12 +1465,13 @@ function evaluateEconCollapse(
   const goldWorkers = myWorkers.filter(w => w.cmd?.type === 'gather' && w.cmd.resourceType === 'gold').length;
   const workerCost = getResolvedCost(RACES[race].worker, race).gold;
   const soldierCost = getResolvedCost(RACES[race].soldier, race).gold;
+  const hasTowerSalvagePath = state.entities.some(e => e.owner === owner && e.kind === 'tower');
 
   const recovered = workerCount >= 2 || (goldWorkers > 0 && gold >= workerCost);
   const workerStarved = workerCount <= 1 && (goldWorkers === 0 || gold < workerCost);
   const econCollapsed = !recovered && (
     (workerCount === 0 && gold < workerCost)
-    || (workerCount <= 1 && goldWorkers === 0 && gold < soldierCost && armyCount <= 2)
+    || (workerCount <= 1 && goldWorkers === 0 && gold < soldierCost && (armyCount <= 2 || hasTowerSalvagePath))
   );
 
   return {
@@ -1480,9 +1493,10 @@ function evaluateRecoveryPriority(
   const goldWorkers = myWorkers.filter(w => w.cmd?.type === 'gather' && w.cmd.resourceType === 'gold').length;
   const workerCount = myWorkers.length;
   const canRebuildWorker = gold >= workerCost;
+  const hasTowerSalvagePath = state.entities.some(e => e.owner === owner && e.kind === 'tower');
   const prioritizeRecovery = econCollapse.econCollapsed
     && workerCount <= 1
-    && (canRebuildWorker || goldWorkers === 0);
+    && (canRebuildWorker || goldWorkers === 0 || hasTowerSalvagePath);
   return { prioritizeRecovery, workerCost };
 }
 
@@ -1554,7 +1568,8 @@ function evaluateEndgamePressureOverride(
   myWorkers: Entity[],
   mySoldiers: Entity[],
 ): EndgamePressureOverride {
-  if (defenseThreat.severe || ai.assaultPosture === 'regroup') {
+  const enemyCrippled = snapshot.enemyArmySize <= 1 && snapshot.enemyWorkerCount === 0 && snapshot.enemyStructureCount > 0;
+  if (defenseThreat.severe || (ai.assaultPosture === 'regroup' && !enemyCrippled)) {
     return { active: false, forceTerminalPivot: false, relaxTowerAversion: false, reserveCap: null };
   }
 
@@ -1568,12 +1583,12 @@ function evaluateEndgamePressureOverride(
   const objectiveStaleTicks = state.tick - ai.lastPressureObjectiveTick;
   const objectiveLikelyStale = staleFrontObjective && objectiveStaleTicks >= Math.round(SIM_HZ * 10);
 
-  const active = economyStrained && smallArmy && enemyStructuresAlive && enemyArmyLight && lowStructureEndgame && objectiveLikelyStale;
+  const active = enemyCrippled || (economyStrained && smallArmy && enemyStructuresAlive && enemyArmyLight && lowStructureEndgame && objectiveLikelyStale);
   if (!active) return { active: false, forceTerminalPivot: false, relaxTowerAversion: false, reserveCap: null };
 
   const frontParity = snapshot.nearbyFriendlyArmyAtFront - snapshot.nearbyEnemyArmyAtFront;
   const notBadlyBehind = frontParity >= -1;
-  const reserveCap = mySoldiers.length >= 3 && mySoldiers.length <= 5 ? 1 : 0;
+  const reserveCap = enemyCrippled ? 0 : mySoldiers.length >= 3 && mySoldiers.length <= 5 ? 1 : 0;
 
   return {
     active: true,
@@ -1908,6 +1923,7 @@ function bestExpansionMine(state: GameState, owner: 0 | 1, ai: AIController): En
 }
 
 function getHomeReserveCount(ai: AIController, soldierCount: number, defenseActive: boolean, tick: number, reserveCapOverride: number | null = null): number {
+  if (reserveCapOverride === 0) return 0;
   if (soldierCount <= 1) return 0;
   const baseReserve = ai.homeReserveMin;
   if (defenseActive) ai.reserveReleaseUntilTick = tick + Math.round(SIM_HZ * 10);

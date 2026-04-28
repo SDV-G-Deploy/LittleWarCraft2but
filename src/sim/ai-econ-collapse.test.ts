@@ -372,6 +372,32 @@ function testTowerDangerGateDoesNotChangeNormalNonTowerProduction(): void {
   assert.equal(humanBarracks.cmd?.type, 'train', 'non-tower production should continue normally when tower intent is blocked');
 }
 
+function testWorkerlessArmyWithTowerPathStillPrioritizesRecovery(): void {
+  const state = makeState();
+  const { myTownHall } = seedBase(state);
+  state.tick = 600;
+  state.gold[1] = 0;
+  state.wood[1] = 0;
+
+  state.entities = state.entities.filter(e => !(e.owner === 1 && e.kind === 'peon'));
+  spawnEntity(state, 'tower', 1, { x: myTownHall.pos.x + 6, y: myTownHall.pos.y });
+  spawnEntity(state, 'grunt', 1, { x: 42, y: 10 });
+  spawnEntity(state, 'grunt', 1, { x: 43, y: 10 });
+  spawnEntity(state, 'grunt', 1, { x: 44, y: 10 });
+  spawnEntity(state, 'grunt', 1, { x: 45, y: 10 });
+  spawnEntity(state, 'grunt', 1, { x: 46, y: 10 });
+  spawnEntity(state, 'grunt', 1, { x: 47, y: 10 });
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  tickAI(state, ai, 1);
+
+  assert.equal(countOwnedTowers(state), 0, 'workerless army with salvage path should still consume one tower for recovery');
+  assert.equal(ai.phase, 'economy');
+  assert.equal(myTownHall.cmd?.type, 'train');
+  assert.equal(myTownHall.cmd?.unit, 'peon');
+}
+
 function run(): void {
   testSurvivingWorkerForcedToGoldInCollapse();
   testTowerBuildSuppressedInCollapseState();
@@ -386,6 +412,7 @@ function run(): void {
   testHumanSkipsTowerBuildWhenEnemyCombatDominatesNearby();
   testHumanStillBuildsTowerWhenAreaIsDefensible();
   testTowerDangerGateDoesNotChangeNormalNonTowerProduction();
+  testWorkerlessArmyWithTowerPathStillPrioritizesRecovery();
   console.log('ai econ collapse tests passed');
 }
 
