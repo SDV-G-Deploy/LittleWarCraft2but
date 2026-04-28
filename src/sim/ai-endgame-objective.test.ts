@@ -117,6 +117,40 @@ function testSevereHomeThreatOverridesEndgamePush(): void {
   assert.equal(ai.lastPressureObjective?.type, 'homeGuard');
 }
 
+function testCrippledEnemyForcesCommitAndNoReserve(): void {
+  const state = makeState();
+  const { myTownHall, enemyTownHall, contestedMine } = seedBase(state);
+  state.tick = 900;
+  state.gold[1] = 0;
+  state.wood[1] = 0;
+
+  spawnEntity(state, 'footman', 1, { x: 24, y: 29 });
+  spawnEntity(state, 'footman', 1, { x: 25, y: 29 });
+  spawnEntity(state, 'archer', 1, { x: 26, y: 29 });
+  spawnEntity(state, 'footman', 1, { x: 27, y: 29 });
+
+  spawnEntity(state, 'tower', 0, { x: enemyTownHall.pos.x + 4, y: enemyTownHall.pos.y + 1 });
+  const enemyGrunt = spawnEntity(state, 'grunt', 0, { x: enemyTownHall.pos.x + 2, y: enemyTownHall.pos.y + 2 });
+  enemyGrunt.hp = 10;
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  ai.homeReserveMin = 3;
+  ai.lastPressureObjective = { type: 'contestedMine', targetId: contestedMine.id, anchor: { x: contestedMine.pos.x, y: contestedMine.pos.y - 1 } };
+  ai.lastPressureObjectiveTick = state.tick - Math.round(SIM_HZ * 20);
+  ai.lastObjectivePivotTick = state.tick - Math.round(SIM_HZ * 20);
+
+  tickAI(state, ai, 1);
+
+  assert.equal(ai.assaultPosture, 'commit');
+  const homeAnchor = { x: myTownHall.pos.x + 1, y: myTownHall.pos.y + myTownHall.tileH };
+  const myArmy = state.entities.filter(e => e.owner === 1 && ['footman', 'archer'].includes(e.kind));
+  const nearHomeCommands = myArmy.filter(u =>
+    u.cmd?.type === 'move' && Math.hypot(u.cmd.goal.x - homeAnchor.x, u.cmd.goal.y - homeAnchor.y) <= 4,
+  ).length;
+  assert.equal(nearHomeCommands, 0, 'crippled enemy should release all reserve when home is not under severe threat');
+}
+
 function testNonEndgameBehaviorUnchanged(): void {
   const state = makeState();
   const { contestedMine } = seedBase(state);
@@ -150,6 +184,7 @@ function run(): void {
   testEndgamePivotsTowardEnemyBaseProgress();
   testEndgameReserveCapKeepsAttackMass();
   testSevereHomeThreatOverridesEndgamePush();
+  testCrippledEnemyForcesCommitAndNoReserve();
   testNonEndgameBehaviorUnchanged();
   console.log('ai endgame objective tests passed');
 }

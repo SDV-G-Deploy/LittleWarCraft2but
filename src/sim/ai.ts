@@ -850,7 +850,7 @@ function updateStrategicIntent(state: GameState, ai: AIController, snapshot: AIS
 
 function updateAssaultPosture(state: GameState, ai: AIController, snapshot: AISnapshot): void {
   const enemyCrippled = snapshot.enemyArmySize <= 1 && snapshot.enemyWorkerCount === 0 && snapshot.enemyStructureCount > 0;
-  if (enemyCrippled && snapshot.myArmySize >= 3 && !snapshot.myTownHallUnderThreat) {
+  if (enemyCrippled && snapshot.myArmySize >= 2 && !snapshot.myTownHallUnderThreat) {
     ai.assaultPosture = 'commit';
     return;
   }
@@ -1020,17 +1020,17 @@ function choosePressureObjective(
 
   let candidate: AIPressureObjective | null = null;
 
-  if (endgameOverride.active && enemyTownHall) {
-    candidate = {
-      type: 'enemyApproach',
-      targetId: enemyTownHall.id,
-      anchor: { x: enemyTownHall.pos.x + 1, y: enemyTownHall.pos.y + 2 },
-    };
-  } else if (endgameOverride.active && enemyBarracks) {
+  if (endgameOverride.active && enemyBarracks) {
     candidate = {
       type: 'pressureProduction',
       targetId: enemyBarracks.id,
       anchor: { x: enemyBarracks.pos.x, y: enemyBarracks.pos.y + enemyBarracks.tileH },
+    };
+  } else if (endgameOverride.active && enemyTownHall) {
+    candidate = {
+      type: 'enemyApproach',
+      targetId: enemyTownHall.id,
+      anchor: { x: enemyTownHall.pos.x + 1, y: enemyTownHall.pos.y + 2 },
     };
   }
 
@@ -1592,7 +1592,7 @@ function evaluateEndgamePressureOverride(
 
   const frontParity = snapshot.nearbyFriendlyArmyAtFront - snapshot.nearbyEnemyArmyAtFront;
   const notBadlyBehind = frontParity >= -1;
-  const reserveCap = enemyCrippled ? 0 : mySoldiers.length >= 3 && mySoldiers.length <= 5 ? 1 : 0;
+  const reserveCap = enemyCrippled ? 0 : mySoldiers.length <= 5 ? 0 : 1;
 
   return {
     active: true,
