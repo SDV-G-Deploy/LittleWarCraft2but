@@ -1522,12 +1522,16 @@ function shouldAttemptEmergencyTowerSalvage(
   if (!noEconomyPath) return false;
   if (state.gold[owner] >= recovery.workerCost) return false;
 
+  const enemyCrippled = state.entities.filter(e => isOwnedByOpposingPlayer(e, owner) && isUnitKind(e.kind)).length <= 1;
+  const salvageableTowerCount = enemyCrippled ? towers.length : Math.max(0, towers.length - 1);
+  if (salvageableTowerCount <= 0) return false;
+
   const nearbyEnemyPressure = state.entities.filter(e =>
     isOwnedByOpposingPlayer(e, owner)
     && isUnitKind(e.kind)
     && Math.hypot(e.pos.x - myTownHall.pos.x, e.pos.y - myTownHall.pos.y) <= ai.baseDefenseRadius + 2,
   ).length;
-  if (nearbyEnemyPressure >= 3 && towers.length <= 1) return false;
+  if (!enemyCrippled && nearbyEnemyPressure >= 3 && towers.length <= 1) return false;
 
   const tinyArmy = mySoldiers.length <= 3;
   if (nearbyEnemyPressure >= 2 && tinyArmy) return false;

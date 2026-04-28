@@ -34,8 +34,29 @@ function testRallyChoosesNearbyFreeTileWhenExactTileIsOccupied(): void {
   assert.notDeepEqual(spawned!.cmd!.goal, { x: 30, y: 30 }, 'occupied rally tile should not remain the exact move goal');
 }
 
+function testRallySpreadsMultipleFreshMeleeAcrossWiderArrivalTiles(): void {
+  const state = makeState();
+  const barracks = spawnEntity(state, 'barracks', 0, { x: 20, y: 20 });
+  barracks.rallyPoint = { x: 30, y: 30 };
+
+  for (let i = 0; i < 6; i++) {
+    barracks.cmd = {
+      type: 'train',
+      unit: 'footman',
+      ticksLeft: 1,
+      queue: [],
+    };
+    processTrain(state, barracks);
+  }
+
+  const trainees = state.entities.filter((e): e is typeof e & { cmd: { type: 'move'; goal: { x: number; y: number } } } => e.owner === 0 && e.kind === 'footman' && e.cmd?.type === 'move');
+  const uniqueGoals = new Set(trainees.map(e => `${e.cmd.goal.x},${e.cmd.goal.y}`));
+  assert.ok(uniqueGoals.size >= 4, `expected wider rally spread for fresh melee cluster, got ${uniqueGoals.size} unique goals`);
+}
+
 function run(): void {
   testRallyChoosesNearbyFreeTileWhenExactTileIsOccupied();
+  testRallySpreadsMultipleFreshMeleeAcrossWiderArrivalTiles();
   console.log('rally pathing tests passed');
 }
 

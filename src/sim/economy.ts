@@ -577,6 +577,11 @@ function findSpawnTile(state: GameState, sx: number, sy: number): Vec2 {
     { x: 1, y: 1 }, { x: -1, y: 1 }, { x: 1, y: -1 }, { x: -1, y: -1 },
     { x: 2, y: 0 }, { x: -2, y: 0 }, { x: 0, y: 2 }, { x: 0, y: -2 },
     { x: 2, y: 1 }, { x: -2, y: 1 }, { x: 2, y: -1 }, { x: -2, y: -1 },
+    { x: 1, y: 2 }, { x: -1, y: 2 }, { x: 1, y: -2 }, { x: -1, y: -2 },
+    { x: 2, y: 2 }, { x: -2, y: 2 }, { x: 2, y: -2 }, { x: -2, y: -2 },
+    { x: 3, y: 0 }, { x: -3, y: 0 }, { x: 0, y: 3 }, { x: 0, y: -3 },
+    { x: 3, y: 1 }, { x: -3, y: 1 }, { x: 3, y: -1 }, { x: -3, y: -1 },
+    { x: 1, y: 3 }, { x: -1, y: 3 }, { x: 1, y: -3 }, { x: -1, y: -3 },
   ];
   for (const d of DIRS) {
     const nx = sx + d.x; const ny = sy + d.y;
@@ -601,7 +606,7 @@ function pickRallyArrivalTile(state: GameState, preferred: Vec2, unitIdSeed: num
   };
 
   pushUnique(preferred.x, preferred.y);
-  for (let r = 1; r <= 2; r++) {
+  for (let r = 1; r <= 4; r++) {
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
         if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;

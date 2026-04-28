@@ -3,7 +3,7 @@ import { buildMapById } from '../data/maps';
 import { createWorld } from './world';
 import { spawnEntity } from './entities';
 import { createAI, tickAI } from './ai';
-import { MAP_W, MINE_GOLD_INITIAL, NEUTRAL, type Entity, type GameState } from '../types';
+import { MAP_W, MINE_GOLD_INITIAL, NEUTRAL, isUnitKind, type Entity, type GameState } from '../types';
 
 function makeState(): GameState {
   const map = buildMapById(1);
@@ -398,6 +398,30 @@ function testWorkerlessArmyWithTowerPathStillPrioritizesRecovery(): void {
   assert.equal(myTownHall.cmd?.unit, 'peon');
 }
 
+function testCrippledEnemyAllowsSalvagingLastTowerForRecovery(): void {
+  const state = makeState();
+  const { myTownHall } = seedBase(state);
+  state.tick = 610;
+  state.gold[1] = 0;
+  state.wood[1] = 0;
+
+  state.entities = state.entities.filter(e => !(e.owner === 1 && e.kind === 'peon'));
+  state.entities = state.entities.filter(e => !(e.owner === 0 && e.kind === 'worker'));
+  state.entities = state.entities.filter(e => !(e.owner === 0 && isUnitKind(e.kind)));
+
+  spawnEntity(state, 'tower', 1, { x: myTownHall.pos.x + 6, y: myTownHall.pos.y });
+  spawnEntity(state, 'grunt', 1, { x: 42, y: 10 });
+  spawnEntity(state, 'grunt', 1, { x: 43, y: 10 });
+
+  const ai = createAI('hard');
+  ai.phase = 'assault';
+  tickAI(state, ai, 1);
+
+  assert.equal(countOwnedTowers(state), 0, 'crippled enemy state should allow salvaging even the last tower to recover');
+  assert.equal(ai.phase, 'economy');
+  assert.equal(myTownHall.cmd?.type, 'train');
+}
+
 function run(): void {
   testSurvivingWorkerForcedToGoldInCollapse();
   testTowerBuildSuppressedInCollapseState();
@@ -413,6 +437,7 @@ function run(): void {
   testHumanStillBuildsTowerWhenAreaIsDefensible();
   testTowerDangerGateDoesNotChangeNormalNonTowerProduction();
   testWorkerlessArmyWithTowerPathStillPrioritizesRecovery();
+  testCrippledEnemyAllowsSalvagingLastTowerForRecovery();
   console.log('ai econ collapse tests passed');
 }
 
