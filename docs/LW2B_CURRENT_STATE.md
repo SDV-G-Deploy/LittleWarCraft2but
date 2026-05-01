@@ -1,64 +1,82 @@
-# LW2B current state (2026-04-25)
+# LW2B final state (2026-05-01)
 
-Short entrypoint for "where we are now" without re-reading all historical passes.
+Canonical final-state entrypoint for where the project ended.
 
 ## One-line state
 
-Core gameplay/movement recovery is stabilized, and online topology is currently split in practice: `w2.kislota.today` is the public frontend while realtime infra is being treated as a separately movable backend contour (currently `rts.kislota.today` in active diagnostics).
+LW2B is a finished small RTS demo with deterministic client-hosted simulation, a functional gameplay/AI/runtime stack, and an archived status after reaching the natural ceiling of its current compact scope.
 
-CI/build truth should be treated as external runtime state, not as something guaranteed by this document.
+## Final status
 
-## What is currently true
+- Project status: **Archived**
+- Delivery state: **Demo complete**
+- Active development status: **closed**
 
-- Movement/combat/worker recovery passes from 2026-04-24 are landed and documented.
-- AI goal spread and worker return-retarget fixes are landed.
-- MultiWebCore transport path has an end-to-end validation pass.
-- Effective production reality is transitional split-topology: frontend reachability and realtime reachability are tracked separately.
-- Docs describe intended/current known project shape, but current CI truth must be checked in GitHub Actions or local build/test runs.
+## What is true in the final codebase
 
-## Public online topology decision note (2026-04-25)
+- Core RTS gameplay loop is in place, including gold + wood economy, building, production, combat, and map play.
+- Opening-plan selection (`Eco`, `Tempo`, `Pressure`) exists and is tied to real gameplay incentives.
+- Movement/combat/worker recovery passes from late April are landed.
+- Offline simulation mode exists as an observer-mode AI-vs-AI runtime.
+- Online runtime supports three transport paths in code:
+  - `peerjs`
+  - `ws-relay`
+  - `mwc`
+- MultiWebCore transport has its own integration-test path.
+- AI behavior is materially beyond a placeholder sparring bot and includes shipped or covered work for:
+  - posture
+  - goal spread
+  - initiative identity
+  - role split
+  - mine intent
+  - econ-collapse recovery
+  - assault watchdog behavior
+  - endgame / terminal-pressure behavior
+- The test surface is broad enough that the repository should be read as a meaningful simulation/gameplay prototype rather than as a toy sketch.
 
-Current diagnostic conclusion:
-- `w2.kislota.today` and realtime backend reliability are not the same problem surface.
-- We should treat static frontend delivery and realtime signaling/ICE/TURN as separate operational layers.
+## Final project strengths
 
-Viable canonicalization options:
-1. Keep strict same-origin on `w2.kislota.today` (frontend + realtime together).
-2. Keep split topology: `w2` as frontend, `rts` as canonical realtime backend.
-3. Move to a neutral canonical backend hostname (for example `rtc.*`) while keeping frontend host independent.
+1. Deterministic RTS core with readable economy/combat/map interaction.
+2. Practical movement and worker-flow improvements backed by tests and doctrine notes.
+3. Credible AI behavior work across pressure, recovery, and endgame states.
+4. Useful online/runtime experimentation without requiring an authoritative-server redesign.
+5. Strong documentation value as a research and implementation archive.
 
-Recommended safest path now:
-- Use option 2 as the short-term production baseline, then migrate toward option 3 after stability evidence.
-- Do not force a same-origin-only rollback until Russia-facing reachability and cross-origin behavior are consistently validated.
+## Final limitations
 
-## Active focus
+- Content density remains intentionally limited.
+- Army and tech vocabulary are sufficient for a demo, but not for a much broader long-form expansion through tuning alone.
+- Map diversity improves match flow, but does not by itself create enough distinct long-term match archetypes to justify a major continuation without a larger content phase.
+- The next meaningful increase in gameplay variety would require broader design/content expansion, not another narrow pass.
 
-1. Validate and tune gameplay variety using the current map-pressure package.
-2. Run short live AI-vs-AI verification after the 2026-04-28 terminal pressure / anti-hoarding pass.
-3. Keep determinism-sensitive changes narrow and reviewable.
-4. Advance simulation-mode design/implementation in small passes without disturbing online paths.
+## Final operational reality
 
-## Latest gameplay/AI pass
+- LW2B uses client-hosted deterministic simulation.
+- Frontend/public delivery and realtime/backend reachability should be treated as separate operational concerns.
+- The online model should be understood through transport/bootstrap verification, not through assumptions that the project is becoming a server-authoritative game.
 
-- Terminal pressure / anti-hoarding Branch A pass landed in code at `fca40fd` and was stabilized at `97a5dff`.
-- Scope: earlier finish-off commit, tighter reserve release in crippled-enemy states, stronger terminal objective preference, then narrowed endgame override gating to preserve non-endgame contested/front behavior.
-- References:
-  - `docs/LW2B_AI_TERMINAL_PRESSURE_AND_ANTI_HOARDING_PASS_2026-04-28.md`
-  - `docs/LW2B_AI_ENDGAME_RECOVERY_AND_RALLY_HOTFIX_2026-04-28.md`
+## Final interpretation
 
-## Explicit non-focus (for now)
+LW2B should now be read as:
+- a completed experimental/demo RTS project
+- a compact but real playable system
+- a source of reusable technical and design lessons
+- an archive, not an active roadmap
 
-- No broad netcode rewrite.
-- No rollback/reconciliation initiative.
-- No large architecture churn without concrete blocker evidence.
+## Verification truth
 
-## Canonical reading path
+Docs are not build truth.
 
-1. `../README.md`
-2. `../ROADMAP.md`
-3. `../NETWORK_ARCHITECTURE.md`
-4. `README.md` (docs index)
-5. `LW2B_GAMEPLAY_DOCTRINE_AND_CROSS_LAYER_INVARIANTS.md`
-6. `LW2B_MOVEMENT_DOCTRINE_2026-04-23.md`
+If verification is needed later, confidence should still come from:
+- `npm run build`
+- `npm test`
+- targeted transport or runtime checks when relevant
 
-Then read the latest active pass docs as needed from `README.md`.
+## Canonical reading order
+
+1. `../PROJECT_STATUS.md`
+2. `../README.md`
+3. `../ROADMAP.md`
+4. `../NETWORK_ARCHITECTURE.md`
+5. `FINAL_ASSESSMENT.md`
+6. `README.md` (docs index)

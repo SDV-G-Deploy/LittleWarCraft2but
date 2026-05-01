@@ -1,320 +1,114 @@
 # LW2B Network Architecture
 
-This document captures the current multiplayer networking architecture for **LittleWarCraft2but (LW2B)**, the main dependency points around PeerJS / WebRTC / TURN, and the practical implications for connectivity, especially for players joining from Russia.
+This document describes the online model that surrounds LW2B gameplay simulation, the transport paths that exist in code, the operational framing used by the project, and the practical verification surfaces for multiplayer health.
 
-Related deep-dive reports from the latest audit pass:
-- `NETWORK_AUDIT_2026-04-21.md`
-- `NETWORK_MECHANICS_AUDIT_2026-04-21.md`
+LW2B is archived, but this document remains useful as a reference for how the demo handled multiplayer architecture and transport concerns.
 
-## Summary
+## Architecture model
 
-LW2B currently uses a **client-hosted multiplayer model**:
+LW2B uses a client-hosted deterministic simulation model.
+
+That means:
 - gameplay simulation runs in the clients
-- online play uses **PeerJS + WebRTC data channels**
-- a small self-hosted backend provides:
-  - PeerJS signaling
-  - runtime ICE configuration
-  - TURN relay when direct peer connectivity fails
+- there is no dedicated authoritative game server in the current design
+- online infrastructure exists to support bootstrap, session establishment, transport, and difficult-network traversal
 
-There is **no dedicated authoritative game server** in the current architecture.
-This is important because it means connectivity issues can be addressed by moving or duplicating the networking backend without rewriting gameplay simulation.
+In practice, the network layer is responsible for:
+- signaling/session bootstrap
+- runtime ICE configuration
+- TURN relay for hard NAT / relay cases
+- supported transport paths used by the game runtime
 
-## Current architecture shape
+Main architectural consequence:
+- online reliability problems can often be addressed by changing the networking contour without rewriting gameplay simulation
 
-Public entry point:
-- `https://game.example.com/`
+## Transports present in code
 
-That public origin currently fronts multiplayer roles:
-1. game client entry point (`/`)
-2. PeerJS signaling endpoint (`/peerjs`)
-3. runtime ICE config endpoint (`/api/ice`)
-4. MultiWebCore websocket endpoint (`/mwc`)
+LW2B supports three transport paths in code:
 
-TURN relay is also part of the same production networking stack.
+1. `peerjs`
+   - WebRTC data-channel path
+   - signaling/bootstrap support around PeerJS
 
-In practice, the current multiplayer backend is organized around one main public networking contour:
-- domain: `game.example.com`
-- TURN/public IP: `203.0.113.10`
-- infra host assumption: Hetzner-based deployment
+2. `ws-relay`
+   - websocket relay transport path
 
-## Main code and infra locations
+3. `mwc`
+   - MultiWebCore websocket transport path
 
-### Client networking
+Main code locations:
 - `src/net/session.ts`
-- `src/menu.ts`
+- `src/net/session-core.ts`
+- `src/net/netcmd.ts`
+- `src/net/transports/peerjs-transport.ts`
+- `src/net/transports/ws-relay-transport.ts`
+- `src/net/transports/mwc-transport.ts`
 
-### Infra
+Related verification surface:
+- `src/net/mwc-transport.integration.test.ts`
+
+## Operational framing used by the project
+
+Operationally, frontend delivery and realtime backend reachability should be treated as separate concerns.
+
+Project reality at the end of active work:
+- frontend/public entrypoint and realtime contour were not treated as a single simplistic same-origin story
+- realtime concerns included signaling, ICE/TURN, and transport-specific connectivity behavior
+- deployment naming could evolve without changing the core simulation model
+
+This distinction matters because:
+- frontend reachability and realtime reachability can fail independently
+- hostname wording alone does not explain multiplayer health
+- operational topology can change faster than architecture truth
+
+So the correct reading is:
+- architecture truth = client-hosted deterministic simulation with supporting online services
+- operational truth = multiplayer health depends on bootstrap, transport, and reachability surfaces
+- deployment truth = naming and hosting layout can change without redefining the gameplay model
+
+## Verification surfaces
+
+The online path should be evaluated through concrete surfaces, not only through architecture descriptions.
+
+Primary verification surfaces:
+1. room create / room join flow
+2. transport startup behavior
+3. packet flow / tick sync stability
+4. ICE/TURN reachability for difficult network paths
+5. transport-specific behavior across `peerjs`, `ws-relay`, and `mwc`
+
+Useful verification methods:
+- local build and targeted transport tests
+- manual live room-flow validation
+- focused checks around sync stability and error reporting
+
+## Risks and cautions captured by the project
+
+- Deterministic gameplay state is more important than transport cleverness.
+- A transport being available in code does not mean all deployment paths are equally validated.
+- Operational hostname or topology decisions should follow real connectivity evidence, not preference alone.
+- Broad network-model churn is higher risk than narrow operational fixes unless evidence proves the model insufficient.
+- Documentation should not flatten placeholder hostnames, current deployment reality, and future target naming into one layer.
+
+## Final architectural direction taken
+
+The project's direction remained conservative:
+- keep the client-hosted simulation model
+- keep transport support explicit and testable
+- keep frontend and realtime concerns separable where that improves operational clarity
+- validate runtime behavior before over-canonicalizing hostnames or deployment shape
+
+In short:
+- do not rewrite gameplay simulation to solve transport symptoms prematurely
+- do not confuse deployment naming with architecture truth
+- keep the bootstrap/transport contour movable while preserving the core simulation model
+
+## Related files
+
+Runtime/network code:
+- `src/net/`
+
+Operational/support files:
 - `infra/compose.yaml`
 - `infra/nginx.conf`
 - `infra/ice-server.js`
-- `.env.example`
-- `infra/.env.example`
-
-## Runtime networking flow
-
-### 1. Lobby / room flow
-Lobby orchestration is client-side.
-
-In `src/menu.ts`:
-- host creates a session via `createSession('host', ...)`
-- guest joins via `createSession('guest', joinCode, ...)`
-- online mode can use `selfhost` or `public`
-
-This means room creation/join UX does not depend on a separate gameplay server. It only depends on the networking bootstrap path working.
-
-### 2. PeerJS / WebRTC session
-In `src/net/session.ts` the game creates a PeerJS client roughly in this shape:
-- `Peer(...)`
-- `DataConnection`
-- WebRTC data-channel-based command sync
-
-Supported runtime modes:
-- `public`
-  - PeerJS host: `0.peerjs.com:443`
-  - STUN fallback: Google STUN
-- `selfhost`
-  - PeerJS host/path/port/secure from `VITE_PEER_*`
-  - ICE from `./api/ice`, with fallback to `VITE_ICE_SERVERS`
-
-So the online path depends on these layers:
-1. signaling reachability
-2. ICE server reachability
-3. TURN availability for relay cases
-4. browser-to-browser WebRTC success
-
-### 3. ICE / TURN flow
-In self-hosted mode, the client first requests:
-- `GET /api/ice`
-
-That endpoint returns runtime ICE config, including TURN credentials.
-
-In `infra/ice-server.js`:
-- the API returns STUN config
-- and TURN config using short-lived HMAC-based credentials
-
-This is the correct shape for production TURN usage.
-
-## Infra stack details
-
-### `infra/compose.yaml`
-Current self-hosted stack includes:
-- `peerjs` (signaling server)
-- `peerjs-https` (nginx with TLS termination)
-- `coturn` (relay)
-- `ice-api` (short-lived TURN credential endpoint)
-
-Current TURN transport shape in repo:
-- TURN UDP/TCP on `3478`
-- TURN/TLS on configurable `TURN_TLS_PORT` (default `5349`)
-- ICE API can emit `turns:` first for TLS-friendly fallback on difficult networks
-- true `turns:...:443` still needs host-side 443 plumbing because nginx already terminates HTTPS on 443 in the default single-IP compose layout
-
-### `infra/nginx.conf`
-Nginx routes requests by path:
-- `/peerjs` and `/peerjs/*` -> PeerJS
-- `/api/ice` -> ice-api
-- `/` -> game client
-
-This same-origin setup keeps the multiplayer bootstrap under one public origin.
-
-## Environment and deployment coupling
-
-### Client env
-In `.env.example` the current production-like defaults are:
-- `VITE_PEER_HOST=game.example.com`
-- `VITE_PEER_PORT=443`
-- `VITE_PEER_PATH=/`
-- `VITE_PEER_SECURE=true`
-- `VITE_ICE_SERVERS` includes `203.0.113.10:3478`
-
-### Infra env
-In `infra/.env.example`:
-- `PEER_DOMAIN=game.example.com`
-- `TURN_REALM=game.example.com`
-- `TURN_EXTERNAL_IP=203.0.113.10`
-
-## Current architecture dependency points
-
-The current multiplayer path is tightly coupled to:
-- domain `game.example.com`
-- public TURN IP `203.0.113.10`
-- the current self-hosted ASN/provider profile
-
-Those references also appear in deployment/docs paths such as:
-- `.env.example`
-- `infra/.env.example`
-- `infra/nginx.conf`
-- `infra/ice-server.js`
-- `.github/workflows/deploy.yml`
-- `README.md`
-
-## Operational interpretation
-
-The main online dependency is not gameplay hosting. The main online dependency is the **bootstrap chain**:
-- can the client reach signaling
-- can the client fetch ICE
-- can the client use TURN when direct connectivity fails
-
-If users in Russia have trouble connecting, the likely bottleneck is not “browser-to-browser” as an idea by itself.
-The likely bottleneck is one or more of:
-- reachability of the current signaling endpoint
-- reachability of the current TURN endpoint
-- routing/ASN/provider filtering or instability
-- dependence on a single Hetzner-based network path
-
-## What can be moved safely
-
-Because gameplay sim is client-hosted, the following can be moved with relatively low product risk:
-- PeerJS signaling backend
-- `api/ice` backend
-- TURN relay
-
-This means LW2B can move or duplicate the networking backend **without rewriting gameplay logic**.
-
-## Safe architectural conclusion
-
-A dedicated authoritative game server is **not required** to improve connectivity.
-The least risky path is to keep the current client simulation model and change only the networking backend topology.
-
-## Recommended future architecture direction
-
-### Recommended option: multi-endpoint networking backend
-Preferred direction:
-1. keep gameplay model unchanged
-2. deploy one or more additional signaling/TURN stacks outside Hetzner
-3. add runtime fallback between multiple networking endpoints
-
-That would preserve:
-- current lockstep model
-- current gameplay implementation
-- current lobby/join logic
-
-while reducing dependence on one provider/path.
-
-## Candidate migration patterns
-
-### Option A, recommended
-Deploy a second self-hosted networking stack on a different provider/region/ASN:
-- PeerJS
-- ice-api
-- coturn
-
-Then let the client choose or fail over between endpoints.
-
-Benefits:
-- smallest gameplay risk
-- easiest to validate with real players
-- directly targets the most likely accessibility problem
-
-### Option B
-Split static hosting from networking hosting:
-- keep the game frontend wherever convenient
-- move networking services to separate net-specific domains/origins
-
-Benefits:
-- easier infra iteration on the network layer
-- lower coupling between game deploy and network deploy
-
-### Option C
-Keep current self-host path, but use public PeerJS as an emergency fallback.
-
-Benefits:
-- minimal infra work
-
-Limitations:
-- less predictable
-- still not robust enough as the main path
-- not a good long-term answer for inconsistent regional reachability
-
-## Recommendation
-
-The recommended architecture path for LW2B is:
-- **do not rewrite the network model yet**
-- **do not rely on a single PeerJS/TURN endpoint**
-- **decouple signaling/ICE/TURN from the current Hetzner-only contour**
-- **add multi-endpoint fallback for the networking backend**
-
-In short:
-- keep simulation as-is
-- move or duplicate the networking bootstrap layer
-- test reachability from Russia against alternate endpoints
-
-## April 2026 server-mode desync incident and fix
-
-A real live test surfaced a true mid-game lockstep divergence in `SERVER` mode.
-
-Observed symptom:
-- early and mid-game sync initially looked healthy
-- later in the match, one player stopped seeing the opponent's units correctly
-- the other player saw units frozen on stale positions
-- the issue reproduced in a Serbia <-> Russia test path
-
-Root-cause chain that was identified:
-1. network command validation in `src/net/session.ts` accepted only a subset of building types
-2. gameplay allowed `tower`, but the network validator did not
-3. a tick containing `build tower` could therefore be rejected at parse/validation time
-4. the old lockstep behavior could then continue past the missing logical input, creating a silent deterministic divergence
-
-Targeted fixes that were applied:
-- `tower` added to network build-command validation
-- lockstep hardened so genuinely missing scheduled remote ticks cannot silently advance as empty input
-- startup regression from an overly strict first hardening pass was corrected by switching to a contiguous remote-receipt watermark instead of requiring literal packet receipt for the earliest startup ticks
-- empty replacement packets were prevented from wiping already queued commands for the same tick
-
-Diagnostics that were added for live triage:
-- inbound packet accept/reject summaries in `src/net/session.ts`
-- lightweight periodic deterministic checksum logging in `src/game.ts`
-- online UI strip can now surface the latest inbound-network summary
-
-Live re-test result after the fix sequence:
-- `SERVER` mode test succeeded
-- towers were built during the test
-- match stayed synchronized
-
-Follow-up anti-desync hardening completed after that incident:
-- per-tick entity command processing tightened to be mutation-safe and order-stable
-- deterministic tie-break rules tightened in key nearest/selection logic
-- targeted determinism regression tests added for this class of failure
-
-Interpretation:
-- the previous failure was a real lockstep/network bug, not random lag
-- the initial fail-closed startup regression was introduced by a too-rigid first guardrail and was then corrected
-- the current online path is materially healthier than the pre-fix state and is suitable for the next round of live tests
-
-## Canonical deployment policy (decision update, 2026-04-25)
-
-Current effective production reality is a split public topology:
-- frontend/public entrypoint: `https://w2.kislota.today/`
-- realtime backend contour under active diagnostics: `rts.kislota.today` (signaling/ICE/TURN path)
-
-This split is intentional for now, because recent diagnostics show frontend reachability and realtime reachability can fail independently.
-
-Viable canonicalization choices:
-1. Same-origin canonical (`w2` hosts both frontend and realtime paths).
-2. Split canonical (`w2` frontend + `rts` realtime backend).
-3. Split canonical with neutral backend hostname (`w2` or CDN frontend + `rtc.*` backend).
-
-Recommended safest path:
-- keep option 2 as the short-term baseline,
-- validate cross-origin behavior and regional reachability with real users,
-- then graduate to option 3 as the long-term canonical model.
-
-Do not treat domain rename alone as the fix; route/provider/backend behavior is the higher-impact lever.
-
-## Immediate operational focus
-
-1. keep frontend and realtime health checks explicit and separate
-2. keep `w2` frontend stable, and keep realtime checks centered on the current backend endpoint
-3. validate room create/join and in-match sync through the current canonical realtime websocket path
-4. continue TURN/ICE validation for hard NAT and Russia-facing paths before further topology churn
-
-## Non-goals for this document
-
-This document describes the current architecture and the safest migration direction.
-It does not propose:
-- rollback networking
-- authoritative server rewrite
-- gameplay protocol redesign
-- simulation rewrite
-
-Those should remain out of scope unless the current model proves fundamentally insufficient.
