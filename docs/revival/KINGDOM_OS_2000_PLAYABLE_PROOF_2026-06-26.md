@@ -25,7 +25,7 @@ Included:
 - hidden debug overlay on backtick
 - no networking
 
-Core toy:
+Core toy, pass 1:
 - resources: gold, grain, crystal, morale
 - victory pressure: Glory reaches 100
 - failure pressure: Threat reaches 100 or morale collapses
@@ -35,6 +35,19 @@ Core toy:
 - random events
 - player edicts with costs and cooldowns
 - visible map nodes, lanes, units, sparks, and floating text
+
+Playtest response, pass 2:
+- AFK mode was too opaque: doing little could lose without clear causality.
+- Active mode collapsed into "press every cooldown immediately."
+- Mobile hid too much of the kingdom behind resource and edict panels.
+
+Pass 2 changes:
+- victory now requires 3 royal programs/crowns instead of passive Glory 100
+- current program is visible in the command panel with objective, hint, and progress
+- programs: Grow the Realm, Win the Sky-Road, Light the Crystal Rite
+- edicts now cost Focus, so button spam runs out of attention
+- edicts have clearer tradeoffs: growth raises pressure, muster draws attention, foundry hurts morale, wards buy safety
+- mobile layout is denser: 8 resources in two rows, 3-column edicts, visible map window
 
 ## Visual target
 
@@ -68,6 +81,8 @@ Viewport screenshots captured with headless Chromium:
 - `docs/revival/screenshots/menu-1440.png`
 - `docs/revival/screenshots/play-1440.png`
 - `docs/revival/screenshots/play-mobile.png`
+- `docs/revival/screenshots/play-1440-pass2.png`
+- `docs/revival/screenshots/play-mobile-pass2.png`
 
 Known repo-level note:
 - `npm ci` still reports the archived repo's existing audit findings: 1 moderate `esbuild`, 2 high `ws`.

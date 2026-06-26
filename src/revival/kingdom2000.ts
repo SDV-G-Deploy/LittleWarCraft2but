@@ -1,12 +1,17 @@
 type Screen = 'menu' | 'mode' | 'playing' | 'paused' | 'ended';
 type EdictId = 'harvest' | 'muster' | 'crystal' | 'festival' | 'ward' | 'scout';
 type EventKind = 'blessing' | 'raid' | 'market' | 'storm' | 'festival';
+type PlanId = 'growth' | 'war' | 'ritual';
 
 type Resources = {
   gold: number;
   grain: number;
   crystal: number;
   morale: number;
+};
+
+type Cost = Partial<Resources> & {
+  focus?: number;
 };
 
 type Node = {
@@ -51,9 +56,20 @@ type Edict = {
   title: string;
   hotkey: string;
   body: string;
-  cost: Partial<Resources>;
+  cost: Cost;
   cooldown: number;
   apply: () => void;
+};
+
+type Plan = {
+  id: PlanId;
+  title: string;
+  shortTitle: string;
+  objective: string;
+  hint: string;
+  isDone: () => boolean;
+  progress: () => number;
+  reward: () => void;
 };
 
 type GameState = {
@@ -61,16 +77,22 @@ type GameState = {
   elapsed: number;
   day: number;
   resources: Resources;
+  focus: number;
+  maxFocus: number;
+  crowns: number;
   army: number;
   workers: number;
   wards: number;
   insight: number;
+  battleWins: number;
   glory: number;
   threat: number;
   enemyPower: number;
   speed: 1 | 2 | 4;
   pausedBeforeOverlay: Screen;
   selectedMode: 'afk' | 'active';
+  activePlan: PlanId;
+  completedPlans: PlanId[];
   ending: 'victory' | 'defeat' | null;
   lastEventAt: number;
   lastBattleAt: number;
@@ -105,6 +127,11 @@ const RESOURCE_LABELS: Record<keyof Resources, string> = {
   morale: 'Morale',
 };
 
+const COST_LABELS: Record<keyof Resources | 'focus', string> = {
+  ...RESOURCE_LABELS,
+  focus: 'Focus',
+};
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -117,20 +144,27 @@ function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function hasEnough(resources: Resources, cost: Partial<Resources>): boolean {
-  return Object.entries(cost).every(([key, value]) => resources[key as keyof Resources] >= (value ?? 0));
+function hasEnough(state: GameState, cost: Cost): boolean {
+  if (state.focus < (cost.focus ?? 0)) return false;
+  return (Object.keys(RESOURCE_LABELS) as Array<keyof Resources>).every(
+    (key) => state.resources[key] >= (cost[key] ?? 0),
+  );
 }
 
-function spend(resources: Resources, cost: Partial<Resources>): void {
-  for (const [key, value] of Object.entries(cost)) {
-    resources[key as keyof Resources] -= value ?? 0;
+function spend(state: GameState, cost: Cost): void {
+  for (const key of Object.keys(RESOURCE_LABELS) as Array<keyof Resources>) {
+    state.resources[key] -= cost[key] ?? 0;
   }
+  state.focus -= cost.focus ?? 0;
 }
 
-function resourceText(cost: Partial<Resources>): string {
-  const entries = Object.entries(cost).filter(([, value]) => (value ?? 0) > 0);
+function resourceText(cost: Cost): string {
+  const order: Array<keyof Resources | 'focus'> = ['focus', 'gold', 'grain', 'crystal', 'morale'];
+  const entries = order
+    .map((key) => [key, cost[key] ?? 0] as const)
+    .filter(([, value]) => value > 0);
   if (!entries.length) return 'Free';
-  return entries.map(([key, value]) => `${value} ${RESOURCE_LABELS[key as keyof Resources]}`).join(' / ');
+  return entries.map(([key, value]) => `${value} ${COST_LABELS[key]}`).join(' / ');
 }
 
 export function runKingdom2000(root: HTMLElement): () => void {
@@ -196,23 +230,29 @@ export function runKingdom2000(root: HTMLElement): () => void {
     elapsed: 0,
     day: 1,
     resources: { gold: 120, grain: 90, crystal: 18, morale: 72 },
+    focus: 76,
+    maxFocus: 100,
+    crowns: 0,
     army: 8,
     workers: 10,
     wards: 1,
     insight: 0,
+    battleWins: 0,
     glory: 8,
     threat: 18,
     enemyPower: 18,
     speed: 1,
     pausedBeforeOverlay: 'playing',
     selectedMode: 'afk',
+    activePlan: 'growth',
+    completedPlans: [],
     ending: null,
     lastEventAt: 0,
     lastBattleAt: 0,
     lastAutosaveAt: 0,
     log: [
       'Royal desktop loaded. The kingdom is waiting for a first edict.',
-      'Goal: reach 100 Glory before Shade Threat reaches 100.',
+      'Goal: complete 3 royal programs before Shade Threat reaches 100.',
     ],
   };
 
@@ -221,24 +261,30 @@ export function runKingdom2000(root: HTMLElement): () => void {
     state.elapsed = 0;
     state.day = 1;
     state.resources = { gold: 120, grain: 90, crystal: 18, morale: 72 };
+    state.focus = mode === 'active' ? 82 : 74;
+    state.maxFocus = 100;
+    state.crowns = 0;
     state.army = mode === 'active' ? 10 : 8;
     state.workers = mode === 'active' ? 11 : 10;
     state.wards = 1;
     state.insight = 0;
+    state.battleWins = 0;
     state.glory = 8;
     state.threat = 18;
     state.enemyPower = 18;
     state.speed = 1;
     state.selectedMode = mode;
+    state.activePlan = 'growth';
+    state.completedPlans = [];
     state.ending = null;
     state.lastEventAt = 0;
     state.lastBattleAt = 0;
     state.lastAutosaveAt = 0;
     state.log = [
       mode === 'afk'
-        ? 'AFK Sovereign mode: the sim keeps moving, edicts steer the kingdom.'
-        : 'Active Steward mode: faster incidents, stronger reward for timely edicts.',
-      'First objective: stabilize economy, then push Glory through raids or festivals.',
+        ? 'AFK Sovereign: it is slower, but not self-winning. Check the current program and spend Focus.'
+        : 'Active Steward: faster incidents, sharper reward, but Focus blocks button spam.',
+      'First program: Grow the realm. Harvest Boom is the clean opening.',
     ];
     for (const node of nodes) {
       const base = NODE_DATA.find((item) => item.id === node.id);
@@ -259,6 +305,79 @@ export function runKingdom2000(root: HTMLElement): () => void {
     renderHud();
   }
 
+  function plans(): Plan[] {
+    return [
+      {
+        id: 'growth',
+        title: 'Grow the Realm',
+        shortTitle: 'Grow',
+        objective: 'Reach 18 Workers and 220 Grain.',
+        hint:
+          state.workers < 18
+            ? 'Use Harvest Boom. It turns morale and Focus into workers.'
+            : 'Stockpile grain. Festivals can wait until the farms are stable.',
+        isDone: () => state.workers >= 18 && state.resources.grain >= 220,
+        progress: () => (clamp(state.workers / 18, 0, 1) + clamp(state.resources.grain / 220, 0, 1)) / 2,
+        reward: () => {
+          state.glory = clamp(state.glory + 16, 0, 100);
+          state.resources.morale = clamp(state.resources.morale + 9, 0, 100);
+          state.resources.gold += 42;
+          addFloater('+1 crown', 0.36, 0.56, 'good');
+          burst(0.36, 0.56, 'gold', 34);
+          flashNode('mill');
+          log('Program complete: Grow the Realm. Farms now fund the crown.');
+        },
+      },
+      {
+        id: 'war',
+        title: 'Win the Sky-Road',
+        shortTitle: 'War',
+        objective: 'Win 2 patrol battles while Threat stays under 70.',
+        hint:
+          state.battleWins < 2
+            ? 'Muster first, then Scout or Ward if Threat climbs.'
+            : 'You have the victories. Keep Threat under 70 until the crown ships.',
+        isDone: () => state.battleWins >= 2 && state.threat < 70,
+        progress: () => (clamp(state.battleWins / 2, 0, 1) + clamp((70 - state.threat) / 70, 0, 1)) / 2,
+        reward: () => {
+          state.glory = clamp(state.glory + 20, 0, 100);
+          state.threat = clamp(state.threat - 14, 0, 100);
+          state.enemyPower = clamp(state.enemyPower - 12, 8, 100);
+          addFloater('+1 crown', 0.78, 0.60, 'good');
+          burst(0.78, 0.60, 'gold', 38);
+          flashNode('portal');
+          log('Program complete: Win the Sky-Road. The Shade Gate lost tempo.');
+        },
+      },
+      {
+        id: 'ritual',
+        title: 'Light the Crystal Rite',
+        shortTitle: 'Rite',
+        objective: 'Reach 70 Crystal and 82 Morale.',
+        hint:
+          state.resources.crystal < 70
+            ? 'Crystal Foundry builds the rite. Scout helps the mine breathe.'
+            : 'Now lift morale with Market Festival before the desktop darkens.',
+        isDone: () => state.resources.crystal >= 70 && state.resources.morale >= 82,
+        progress: () =>
+          (clamp(state.resources.crystal / 70, 0, 1) + clamp(state.resources.morale / 82, 0, 1)) / 2,
+        reward: () => {
+          state.glory = clamp(state.glory + 24, 0, 100);
+          state.wards += 1;
+          state.threat = clamp(state.threat - 10, 0, 100);
+          addFloater('+1 crown', 0.45, 0.76, 'good');
+          burst(0.45, 0.76, 'aqua', 42);
+          flashNode('mine');
+          log('Program complete: Light the Crystal Rite. The kingdom gleams harder.');
+        },
+      },
+    ];
+  }
+
+  function currentPlan(): Plan {
+    return plans().find((plan) => plan.id === state.activePlan) ?? plans()[0];
+  }
+
   function log(message: string): void {
     state.log.unshift(message);
     state.log = state.log.slice(0, 7);
@@ -274,65 +393,68 @@ export function runKingdom2000(root: HTMLElement): () => void {
         id: 'harvest',
         title: 'Harvest Boom',
         hotkey: 'Q',
-        body: '+workers, quick gold and grain burst.',
-        cost: { morale: 6 },
+        body: 'Best for Grow: workers and grain now, morale later.',
+        cost: { focus: 18, morale: 6 },
         cooldown: 8,
         apply: () => {
-          spend(state.resources, { morale: 6 });
+          spend(state, { focus: 18, morale: 6 });
           state.workers += 3;
           state.resources.gold += 34;
           state.resources.grain += 42;
           state.glory += 2;
+          state.threat = clamp(state.threat + 2, 0, 100);
           addFloater('+3 workers', 0.36, 0.56, 'good');
           burst(0.36, 0.56, 'gold', 18);
           flashNode('mill');
-          log('Harvest Boom: sunmills overclocked, peasant queue smiling.');
+          log('Harvest Boom: growth jumps, but overworked farms add a little Threat.');
         },
       },
       {
         id: 'muster',
         title: 'Royal Muster',
         hotkey: 'W',
-        body: 'Train a glittering patrol and pressure the gate.',
-        cost: { gold: 42, grain: 18 },
+        body: 'Best for War: more army, more noise at the gate.',
+        cost: { focus: 24, gold: 42, grain: 18 },
         cooldown: 10,
         apply: () => {
-          spend(state.resources, { gold: 42, grain: 18 });
+          spend(state, { focus: 24, gold: 42, grain: 18 });
           state.army += 6;
           state.resources.morale = clamp(state.resources.morale + 4, 0, 100);
+          state.threat = clamp(state.threat + 3, 0, 100);
           spawnUnit('royal', 2, 0.05);
           addFloater('+6 army', 0.68, 0.31, 'good');
           burst(0.68, 0.31, 'aqua', 22);
           flashNode('castle');
-          log('Royal Muster: glass knights queue onto the sky-road.');
+          log('Royal Muster: glass knights queue onto the sky-road and draw attention.');
         },
       },
       {
         id: 'crystal',
         title: 'Crystal Foundry',
         hotkey: 'E',
-        body: 'Convert gold into crystal economy and Glory.',
-        cost: { gold: 36, grain: 12 },
+        body: 'Best for Rite: crystal surge, morale gets brittle.',
+        cost: { focus: 24, gold: 36, grain: 12 },
         cooldown: 12,
         apply: () => {
-          spend(state.resources, { gold: 36, grain: 12 });
+          spend(state, { focus: 24, gold: 36, grain: 12 });
           state.resources.crystal += 20;
+          state.resources.morale = clamp(state.resources.morale - 3, 0, 100);
           state.glory += 6;
           addFloater('+20 crystal', 0.45, 0.76, 'good');
           burst(0.45, 0.76, 'aqua', 24);
           flashNode('mine');
-          log('Crystal Foundry: the desktop mines hum like a boot chime.');
+          log('Crystal Foundry: the mine sings, but citizens squint at the glare.');
         },
       },
       {
         id: 'festival',
         title: 'Market Festival',
         hotkey: 'A',
-        body: 'Trade crystal for morale, income, and safe Glory.',
-        cost: { crystal: 12, grain: 20 },
+        body: 'Morale rescue and safe Glory, paid in crystal.',
+        cost: { focus: 28, crystal: 12, grain: 20 },
         cooldown: 14,
         apply: () => {
-          spend(state.resources, { crystal: 12, grain: 20 });
+          spend(state, { focus: 28, crystal: 12, grain: 20 });
           state.resources.morale = clamp(state.resources.morale + 22, 0, 100);
           state.resources.gold += 24;
           state.glory += 8;
@@ -346,11 +468,11 @@ export function runKingdom2000(root: HTMLElement): () => void {
         id: 'ward',
         title: 'Guardian Ward',
         hotkey: 'S',
-        body: 'Reduce threat and protect the next battle.',
-        cost: { crystal: 10, gold: 24 },
+        body: 'Threat brake. Saves bad runs, delays economy.',
+        cost: { focus: 22, crystal: 10, gold: 24 },
         cooldown: 15,
         apply: () => {
-          spend(state.resources, { crystal: 10, gold: 24 });
+          spend(state, { focus: 22, crystal: 10, gold: 24 });
           state.wards += 1;
           state.threat = clamp(state.threat - 12, 0, 100);
           state.glory += 3;
@@ -364,11 +486,11 @@ export function runKingdom2000(root: HTMLElement): () => void {
         id: 'scout',
         title: 'Scout Sky-Road',
         hotkey: 'D',
-        body: 'Reveal a window: lower enemy power, gain insight.',
-        cost: { grain: 16, morale: 4 },
+        body: 'Cheap read: lower enemy power, gain insight.',
+        cost: { focus: 16, grain: 16, morale: 4 },
         cooldown: 9,
         apply: () => {
-          spend(state.resources, { grain: 16, morale: 4 });
+          spend(state, { focus: 16, grain: 16, morale: 4 });
           state.insight += 1;
           state.enemyPower = clamp(state.enemyPower - 8, 8, 90);
           state.glory += 2;
@@ -382,18 +504,36 @@ export function runKingdom2000(root: HTMLElement): () => void {
   }
 
   function canCast(edict: Edict): boolean {
-    return state.screen === 'playing' && (cooldowns.get(edict.id) ?? 0) <= 0 && hasEnough(state.resources, edict.cost);
+    return state.screen === 'playing' && (cooldowns.get(edict.id) ?? 0) <= 0 && hasEnough(state, edict.cost);
   }
 
   function castEdict(id: EdictId): void {
     const edict = edicts().find((item) => item.id === id);
     if (!edict || !canCast(edict)) {
-      if (edict) log(`${edict.title} is blocked: missing resources or cooldown.`);
+      if (edict) log(`${edict.title} blocked: wait for Focus, resources, or cooldown.`);
       return;
     }
     edict.apply();
     setCooldown(edict.id, edict.cooldown);
+    checkPlanCompletion();
     renderHud();
+  }
+
+  function checkPlanCompletion(): void {
+    const plan = currentPlan();
+    if (state.completedPlans.includes(plan.id) || !plan.isDone()) return;
+
+    state.completedPlans.push(plan.id);
+    state.crowns = state.completedPlans.length;
+    plan.reward();
+
+    const next = plans().find((item) => !state.completedPlans.includes(item.id));
+    if (next) {
+      state.activePlan = next.id;
+      log(`Next program: ${next.title}. ${next.objective}`);
+    } else {
+      endGame('victory');
+    }
   }
 
   function flashNode(id: string): void {
@@ -506,9 +646,10 @@ export function runKingdom2000(root: HTMLElement): () => void {
       state.glory = clamp(state.glory + gloryGain, 0, 100);
       state.enemyPower = clamp(state.enemyPower - 7, 8, 100);
       state.army = Math.max(3, state.army - Math.floor(3 + Math.random() * 4));
+      state.battleWins += 1;
       addFloater(`+${gloryGain} glory`, 0.78, 0.60, 'good');
       burst(0.78, 0.60, 'gold', 30);
-      log(`Battle: royal patrol won the lane and banked ${gloryGain} Glory.`);
+      log(`Battle: royal patrol won lane ${state.battleWins}/2 for the War program.`);
     } else {
       const threatGain = 8 + Math.floor((shade - royal) / 6);
       state.threat = clamp(state.threat + threatGain, 0, 100);
@@ -532,13 +673,18 @@ export function runKingdom2000(root: HTMLElement): () => void {
     }
 
     const activeBonus = state.selectedMode === 'active' ? 1.16 : 1;
+    state.focus = clamp(
+      state.focus + scaled * (state.selectedMode === 'active' ? 2.3 : 1.45),
+      0,
+      state.maxFocus,
+    );
     state.resources.gold += scaled * (2.1 + state.workers * 0.16) * activeBonus;
     state.resources.grain += scaled * (1.6 + state.workers * 0.15) * activeBonus;
     state.resources.crystal += scaled * (0.25 + state.insight * 0.035);
     state.resources.morale = clamp(state.resources.morale + scaled * 0.17 - scaled * state.threat * 0.012, 0, 100);
-    state.glory = clamp(state.glory + scaled * (state.resources.morale > 80 ? 0.06 : 0.025), 0, 100);
-    state.threat = clamp(state.threat + scaled * (0.20 + state.enemyPower * 0.006) - state.wards * scaled * 0.018, 0, 100);
-    state.enemyPower = clamp(state.enemyPower + scaled * 0.08, 8, 100);
+    state.glory = clamp(state.glory + scaled * (state.resources.morale > 80 ? 0.025 : 0.01), 0, 100);
+    state.threat = clamp(state.threat + scaled * (0.16 + state.enemyPower * 0.005) - state.wards * scaled * 0.02, 0, 100);
+    state.enemyPower = clamp(state.enemyPower + scaled * 0.07, 8, 100);
 
     if (Math.floor(state.elapsed) % 7 === 0 && state.elapsed - state.lastAutosaveAt > 6.5) {
       state.lastAutosaveAt = state.elapsed;
@@ -567,8 +713,9 @@ export function runKingdom2000(root: HTMLElement): () => void {
 
     updateUnits(scaled);
     updateEffects(scaled);
+    checkPlanCompletion();
+    if (state.screen !== 'playing') return;
 
-    if (state.glory >= 100) endGame('victory');
     if (state.threat >= 100 || state.resources.morale <= 0) endGame('defeat');
   }
 
@@ -850,23 +997,26 @@ export function runKingdom2000(root: HTMLElement): () => void {
     resourceStrip.innerHTML = `
       ${renderMeter('glory', 'Glory', state.glory, '#10bce3')}
       ${renderMeter('threat', 'Threat', state.threat, '#f42fbf')}
+      ${renderMeter('focus', 'Focus', state.focus, '#ffe14d')}
+      ${renderChip('crowns', `${state.crowns}/3`)}
       ${renderChip('gold', fmt(state.resources.gold))}
       ${renderChip('grain', fmt(state.resources.grain))}
       ${renderChip('crystal', fmt(state.resources.crystal))}
       ${renderChip('morale', fmt(state.resources.morale))}
-      ${renderChip('army', fmt(state.army))}
-      ${renderChip('workers', fmt(state.workers))}
     `;
 
     commandPanel.innerHTML = `
       <header>
-        <span>Royal Edicts</span>
+        <span>Royal Desktop</span>
         <strong>Day ${state.day}</strong>
       </header>
+      ${renderPlanPanel()}
       <div class="k2k-edict-grid">
         ${edicts().map(renderEdict).join('')}
       </div>
       <div class="k2k-mini-status">
+        <span>Workers <b>${state.workers}</b></span>
+        <span>Army <b>${state.army}</b></span>
         <span>Wards <b>${state.wards}</b></span>
         <span>Insight <b>${state.insight}</b></span>
         <span>Mode <b>${state.selectedMode === 'afk' ? 'AFK' : 'Active'}</b></span>
@@ -879,6 +1029,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
         <strong>${state.ending ? titleCase(state.ending) : state.screen === 'playing' ? 'Live' : 'Ready'}</strong>
       </header>
       <ol>
+        <li class="k2k-feed-priority">${currentPlan().title}: ${currentPlan().objective}</li>
         ${state.log.map((entry) => `<li>${entry}</li>`).join('')}
       </ol>
     `;
@@ -905,9 +1056,39 @@ export function runKingdom2000(root: HTMLElement): () => void {
     `;
   }
 
+  function renderPlanPanel(): string {
+    const plan = currentPlan();
+    const progress = Math.round(plan.progress() * 100);
+    return `
+      <section class="k2k-plan-panel" aria-label="Current royal program">
+        <div class="k2k-plan-current">
+          <span>Current program</span>
+          <strong>${plan.title}</strong>
+          <p>${plan.objective}</p>
+          <em>${plan.hint}</em>
+          <i style="--plan-progress:${progress}"></i>
+        </div>
+        <div class="k2k-plan-grid" aria-label="Royal programs">
+          ${plans()
+            .map((item) => {
+              const done = state.completedPlans.includes(item.id);
+              const active = item.id === state.activePlan;
+              return `
+                <button data-plan="${item.id}" class="${active ? 'is-active' : ''} ${done ? 'is-done' : ''}" type="button" ${done ? 'disabled' : ''}>
+                  <b>${done ? 'OK' : `${Math.round(item.progress() * 100)}%`}</b>
+                  <span>${item.shortTitle}</span>
+                </button>
+              `;
+            })
+            .join('')}
+        </div>
+      </section>
+    `;
+  }
+
   function renderEdict(edict: Edict): string {
     const cd = cooldowns.get(edict.id) ?? 0;
-    const affordable = hasEnough(state.resources, edict.cost);
+    const affordable = hasEnough(state, edict.cost);
     const disabled = state.screen !== 'playing' || cd > 0 || !affordable;
     const reason = cd > 0 ? `${Math.ceil(cd)}s` : affordable ? resourceText(edict.cost) : `Need ${resourceText(edict.cost)}`;
     return `
@@ -926,7 +1107,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
         <div class="k2k-card k2k-title-card">
           <p class="k2k-kicker">Minimum Beautiful Playable</p>
           <h1>Kingdom OS 2000</h1>
-          <p class="k2k-lede">A glassy idle RTS command desk: your tiny kingdom harvests, fights, panics, and celebrates while you steer it with royal edicts.</p>
+          <p class="k2k-lede">A glassy idle RTS command desk: pick a royal program, spend Focus on edicts, and earn 3 crowns before Shade Threat fills the desktop.</p>
           <div class="k2k-actions">
             <button data-action="mode" type="button">Start</button>
             <button data-action="instant" type="button">Quick AFK Run</button>
@@ -943,11 +1124,11 @@ export function runKingdom2000(root: HTMLElement): () => void {
           <div class="k2k-mode-grid">
             <button data-mode="afk" type="button">
               <strong>AFK Sovereign</strong>
-              <span>Slower, more idle. Watch the kingdom breathe and intervene when the feed gets spicy.</span>
+              <span>Slower pressure. Check the current program, spend Focus, and let the kingdom breathe between edicts.</span>
             </button>
             <button data-mode="active" type="button">
               <strong>Active Steward</strong>
-              <span>Faster incidents, sharper tradeoffs, better for a 90-second test run.</span>
+              <span>Faster incidents. Good for a short test, but Focus makes every click a choice.</span>
             </button>
           </div>
         </div>
@@ -975,8 +1156,9 @@ export function runKingdom2000(root: HTMLElement): () => void {
         <div class="k2k-card k2k-end-card ${victory ? 'is-victory' : 'is-defeat'}">
           <p class="k2k-kicker">${victory ? 'Victory proof' : 'Recovery proof'}</p>
           <h2>${victory ? 'The glass kingdom shipped.' : 'Shade filled the desktop.'}</h2>
-          <p>${victory ? 'The core toy reached a clean win state with resource pressure, edicts, and readable spectacle.' : 'The loop has failure pressure. Try more wards, scouting, or faster musters.'}</p>
+          <p>${victory ? 'All three royal programs reached proof. You balanced economy, patrol pressure, and the crystal rite.' : 'The loop has failure pressure. Pick one program at a time, keep Focus for wards, and do not spend every cooldown blindly.'}</p>
           <div class="k2k-scoreline">
+            <span>Crowns <b>${state.crowns}/3</b></span>
             <span>Glory <b>${fmt(state.glory)}</b></span>
             <span>Threat <b>${fmt(state.threat)}</b></span>
             <span>Day <b>${state.day}</b></span>
@@ -998,6 +1180,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
     const action = target.closest<HTMLElement>('[data-action]')?.dataset.action;
     const edict = target.closest<HTMLElement>('[data-edict]')?.dataset.edict as EdictId | undefined;
     const mode = target.closest<HTMLElement>('[data-mode]')?.dataset.mode as 'afk' | 'active' | undefined;
+    const plan = target.closest<HTMLElement>('[data-plan]')?.dataset.plan as PlanId | undefined;
 
     if (edict) {
       castEdict(edict);
@@ -1006,6 +1189,15 @@ export function runKingdom2000(root: HTMLElement): () => void {
 
     if (mode) {
       resetGame(mode);
+      return;
+    }
+
+    if (plan && !state.completedPlans.includes(plan)) {
+      state.activePlan = plan;
+      const selected = currentPlan();
+      log(`Program selected: ${selected.title}. ${selected.hint}`);
+      checkPlanCompletion();
+      renderHud();
       return;
     }
 
