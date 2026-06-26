@@ -1,0 +1,1097 @@
+type Screen = 'menu' | 'mode' | 'playing' | 'paused' | 'ended';
+type EdictId = 'harvest' | 'muster' | 'crystal' | 'festival' | 'ward' | 'scout';
+type EventKind = 'blessing' | 'raid' | 'market' | 'storm' | 'festival';
+
+type Resources = {
+  gold: number;
+  grain: number;
+  crystal: number;
+  morale: number;
+};
+
+type Node = {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  owner: 'royal' | 'neutral' | 'shade';
+  kind: 'castle' | 'farm' | 'mine' | 'tower' | 'portal' | 'market';
+  pulse: number;
+};
+
+type Unit = {
+  id: number;
+  side: 'royal' | 'shade';
+  lane: number;
+  progress: number;
+  speed: number;
+  hp: number;
+  power: number;
+};
+
+type FloatingText = {
+  text: string;
+  x: number;
+  y: number;
+  age: number;
+  tone: 'good' | 'bad' | 'neutral';
+};
+
+type Spark = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  tone: 'aqua' | 'gold' | 'pink';
+};
+
+type Edict = {
+  id: EdictId;
+  title: string;
+  hotkey: string;
+  body: string;
+  cost: Partial<Resources>;
+  cooldown: number;
+  apply: () => void;
+};
+
+type GameState = {
+  screen: Screen;
+  elapsed: number;
+  day: number;
+  resources: Resources;
+  army: number;
+  workers: number;
+  wards: number;
+  insight: number;
+  glory: number;
+  threat: number;
+  enemyPower: number;
+  speed: 1 | 2 | 4;
+  pausedBeforeOverlay: Screen;
+  selectedMode: 'afk' | 'active';
+  ending: 'victory' | 'defeat' | null;
+  lastEventAt: number;
+  lastBattleAt: number;
+  lastAutosaveAt: number;
+  log: string[];
+};
+
+const BG_URL = `${import.meta.env.BASE_URL}assets/revival/kingdom2000-bg.png`;
+
+const EDGES: Array<[number, number]> = [
+  [0, 1],
+  [1, 2],
+  [1, 4],
+  [2, 3],
+  [4, 5],
+  [5, 3],
+];
+
+const NODE_DATA: Node[] = [
+  { id: 'castle', label: 'Glass Keep', x: 0.68, y: 0.31, owner: 'royal', kind: 'castle', pulse: 0 },
+  { id: 'mill', label: 'Sunmill', x: 0.36, y: 0.56, owner: 'royal', kind: 'farm', pulse: 0 },
+  { id: 'mine', label: 'Blue Mine', x: 0.45, y: 0.76, owner: 'royal', kind: 'mine', pulse: 0 },
+  { id: 'portal', label: 'Violet Gate', x: 0.78, y: 0.60, owner: 'shade', kind: 'portal', pulse: 0 },
+  { id: 'market', label: 'Bubble Market', x: 0.55, y: 0.47, owner: 'neutral', kind: 'market', pulse: 0 },
+  { id: 'tower', label: 'Cloud Tower', x: 0.70, y: 0.70, owner: 'neutral', kind: 'tower', pulse: 0 },
+];
+
+const RESOURCE_LABELS: Record<keyof Resources, string> = {
+  gold: 'Gold',
+  grain: 'Grain',
+  crystal: 'Crystal',
+  morale: 'Morale',
+};
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function fmt(value: number): string {
+  return `${Math.floor(value)}`;
+}
+
+function titleCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function hasEnough(resources: Resources, cost: Partial<Resources>): boolean {
+  return Object.entries(cost).every(([key, value]) => resources[key as keyof Resources] >= (value ?? 0));
+}
+
+function spend(resources: Resources, cost: Partial<Resources>): void {
+  for (const [key, value] of Object.entries(cost)) {
+    resources[key as keyof Resources] -= value ?? 0;
+  }
+}
+
+function resourceText(cost: Partial<Resources>): string {
+  const entries = Object.entries(cost).filter(([, value]) => (value ?? 0) > 0);
+  if (!entries.length) return 'Free';
+  return entries.map(([key, value]) => `${value} ${RESOURCE_LABELS[key as keyof Resources]}`).join(' / ');
+}
+
+export function runKingdom2000(root: HTMLElement): () => void {
+  root.innerHTML = `
+    <main class="k2k-shell" aria-label="Kingdom OS 2000 playable proof">
+      <canvas class="k2k-canvas" aria-hidden="true"></canvas>
+      <section class="k2k-topbar">
+        <button class="k2k-logo" data-action="menu" type="button">
+          <span class="k2k-logo-mark"></span>
+          <span>
+            <strong>Kingdom OS 2000</strong>
+            <small>Playable proof build</small>
+          </span>
+        </button>
+        <div class="k2k-system-buttons" aria-label="System controls">
+          <button data-action="speed" type="button" title="Simulation speed">1x</button>
+          <button data-action="pause" type="button" title="Pause">Pause</button>
+          <button data-action="restart" type="button" title="Restart">Restart</button>
+        </div>
+      </section>
+      <section class="k2k-resource-strip" aria-label="Resources"></section>
+      <aside class="k2k-command-panel" aria-label="Edicts"></aside>
+      <aside class="k2k-advisor-panel" aria-label="Advisor log"></aside>
+      <section class="k2k-overlay" aria-live="polite"></section>
+    </main>
+  `;
+
+  function mustGet<T extends Element>(selector: string): T {
+    const found = root.querySelector<T>(selector);
+    if (!found) throw new Error(`Kingdom OS 2000 shell missing ${selector}`);
+    return found;
+  }
+
+  const shell = mustGet<HTMLElement>('.k2k-shell');
+  const canvas = mustGet<HTMLCanvasElement>('.k2k-canvas');
+  const resourceStrip = mustGet<HTMLElement>('.k2k-resource-strip');
+  const commandPanel = mustGet<HTMLElement>('.k2k-command-panel');
+  const advisorPanel = mustGet<HTMLElement>('.k2k-advisor-panel');
+  const overlay = mustGet<HTMLElement>('.k2k-overlay');
+  const speedButton = mustGet<HTMLButtonElement>('[data-action="speed"]');
+  const pauseButton = mustGet<HTMLButtonElement>('[data-action="pause"]');
+
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Canvas 2D context unavailable');
+  const ctx: CanvasRenderingContext2D = context;
+
+  const background = new Image();
+  background.src = BG_URL;
+
+  let raf = 0;
+  let lastFrame = performance.now();
+  let unitId = 1;
+  let debug = false;
+
+  const nodes = NODE_DATA.map((node) => ({ ...node }));
+  const units: Unit[] = [];
+  const floaters: FloatingText[] = [];
+  const sparks: Spark[] = [];
+  const cooldowns = new Map<EdictId, number>();
+
+  const state: GameState = {
+    screen: 'menu',
+    elapsed: 0,
+    day: 1,
+    resources: { gold: 120, grain: 90, crystal: 18, morale: 72 },
+    army: 8,
+    workers: 10,
+    wards: 1,
+    insight: 0,
+    glory: 8,
+    threat: 18,
+    enemyPower: 18,
+    speed: 1,
+    pausedBeforeOverlay: 'playing',
+    selectedMode: 'afk',
+    ending: null,
+    lastEventAt: 0,
+    lastBattleAt: 0,
+    lastAutosaveAt: 0,
+    log: [
+      'Royal desktop loaded. The kingdom is waiting for a first edict.',
+      'Goal: reach 100 Glory before Shade Threat reaches 100.',
+    ],
+  };
+
+  function resetGame(mode: 'afk' | 'active' = state.selectedMode): void {
+    state.screen = 'playing';
+    state.elapsed = 0;
+    state.day = 1;
+    state.resources = { gold: 120, grain: 90, crystal: 18, morale: 72 };
+    state.army = mode === 'active' ? 10 : 8;
+    state.workers = mode === 'active' ? 11 : 10;
+    state.wards = 1;
+    state.insight = 0;
+    state.glory = 8;
+    state.threat = 18;
+    state.enemyPower = 18;
+    state.speed = 1;
+    state.selectedMode = mode;
+    state.ending = null;
+    state.lastEventAt = 0;
+    state.lastBattleAt = 0;
+    state.lastAutosaveAt = 0;
+    state.log = [
+      mode === 'afk'
+        ? 'AFK Sovereign mode: the sim keeps moving, edicts steer the kingdom.'
+        : 'Active Steward mode: faster incidents, stronger reward for timely edicts.',
+      'First objective: stabilize economy, then push Glory through raids or festivals.',
+    ];
+    for (const node of nodes) {
+      const base = NODE_DATA.find((item) => item.id === node.id);
+      if (base) {
+        node.owner = base.owner;
+        node.pulse = 0;
+      }
+    }
+    units.length = 0;
+    floaters.length = 0;
+    sparks.length = 0;
+    cooldowns.clear();
+    setCooldown('harvest', 1.5);
+    setCooldown('muster', 2.5);
+    spawnUnit('royal', 1, 0.15);
+    spawnUnit('shade', 4, 0.2);
+    flashNode('castle');
+    renderHud();
+  }
+
+  function log(message: string): void {
+    state.log.unshift(message);
+    state.log = state.log.slice(0, 7);
+  }
+
+  function setCooldown(id: EdictId, seconds: number): void {
+    cooldowns.set(id, seconds);
+  }
+
+  function edicts(): Edict[] {
+    return [
+      {
+        id: 'harvest',
+        title: 'Harvest Boom',
+        hotkey: 'Q',
+        body: '+workers, quick gold and grain burst.',
+        cost: { morale: 6 },
+        cooldown: 8,
+        apply: () => {
+          spend(state.resources, { morale: 6 });
+          state.workers += 3;
+          state.resources.gold += 34;
+          state.resources.grain += 42;
+          state.glory += 2;
+          addFloater('+3 workers', 0.36, 0.56, 'good');
+          burst(0.36, 0.56, 'gold', 18);
+          flashNode('mill');
+          log('Harvest Boom: sunmills overclocked, peasant queue smiling.');
+        },
+      },
+      {
+        id: 'muster',
+        title: 'Royal Muster',
+        hotkey: 'W',
+        body: 'Train a glittering patrol and pressure the gate.',
+        cost: { gold: 42, grain: 18 },
+        cooldown: 10,
+        apply: () => {
+          spend(state.resources, { gold: 42, grain: 18 });
+          state.army += 6;
+          state.resources.morale = clamp(state.resources.morale + 4, 0, 100);
+          spawnUnit('royal', 2, 0.05);
+          addFloater('+6 army', 0.68, 0.31, 'good');
+          burst(0.68, 0.31, 'aqua', 22);
+          flashNode('castle');
+          log('Royal Muster: glass knights queue onto the sky-road.');
+        },
+      },
+      {
+        id: 'crystal',
+        title: 'Crystal Foundry',
+        hotkey: 'E',
+        body: 'Convert gold into crystal economy and Glory.',
+        cost: { gold: 36, grain: 12 },
+        cooldown: 12,
+        apply: () => {
+          spend(state.resources, { gold: 36, grain: 12 });
+          state.resources.crystal += 20;
+          state.glory += 6;
+          addFloater('+20 crystal', 0.45, 0.76, 'good');
+          burst(0.45, 0.76, 'aqua', 24);
+          flashNode('mine');
+          log('Crystal Foundry: the desktop mines hum like a boot chime.');
+        },
+      },
+      {
+        id: 'festival',
+        title: 'Market Festival',
+        hotkey: 'A',
+        body: 'Trade crystal for morale, income, and safe Glory.',
+        cost: { crystal: 12, grain: 20 },
+        cooldown: 14,
+        apply: () => {
+          spend(state.resources, { crystal: 12, grain: 20 });
+          state.resources.morale = clamp(state.resources.morale + 22, 0, 100);
+          state.resources.gold += 24;
+          state.glory += 8;
+          addFloater('+22 morale', 0.55, 0.47, 'good');
+          burst(0.55, 0.47, 'pink', 26);
+          flashNode('market');
+          log('Market Festival: citizens installed joy.exe successfully.');
+        },
+      },
+      {
+        id: 'ward',
+        title: 'Guardian Ward',
+        hotkey: 'S',
+        body: 'Reduce threat and protect the next battle.',
+        cost: { crystal: 10, gold: 24 },
+        cooldown: 15,
+        apply: () => {
+          spend(state.resources, { crystal: 10, gold: 24 });
+          state.wards += 1;
+          state.threat = clamp(state.threat - 12, 0, 100);
+          state.glory += 3;
+          addFloater('-12 threat', 0.70, 0.70, 'good');
+          burst(0.70, 0.70, 'aqua', 30);
+          flashNode('tower');
+          log('Guardian Ward: a translucent firewall wraps the kingdom.');
+        },
+      },
+      {
+        id: 'scout',
+        title: 'Scout Sky-Road',
+        hotkey: 'D',
+        body: 'Reveal a window: lower enemy power, gain insight.',
+        cost: { grain: 16, morale: 4 },
+        cooldown: 9,
+        apply: () => {
+          spend(state.resources, { grain: 16, morale: 4 });
+          state.insight += 1;
+          state.enemyPower = clamp(state.enemyPower - 8, 8, 90);
+          state.glory += 2;
+          addFloater('+1 insight', 0.70, 0.70, 'good');
+          burst(0.70, 0.70, 'gold', 16);
+          flashNode('tower');
+          log('Scout Sky-Road: patrols found a softer route through the clouds.');
+        },
+      },
+    ];
+  }
+
+  function canCast(edict: Edict): boolean {
+    return state.screen === 'playing' && (cooldowns.get(edict.id) ?? 0) <= 0 && hasEnough(state.resources, edict.cost);
+  }
+
+  function castEdict(id: EdictId): void {
+    const edict = edicts().find((item) => item.id === id);
+    if (!edict || !canCast(edict)) {
+      if (edict) log(`${edict.title} is blocked: missing resources or cooldown.`);
+      return;
+    }
+    edict.apply();
+    setCooldown(edict.id, edict.cooldown);
+    renderHud();
+  }
+
+  function flashNode(id: string): void {
+    const node = nodes.find((item) => item.id === id);
+    if (node) node.pulse = 1;
+  }
+
+  function addFloater(text: string, x: number, y: number, tone: FloatingText['tone']): void {
+    floaters.push({ text, x, y, age: 0, tone });
+  }
+
+  function burst(x: number, y: number, tone: Spark['tone'], count: number): void {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.08 + Math.random() * 0.22;
+      sparks.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.8 + Math.random() * 0.7,
+        tone,
+      });
+    }
+  }
+
+  function spawnUnit(side: Unit['side'], lane: number, progress = side === 'royal' ? 0 : 1): void {
+    units.push({
+      id: unitId++,
+      side,
+      lane,
+      progress,
+      speed: side === 'royal' ? 0.034 + Math.random() * 0.018 : 0.026 + Math.random() * 0.018,
+      hp: side === 'royal' ? 12 : 10,
+      power: side === 'royal' ? 3 + Math.random() * 2 : 2.8 + Math.random() * 2.5,
+    });
+  }
+
+  function triggerEvent(): void {
+    const events: Array<{ kind: EventKind; run: () => void }> = [
+      {
+        kind: 'blessing',
+        run: () => {
+          state.resources.crystal += 8 + state.insight * 2;
+          state.glory += 3;
+          addFloater('sky blessing', 0.50, 0.28, 'good');
+          burst(0.50, 0.28, 'aqua', 20);
+          log('Event: sky blessing cached fresh crystal packets.');
+        },
+      },
+      {
+        kind: 'raid',
+        run: () => {
+          state.threat += 9;
+          state.enemyPower += 6;
+          spawnUnit('shade', 4, 0.95);
+          addFloater('shade raid', 0.78, 0.60, 'bad');
+          burst(0.78, 0.60, 'pink', 18);
+          log('Event: Shade Gate opened a raid window.');
+        },
+      },
+      {
+        kind: 'market',
+        run: () => {
+          state.resources.gold += 28;
+          state.resources.grain += 18;
+          addFloater('market ping', 0.55, 0.47, 'good');
+          burst(0.55, 0.47, 'gold', 16);
+          log('Event: Bubble Market paid out old invoices.');
+        },
+      },
+      {
+        kind: 'storm',
+        run: () => {
+          const wardBlock = state.wards > 0;
+          if (wardBlock) {
+            state.wards -= 1;
+            state.glory += 2;
+            log('Event: glass storm hit, but a Guardian Ward absorbed it.');
+          } else {
+            state.resources.grain = clamp(state.resources.grain - 28, 0, 999);
+            state.resources.morale = clamp(state.resources.morale - 10, 0, 100);
+            state.threat += 5;
+            log('Event: glass storm cracked farms and morale.');
+          }
+          addFloater(wardBlock ? 'ward block' : 'storm damage', 0.36, 0.56, wardBlock ? 'good' : 'bad');
+          burst(0.36, 0.56, wardBlock ? 'aqua' : 'pink', 22);
+        },
+      },
+      {
+        kind: 'festival',
+        run: () => {
+          state.resources.morale = clamp(state.resources.morale + 12, 0, 100);
+          state.glory += 5;
+          log('Event: spontaneous festival made the UI sparkle.');
+          addFloater('+festival', 0.68, 0.31, 'good');
+          burst(0.68, 0.31, 'pink', 24);
+        },
+      },
+    ];
+    const index = Math.floor(Math.random() * events.length);
+    events[index].run();
+  }
+
+  function resolveBattle(): void {
+    const royal = state.army + state.resources.morale * 0.12 + state.wards * 2 + Math.random() * 10;
+    const shade = state.enemyPower + state.threat * 0.08 + Math.random() * 12;
+    if (royal >= shade) {
+      const gloryGain = 8 + Math.floor((royal - shade) / 5);
+      state.glory = clamp(state.glory + gloryGain, 0, 100);
+      state.enemyPower = clamp(state.enemyPower - 7, 8, 100);
+      state.army = Math.max(3, state.army - Math.floor(3 + Math.random() * 4));
+      addFloater(`+${gloryGain} glory`, 0.78, 0.60, 'good');
+      burst(0.78, 0.60, 'gold', 30);
+      log(`Battle: royal patrol won the lane and banked ${gloryGain} Glory.`);
+    } else {
+      const threatGain = 8 + Math.floor((shade - royal) / 6);
+      state.threat = clamp(state.threat + threatGain, 0, 100);
+      state.army = Math.max(0, state.army - Math.floor(4 + Math.random() * 5));
+      state.resources.morale = clamp(state.resources.morale - 8, 0, 100);
+      addFloater(`+${threatGain} threat`, 0.70, 0.70, 'bad');
+      burst(0.70, 0.70, 'pink', 26);
+      log(`Battle: Shade pressure broke through for +${threatGain} Threat.`);
+    }
+  }
+
+  function tick(dt: number): void {
+    if (state.screen !== 'playing') return;
+
+    const scaled = dt * state.speed;
+    state.elapsed += scaled;
+    state.day = 1 + Math.floor(state.elapsed / 12);
+
+    for (const id of Array.from(cooldowns.keys())) {
+      cooldowns.set(id, Math.max(0, (cooldowns.get(id) ?? 0) - scaled));
+    }
+
+    const activeBonus = state.selectedMode === 'active' ? 1.16 : 1;
+    state.resources.gold += scaled * (2.1 + state.workers * 0.16) * activeBonus;
+    state.resources.grain += scaled * (1.6 + state.workers * 0.15) * activeBonus;
+    state.resources.crystal += scaled * (0.25 + state.insight * 0.035);
+    state.resources.morale = clamp(state.resources.morale + scaled * 0.17 - scaled * state.threat * 0.012, 0, 100);
+    state.glory = clamp(state.glory + scaled * (state.resources.morale > 80 ? 0.06 : 0.025), 0, 100);
+    state.threat = clamp(state.threat + scaled * (0.20 + state.enemyPower * 0.006) - state.wards * scaled * 0.018, 0, 100);
+    state.enemyPower = clamp(state.enemyPower + scaled * 0.08, 8, 100);
+
+    if (Math.floor(state.elapsed) % 7 === 0 && state.elapsed - state.lastAutosaveAt > 6.5) {
+      state.lastAutosaveAt = state.elapsed;
+      if (state.resources.gold > 140 && state.army < 18) {
+        state.resources.gold -= 32;
+        state.resources.grain = Math.max(0, state.resources.grain - 12);
+        state.army += 2;
+        spawnUnit('royal', 1, 0.08);
+        log('Autopilot: barracks bought two units from surplus gold.');
+      }
+    }
+
+    const eventCadence = state.selectedMode === 'active' ? 10 : 13;
+    if (state.elapsed - state.lastEventAt > eventCadence) {
+      state.lastEventAt = state.elapsed;
+      triggerEvent();
+    }
+
+    if (state.elapsed - state.lastBattleAt > 16) {
+      state.lastBattleAt = state.elapsed;
+      resolveBattle();
+    }
+
+    if (Math.random() < scaled * 0.8) spawnUnit('royal', 1 + Math.floor(Math.random() * 2), 0.02);
+    if (Math.random() < scaled * 0.62) spawnUnit('shade', 3 + Math.floor(Math.random() * 2), 0.98);
+
+    updateUnits(scaled);
+    updateEffects(scaled);
+
+    if (state.glory >= 100) endGame('victory');
+    if (state.threat >= 100 || state.resources.morale <= 0) endGame('defeat');
+  }
+
+  function updateUnits(dt: number): void {
+    for (const unit of units) {
+      unit.progress += (unit.side === 'royal' ? 1 : -1) * unit.speed * dt;
+      const jitter = Math.sin((state.elapsed + unit.id) * 3) * 0.0009;
+      unit.progress += jitter;
+    }
+
+    for (let i = units.length - 1; i >= 0; i--) {
+      const unit = units[i];
+      if (unit.progress < -0.05 || unit.progress > 1.05 || unit.hp <= 0) units.splice(i, 1);
+    }
+
+    for (const a of units) {
+      for (const b of units) {
+        if (a === b || a.side === b.side || a.lane !== b.lane) continue;
+        if (Math.abs(a.progress - b.progress) < 0.045) {
+          a.hp -= b.power * dt * 0.35;
+          b.hp -= a.power * dt * 0.35;
+          if (Math.random() < dt * 3) {
+            const p = lanePoint(a.lane, (a.progress + b.progress) / 2);
+            burst(p.x, p.y, Math.random() > 0.5 ? 'gold' : 'pink', 2);
+          }
+        }
+      }
+    }
+  }
+
+  function updateEffects(dt: number): void {
+    for (const node of nodes) node.pulse = Math.max(0, node.pulse - dt * 1.4);
+    for (let i = floaters.length - 1; i >= 0; i--) {
+      floaters[i].age += dt;
+      if (floaters[i].age > 1.7) floaters.splice(i, 1);
+    }
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const spark = sparks[i];
+      spark.x += spark.vx * dt;
+      spark.y += spark.vy * dt;
+      spark.vy += 0.03 * dt;
+      spark.life -= dt;
+      if (spark.life <= 0) sparks.splice(i, 1);
+    }
+  }
+
+  function endGame(result: 'victory' | 'defeat'): void {
+    state.screen = 'ended';
+    state.ending = result;
+    log(result === 'victory' ? 'Victory: the glass kingdom shipped a beautiful proof.' : 'Defeat: Shade Threat filled the desktop.');
+    renderHud();
+  }
+
+  function lanePoint(lane: number, progress: number): { x: number; y: number } {
+    const [from, to] = EDGES[lane % EDGES.length];
+    const a = nodes[from];
+    const b = nodes[to];
+    return {
+      x: a.x + (b.x - a.x) * progress,
+      y: a.y + (b.y - a.y) * progress,
+    };
+  }
+
+  function resize(): void {
+    const rect = shell.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function draw(): void {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+
+    drawBackground(w, h);
+    drawWorld(w, h);
+    if (debug) drawDebug(w, h);
+  }
+
+  function drawBackground(w: number, h: number): void {
+    const gradient = ctx.createLinearGradient(0, 0, w, h);
+    gradient.addColorStop(0, '#10c8ff');
+    gradient.addColorStop(0.42, '#88f2ff');
+    gradient.addColorStop(1, '#65ffbd');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, w, h);
+
+    if (background.complete && background.naturalWidth > 0) {
+      const scale = Math.max(w / background.naturalWidth, h / background.naturalHeight);
+      const iw = background.naturalWidth * scale;
+      const ih = background.naturalHeight * scale;
+      ctx.globalAlpha = 0.88;
+      ctx.drawImage(background, (w - iw) * 0.55, (h - ih) * 0.48, iw, ih);
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    for (let x = -80; x < w + 160; x += 96) {
+      ctx.beginPath();
+      ctx.moveTo(x + Math.sin(state.elapsed * 0.3) * 12, 0);
+      ctx.lineTo(x - 220, h);
+      ctx.stroke();
+    }
+    for (let y = 40; y < h; y += 110) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y + Math.cos(state.elapsed * 0.2) * 18);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    const veil = ctx.createLinearGradient(0, 0, 0, h);
+    veil.addColorStop(0, 'rgba(255,255,255,0.18)');
+    veil.addColorStop(0.5, 'rgba(255,255,255,0.02)');
+    veil.addColorStop(1, 'rgba(10,60,120,0.22)');
+    ctx.fillStyle = veil;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  function drawWorld(w: number, h: number): void {
+    const mapRect = getMapRect(w, h);
+    ctx.save();
+    ctx.translate(mapRect.x, mapRect.y);
+    ctx.scale(mapRect.w, mapRect.h);
+
+    drawRoutes();
+    for (const unit of units) drawUnit(unit);
+    for (const node of nodes) drawNode(node);
+    for (const spark of sparks) drawSpark(spark);
+    for (const floater of floaters) drawFloater(floater);
+
+    ctx.restore();
+  }
+
+  function getMapRect(w: number, h: number): { x: number; y: number; w: number; h: number } {
+    const compact = w < 900;
+    return compact
+      ? { x: w * 0.04, y: h * 0.20, w: w * 0.92, h: h * 0.54 }
+      : { x: w * 0.21, y: h * 0.10, w: w * 0.72, h: h * 0.73 };
+  }
+
+  function drawRoutes(): void {
+    ctx.lineCap = 'round';
+    for (let i = 0; i < EDGES.length; i++) {
+      const [from, to] = EDGES[i];
+      const a = nodes[from];
+      const b = nodes[to];
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2 - 0.05;
+      ctx.quadraticCurveTo(mx, my, b.x, b.y);
+      ctx.strokeStyle = 'rgba(255,255,255,0.72)';
+      ctx.lineWidth = 0.014;
+      ctx.stroke();
+      ctx.strokeStyle = i % 2 === 0 ? 'rgba(18,224,255,0.50)' : 'rgba(255,228,62,0.36)';
+      ctx.lineWidth = 0.006;
+      ctx.stroke();
+    }
+  }
+
+  function drawNode(node: Node): void {
+    const color = node.owner === 'royal' ? '#3edcff' : node.owner === 'shade' ? '#ff4bd8' : '#ffe66d';
+    const radius = node.kind === 'castle' ? 0.054 : node.kind === 'portal' ? 0.048 : 0.039;
+    ctx.save();
+    ctx.translate(node.x, node.y);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 0.055 + node.pulse * 0.08;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.42)';
+    roundedRect(-radius * 1.28, -radius * 0.9, radius * 2.56, radius * 1.8, radius * 0.44);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.82)';
+    ctx.lineWidth = 0.006;
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.95;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * (0.62 + node.pulse * 0.18), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = 'rgba(8,42,96,0.82)';
+    ctx.font = '700 0.020px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(node.label, 0, radius * 1.45);
+    ctx.restore();
+  }
+
+  function drawUnit(unit: Unit): void {
+    const point = lanePoint(unit.lane, unit.progress);
+    const sideOffset = unit.side === 'royal' ? -0.012 : 0.012;
+    const x = point.x;
+    const y = point.y + sideOffset + Math.sin((state.elapsed + unit.id) * 5) * 0.003;
+    const color = unit.side === 'royal' ? '#f7fcff' : '#8d22ff';
+    const trim = unit.side === 'royal' ? '#177bff' : '#ff4bd8';
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.shadowColor = trim;
+    ctx.shadowBlur = 0.025;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(0, 0, 0.014, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = trim;
+    ctx.fillRect(-0.010, -0.026, 0.020, 0.008);
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 0.003;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawSpark(spark: Spark): void {
+    const color = spark.tone === 'aqua' ? '#3ff7ff' : spark.tone === 'gold' ? '#ffe85c' : '#ff5df1';
+    ctx.save();
+    ctx.globalAlpha = clamp(spark.life, 0, 1);
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 0.04;
+    ctx.beginPath();
+    ctx.arc(spark.x, spark.y, 0.006, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawFloater(floater: FloatingText): void {
+    const color = floater.tone === 'good' ? '#007c8f' : floater.tone === 'bad' ? '#9d0473' : '#334155';
+    ctx.save();
+    ctx.globalAlpha = 1 - floater.age / 1.7;
+    ctx.translate(floater.x, floater.y - floater.age * 0.035);
+    ctx.fillStyle = 'rgba(255,255,255,0.82)';
+    roundedRect(-0.05, -0.020, 0.10, 0.032, 0.012);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.font = '800 0.017px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(floater.text, 0, 0.002);
+    ctx.restore();
+  }
+
+  function drawDebug(w: number, h: number): void {
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,20,30,0.65)';
+    ctx.fillRect(12, h - 92, 290, 76);
+    ctx.fillStyle = '#d8fbff';
+    ctx.font = '12px ui-monospace, monospace';
+    ctx.fillText(`elapsed=${state.elapsed.toFixed(1)} screen=${state.screen} speed=${state.speed}`, 24, h - 64);
+    ctx.fillText(`units=${units.length} sparks=${sparks.length} mode=${state.selectedMode}`, 24, h - 42);
+    ctx.fillText(`glory=${state.glory.toFixed(1)} threat=${state.threat.toFixed(1)}`, 24, h - 20);
+    ctx.restore();
+  }
+
+  function roundedRect(x: number, y: number, w: number, h: number, r: number): void {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+  }
+
+  function renderHud(): void {
+    shell.dataset.screen = state.screen;
+    speedButton.textContent = `${state.speed}x`;
+    pauseButton.textContent = state.screen === 'paused' ? 'Resume' : 'Pause';
+
+    resourceStrip.innerHTML = `
+      ${renderMeter('glory', 'Glory', state.glory, '#10bce3')}
+      ${renderMeter('threat', 'Threat', state.threat, '#f42fbf')}
+      ${renderChip('gold', fmt(state.resources.gold))}
+      ${renderChip('grain', fmt(state.resources.grain))}
+      ${renderChip('crystal', fmt(state.resources.crystal))}
+      ${renderChip('morale', fmt(state.resources.morale))}
+      ${renderChip('army', fmt(state.army))}
+      ${renderChip('workers', fmt(state.workers))}
+    `;
+
+    commandPanel.innerHTML = `
+      <header>
+        <span>Royal Edicts</span>
+        <strong>Day ${state.day}</strong>
+      </header>
+      <div class="k2k-edict-grid">
+        ${edicts().map(renderEdict).join('')}
+      </div>
+      <div class="k2k-mini-status">
+        <span>Wards <b>${state.wards}</b></span>
+        <span>Insight <b>${state.insight}</b></span>
+        <span>Mode <b>${state.selectedMode === 'afk' ? 'AFK' : 'Active'}</b></span>
+      </div>
+    `;
+
+    advisorPanel.innerHTML = `
+      <header>
+        <span>Advisor Feed</span>
+        <strong>${state.ending ? titleCase(state.ending) : state.screen === 'playing' ? 'Live' : 'Ready'}</strong>
+      </header>
+      <ol>
+        ${state.log.map((entry) => `<li>${entry}</li>`).join('')}
+      </ol>
+    `;
+
+    overlay.innerHTML = renderOverlay();
+  }
+
+  function renderMeter(id: string, label: string, value: number, color: string): string {
+    return `
+      <article class="k2k-meter" data-meter="${id}" style="--meter:${clamp(value, 0, 100)}; --meter-color:${color}">
+        <span>${label}</span>
+        <strong>${fmt(value)}</strong>
+        <i></i>
+      </article>
+    `;
+  }
+
+  function renderChip(label: string, value: string): string {
+    return `
+      <article class="k2k-chip" data-kind="${label}">
+        <span>${titleCase(label)}</span>
+        <strong>${value}</strong>
+      </article>
+    `;
+  }
+
+  function renderEdict(edict: Edict): string {
+    const cd = cooldowns.get(edict.id) ?? 0;
+    const affordable = hasEnough(state.resources, edict.cost);
+    const disabled = state.screen !== 'playing' || cd > 0 || !affordable;
+    const reason = cd > 0 ? `${Math.ceil(cd)}s` : affordable ? resourceText(edict.cost) : `Need ${resourceText(edict.cost)}`;
+    return `
+      <button class="k2k-edict" data-edict="${edict.id}" type="button" ${disabled ? 'disabled' : ''}>
+        <span class="k2k-hotkey">${edict.hotkey}</span>
+        <strong>${edict.title}</strong>
+        <small>${edict.body}</small>
+        <em>${reason}</em>
+      </button>
+    `;
+  }
+
+  function renderOverlay(): string {
+    if (state.screen === 'menu') {
+      return `
+        <div class="k2k-card k2k-title-card">
+          <p class="k2k-kicker">Minimum Beautiful Playable</p>
+          <h1>Kingdom OS 2000</h1>
+          <p class="k2k-lede">A glassy idle RTS command desk: your tiny kingdom harvests, fights, panics, and celebrates while you steer it with royal edicts.</p>
+          <div class="k2k-actions">
+            <button data-action="mode" type="button">Start</button>
+            <button data-action="instant" type="button">Quick AFK Run</button>
+          </div>
+        </div>
+      `;
+    }
+
+    if (state.screen === 'mode') {
+      return `
+        <div class="k2k-card k2k-mode-card">
+          <p class="k2k-kicker">Choose first playable loop</p>
+          <h2>How should the kingdom behave?</h2>
+          <div class="k2k-mode-grid">
+            <button data-mode="afk" type="button">
+              <strong>AFK Sovereign</strong>
+              <span>Slower, more idle. Watch the kingdom breathe and intervene when the feed gets spicy.</span>
+            </button>
+            <button data-mode="active" type="button">
+              <strong>Active Steward</strong>
+              <span>Faster incidents, sharper tradeoffs, better for a 90-second test run.</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    if (state.screen === 'paused') {
+      return `
+        <div class="k2k-card k2k-pause-card">
+          <p class="k2k-kicker">System paused</p>
+          <h2>Kingdom suspended</h2>
+          <p>Nothing moves while the royal desktop is paused.</p>
+          <div class="k2k-actions">
+            <button data-action="resume" type="button">Resume</button>
+            <button data-action="restart" type="button">Restart</button>
+            <button data-action="menu" type="button">Menu</button>
+          </div>
+        </div>
+      `;
+    }
+
+    if (state.screen === 'ended') {
+      const victory = state.ending === 'victory';
+      return `
+        <div class="k2k-card k2k-end-card ${victory ? 'is-victory' : 'is-defeat'}">
+          <p class="k2k-kicker">${victory ? 'Victory proof' : 'Recovery proof'}</p>
+          <h2>${victory ? 'The glass kingdom shipped.' : 'Shade filled the desktop.'}</h2>
+          <p>${victory ? 'The core toy reached a clean win state with resource pressure, edicts, and readable spectacle.' : 'The loop has failure pressure. Try more wards, scouting, or faster musters.'}</p>
+          <div class="k2k-scoreline">
+            <span>Glory <b>${fmt(state.glory)}</b></span>
+            <span>Threat <b>${fmt(state.threat)}</b></span>
+            <span>Day <b>${state.day}</b></span>
+          </div>
+          <div class="k2k-actions">
+            <button data-action="restart" type="button">Rematch</button>
+            <button data-action="mode" type="button">Mode Select</button>
+          </div>
+        </div>
+      `;
+    }
+
+    return '';
+  }
+
+  function handleClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    const action = target.closest<HTMLElement>('[data-action]')?.dataset.action;
+    const edict = target.closest<HTMLElement>('[data-edict]')?.dataset.edict as EdictId | undefined;
+    const mode = target.closest<HTMLElement>('[data-mode]')?.dataset.mode as 'afk' | 'active' | undefined;
+
+    if (edict) {
+      castEdict(edict);
+      return;
+    }
+
+    if (mode) {
+      resetGame(mode);
+      return;
+    }
+
+    if (action === 'mode') {
+      state.screen = 'mode';
+      renderHud();
+      return;
+    }
+    if (action === 'instant') {
+      resetGame('afk');
+      return;
+    }
+    if (action === 'pause') {
+      if (state.screen === 'playing') {
+        state.pausedBeforeOverlay = 'playing';
+        state.screen = 'paused';
+      } else if (state.screen === 'paused') {
+        state.screen = state.pausedBeforeOverlay;
+      }
+      renderHud();
+      return;
+    }
+    if (action === 'resume') {
+      state.screen = 'playing';
+      renderHud();
+      return;
+    }
+    if (action === 'restart') {
+      resetGame(state.selectedMode);
+      return;
+    }
+    if (action === 'speed') {
+      state.speed = state.speed === 1 ? 2 : state.speed === 2 ? 4 : 1;
+      renderHud();
+      return;
+    }
+    if (action === 'menu') {
+      state.screen = 'menu';
+      state.ending = null;
+      renderHud();
+    }
+  }
+
+  function handleKey(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      if (state.screen === 'playing') state.screen = 'paused';
+      else if (state.screen === 'paused') state.screen = 'playing';
+      renderHud();
+      return;
+    }
+    if (event.key.toLowerCase() === 'r') {
+      resetGame(state.selectedMode);
+      return;
+    }
+    if (event.key.toLowerCase() === '`') {
+      debug = !debug;
+      return;
+    }
+    const byKey = edicts().find((edict) => edict.hotkey.toLowerCase() === event.key.toLowerCase());
+    if (byKey) castEdict(byKey.id);
+  }
+
+  function loop(now: number): void {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    tick(dt);
+    draw();
+    if (state.screen === 'playing') renderHud();
+    raf = requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('resize', resize);
+  shell.addEventListener('click', handleClick);
+  window.addEventListener('keydown', handleKey);
+  background.addEventListener('load', draw);
+
+  const playParam = new URLSearchParams(window.location.search).get('play');
+  resize();
+  if (playParam === 'active' || playParam === 'afk') resetGame(playParam);
+  else renderHud();
+  raf = requestAnimationFrame(loop);
+
+  return () => {
+    cancelAnimationFrame(raf);
+    window.removeEventListener('resize', resize);
+    shell.removeEventListener('click', handleClick);
+    window.removeEventListener('keydown', handleKey);
+  };
+}
