@@ -439,6 +439,10 @@ button {
   margin-bottom: 9px;
 }
 
+.k2k-plan-current .k2k-council-order {
+  display: none;
+}
+
 .k2k-plan-current em {
   margin-top: 5px;
   font-style: normal;
@@ -883,6 +887,10 @@ button {
 
   .k2k-advisor-panel {
     display: none;
+  }
+
+  .k2k-plan-current .k2k-council-order {
+    display: block;
   }
 
   .k2k-edict-grid {

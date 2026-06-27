@@ -471,3 +471,40 @@ Deploy:
 
 Next recommendation:
 - Review pass should test the Council order under high-Threat and low-Morale states, and check whether the added order card makes the mobile command panel too tall during normal play.
+
+## Wake 12 - Cycle 4 - Review/Fix
+
+Start: 2026-06-27 04:50 UTC
+End: 2026-06-27 04:54 UTC
+Starting HEAD: `f922239`
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Reviewed the Wake 11 Council order implementation and screenshots.
+- Found the desktop command panel duplicated the same Council order already shown in the advisor feed.
+- Kept the command-panel Council order as the mobile fallback because the advisor panel is hidden on small screens.
+- Captured fresh desktop and mobile final-protocol screenshots with headless Chromium.
+
+Files changed:
+- `src/revival/kingdom2000.css`
+- `docs/night-runs/artifacts/wake-12-review-fix.md`
+- `docs/night-runs/artifacts/wake-12-council-desktop-fixed.png`
+- `docs/night-runs/artifacts/wake-12-council-mobile-fixed.png`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- `npm run build` passed.
+- `npm test` skipped because the fix is CSS-only.
+- Headless Chromium reached `Final 2/3` through the Sky-Road commission path.
+- Desktop screenshot shows one Council order in the advisor feed and none in the left current-program card.
+- Mobile screenshot shows the Council order in the current-program card.
+- Final screenshot state: program `Light the Crystal Rite`, order `Steady Citizens - Cast Market Festival now`, Threat `47`, Focus `100`, Morale `46`.
+
+Commit:
+- Pending.
+
+Deploy:
+- Pending.
+
+Next recommendation:
+- Next research pass should study the opening five minutes: whether the first crown needs a stronger onboarding prompt, a clearer first-click highlight, or a small early win animation before the mid-run commission appears.
