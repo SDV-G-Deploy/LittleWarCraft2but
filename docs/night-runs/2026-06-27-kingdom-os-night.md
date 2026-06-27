@@ -539,10 +539,10 @@ Verification:
 - Headless Chromium captured the opening live screenshot.
 
 Commit:
-- Pending.
+- `b6c9e4a` (`docs: research kingdom os opening decree`)
 
 Deploy:
-- Pending.
+- GitHub Pages deploy succeeded for pushed HEAD `b6c9e4a`; run `28279712265`.
 
 Next recommendation:
 - Implement a bounded opening decree: highlight Harvest Boom as the first command on fresh runs, show a compact `First decree` hint in the current-program card, and clear the hint immediately after the first edict is cast.
