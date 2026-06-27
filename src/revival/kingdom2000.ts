@@ -595,11 +595,12 @@ export function runKingdom2000(root: HTMLElement): () => void {
         shortTitle: 'Crystal',
         planId: 'ritual',
         benefit: 'Crystal and gold jump toward Rite.',
-        tradeoff: '-8 Morale from glare fatigue.',
+        tradeoff: '-10 Morale and +4 Threat from glare fatigue.',
         apply: () => {
           state.resources.crystal = raiseToward(state.resources.crystal, 18, 66);
-          state.resources.gold += 24;
-          state.resources.morale = clamp(state.resources.morale - 8, 0, 100);
+          state.resources.gold += 18;
+          state.resources.morale = clamp(state.resources.morale - 10, 0, 100);
+          state.threat = clamp(state.threat + 4, 0, 96);
           addFloater('Crystal Mandate', 0.45, 0.76, 'good');
           burst(0.45, 0.76, 'aqua', 30);
           flashNode('mine');

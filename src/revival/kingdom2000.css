@@ -580,6 +580,12 @@ button {
   pointer-events: none;
 }
 
+.k2k-shell[data-screen="commission"] .k2k-command-panel,
+.k2k-shell[data-screen="commission"] .k2k-advisor-panel {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .k2k-card {
   width: min(620px, calc(100vw - 32px));
   margin-left: clamp(8px, 7vw, 110px);
@@ -670,6 +676,9 @@ button {
 
 .k2k-commission-card {
   width: min(780px, calc(100vw - 32px));
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.88), rgba(205, 250, 255, 0.72)),
+    rgba(255, 255, 255, 0.78);
 }
 
 .k2k-commission-grid {
