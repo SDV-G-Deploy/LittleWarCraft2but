@@ -564,6 +564,7 @@ button {
 
 .k2k-shell[data-screen="menu"] .k2k-overlay,
 .k2k-shell[data-screen="mode"] .k2k-overlay,
+.k2k-shell[data-screen="commission"] .k2k-overlay,
 .k2k-shell[data-screen="paused"] .k2k-overlay,
 .k2k-shell[data-screen="ended"] .k2k-overlay {
   display: flex;
@@ -667,6 +668,67 @@ button {
   line-height: 1.35;
 }
 
+.k2k-commission-card {
+  width: min(780px, calc(100vw - 32px));
+}
+
+.k2k-commission-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.k2k-commission-grid button {
+  min-height: 164px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 14px;
+  color: #04345b;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.92), transparent 34%),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.78), rgba(255, 227, 78, 0.36)),
+    #bff7ff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 14px 28px rgba(12, 100, 176, 0.20);
+  text-align: left;
+  cursor: pointer;
+}
+
+.k2k-commission-grid button:hover {
+  transform: translateY(-2px);
+  filter: saturate(1.08);
+}
+
+.k2k-commission-grid strong,
+.k2k-commission-grid span,
+.k2k-commission-grid em {
+  display: block;
+}
+
+.k2k-commission-grid strong {
+  color: #052d4d;
+  font-size: 1.05rem;
+  line-height: 1.08;
+}
+
+.k2k-commission-grid span {
+  margin-top: 10px;
+  color: rgba(5, 50, 79, 0.76);
+  font-size: 0.84rem;
+  line-height: 1.25;
+}
+
+.k2k-commission-grid em {
+  margin-top: 12px;
+  color: #006c88;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
 .k2k-scoreline {
   display: flex;
   flex-wrap: wrap;
@@ -765,6 +827,14 @@ button {
 
   .k2k-mode-grid {
     grid-template-columns: 1fr;
+  }
+
+  .k2k-commission-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .k2k-commission-grid button {
+    min-height: 0;
   }
 }
 
@@ -938,5 +1008,36 @@ button {
 
   .k2k-card h2 {
     font-size: clamp(1.9rem, 9vw, 3rem);
+  }
+
+  .k2k-commission-card {
+    padding: 18px;
+  }
+
+  .k2k-commission-card p:not(.k2k-kicker) {
+    margin-top: 10px;
+    font-size: 0.92rem;
+    line-height: 1.32;
+  }
+
+  .k2k-commission-grid {
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .k2k-commission-grid button {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .k2k-commission-grid strong {
+    font-size: 0.95rem;
+  }
+
+  .k2k-commission-grid span,
+  .k2k-commission-grid em {
+    margin-top: 6px;
+    font-size: 0.72rem;
+    line-height: 1.18;
   }
 }

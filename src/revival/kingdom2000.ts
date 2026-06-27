@@ -1,7 +1,8 @@
-type Screen = 'menu' | 'mode' | 'playing' | 'paused' | 'ended';
+type Screen = 'menu' | 'mode' | 'playing' | 'commission' | 'paused' | 'ended';
 type EdictId = 'harvest' | 'muster' | 'crystal' | 'festival' | 'ward' | 'scout';
 type EventKind = 'blessing' | 'raid' | 'market' | 'storm' | 'festival';
 type PlanId = 'growth' | 'war' | 'ritual';
+type CommissionId = 'farm' | 'skyroad' | 'crystal';
 
 type Resources = {
   gold: number;
@@ -85,6 +86,16 @@ type Plan = {
   reward: () => void;
 };
 
+type Commission = {
+  id: CommissionId;
+  title: string;
+  shortTitle: string;
+  planId: PlanId;
+  benefit: string;
+  tradeoff: string;
+  apply: () => void;
+};
+
 type GameState = {
   screen: Screen;
   elapsed: number;
@@ -106,6 +117,8 @@ type GameState = {
   selectedMode: 'afk' | 'active';
   activePlan: PlanId;
   completedPlans: PlanId[];
+  commissionOffered: boolean;
+  activeCommission: CommissionId | null;
   finalProtocolStarted: boolean;
   finalProtocolAge: number;
   ending: 'victory' | 'defeat' | null;
@@ -262,6 +275,8 @@ export function runKingdom2000(root: HTMLElement): () => void {
     selectedMode: 'afk',
     activePlan: 'growth',
     completedPlans: [],
+    commissionOffered: false,
+    activeCommission: null,
     finalProtocolStarted: false,
     finalProtocolAge: 0,
     ending: null,
@@ -294,6 +309,8 @@ export function runKingdom2000(root: HTMLElement): () => void {
     state.selectedMode = mode;
     state.activePlan = 'growth';
     state.completedPlans = [];
+    state.commissionOffered = false;
+    state.activeCommission = null;
     state.finalProtocolStarted = false;
     state.finalProtocolAge = 0;
     state.ending = null;
@@ -536,6 +553,70 @@ export function runKingdom2000(root: HTMLElement): () => void {
     ];
   }
 
+  function commissions(): Commission[] {
+    return [
+      {
+        id: 'farm',
+        title: 'Farm Charter',
+        shortTitle: 'Farm',
+        planId: 'growth',
+        benefit: 'Workers and grain climb toward Grow.',
+        tradeoff: '+6 Threat from overworked farms.',
+        apply: () => {
+          state.workers = raiseToward(state.workers, 2, 17);
+          state.resources.grain = raiseToward(state.resources.grain, 52, 210);
+          state.threat = clamp(state.threat + 6, 0, 96);
+          addFloater('Farm Charter', 0.36, 0.56, 'good');
+          burst(0.36, 0.56, 'gold', 28);
+          flashNode('mill');
+        },
+      },
+      {
+        id: 'skyroad',
+        title: 'Sky-Road Contract',
+        shortTitle: 'Sky-Road',
+        planId: 'war',
+        benefit: 'Army and insight arrive for War.',
+        tradeoff: '+8 enemy power as Shade mobilizes.',
+        apply: () => {
+          state.army += 5;
+          state.insight += 1;
+          state.enemyPower = clamp(state.enemyPower + 8, 8, 100);
+          state.threat = clamp(state.threat + 3, 0, 96);
+          spawnUnit('royal', 2, 0.06);
+          addFloater('Sky-Road Contract', 0.78, 0.60, 'good');
+          burst(0.78, 0.60, 'aqua', 30);
+          flashNode('portal');
+        },
+      },
+      {
+        id: 'crystal',
+        title: 'Crystal Mandate',
+        shortTitle: 'Crystal',
+        planId: 'ritual',
+        benefit: 'Crystal and gold jump toward Rite.',
+        tradeoff: '-8 Morale from glare fatigue.',
+        apply: () => {
+          state.resources.crystal = raiseToward(state.resources.crystal, 18, 66);
+          state.resources.gold += 24;
+          state.resources.morale = clamp(state.resources.morale - 8, 0, 100);
+          addFloater('Crystal Mandate', 0.45, 0.76, 'good');
+          burst(0.45, 0.76, 'aqua', 30);
+          flashNode('mine');
+        },
+      },
+    ];
+  }
+
+  function activeCommission(): Commission | null {
+    if (!state.activeCommission) return null;
+    return commissions().find((commission) => commission.id === state.activeCommission) ?? null;
+  }
+
+  function commissionLabel(): string {
+    return activeCommission()?.shortTitle ?? 'None';
+  }
+
   function canCast(edict: Edict): boolean {
     return state.screen === 'playing' && (cooldowns.get(edict.id) ?? 0) <= 0 && hasEnough(state, edict.cost);
   }
@@ -565,10 +646,42 @@ export function runKingdom2000(root: HTMLElement): () => void {
     if (next) {
       state.activePlan = next.id;
       log(`Next program: ${next.title}. ${next.objective}`);
+      if (state.crowns === 1 && !state.commissionOffered) {
+        offerRoyalCommission();
+        return;
+      }
       if (state.crowns === 2) triggerFinalProtocol(next);
     } else {
       endGame('victory');
     }
+  }
+
+  function offerRoyalCommission(): void {
+    state.commissionOffered = true;
+    state.pausedBeforeOverlay = 'playing';
+    state.screen = 'commission';
+    log('Royal commission opened: choose a charter to bend the next crown route.');
+    renderHud();
+  }
+
+  function chooseCommission(id: CommissionId): void {
+    const commission = commissions().find((item) => item.id === id);
+    if (!commission || state.activeCommission) return;
+
+    state.activeCommission = commission.id;
+    commission.apply();
+
+    const biased = plans().find((plan) => plan.id === commission.planId && !state.completedPlans.includes(plan.id));
+    const fallback = plans().find((plan) => !state.completedPlans.includes(plan.id));
+    const next = biased ?? fallback;
+    if (next) state.activePlan = next.id;
+
+    state.screen = 'playing';
+    log(
+      `Commission chosen: ${commission.title}. ${commission.benefit} ${commission.tradeoff} ${next ? `Next: ${next.shortTitle}.` : ''}`,
+    );
+    checkPlanCompletion();
+    renderHud();
   }
 
   function isFinalProtocolActive(): boolean {
@@ -1271,6 +1384,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
         <span>Wards <b>${state.wards}</b></span>
         <span>Insight <b>${state.insight}</b></span>
         <span>Mode <b>${state.selectedMode === 'afk' ? 'AFK' : 'Active'}</b></span>
+        <span>Commission <b>${commissionLabel()}</b></span>
       </div>
     `;
 
@@ -1311,13 +1425,19 @@ export function runKingdom2000(root: HTMLElement): () => void {
     const plan = currentPlan();
     const progress = Math.round(plan.progress() * 100);
     const finalActive = isFinalProtocolActive();
+    const commission = activeCommission();
+    const hint = finalActive
+      ? 'Last crown active. Spend the restored Focus before Shade pressure converts the surge.'
+      : commission
+        ? `${commission.shortTitle} commission active. ${commission.benefit}`
+        : plan.hint;
     return `
       <section class="k2k-plan-panel" aria-label="Current royal program">
         <div class="k2k-plan-current ${finalActive ? 'is-final' : ''}">
           <span>${finalActive ? 'Final crown protocol' : 'Current program'}</span>
           <strong>${plan.title}</strong>
           <p>${plan.objective}</p>
-          <em>${finalActive ? 'Last crown active. Spend the restored Focus before Shade pressure converts the surge.' : plan.hint}</em>
+          <em>${hint}</em>
           <i style="--plan-progress:${progress}"></i>
         </div>
         <div class="k2k-plan-grid" aria-label="Royal programs">
@@ -1402,6 +1522,29 @@ export function runKingdom2000(root: HTMLElement): () => void {
       `;
     }
 
+    if (state.screen === 'commission') {
+      return `
+        <div class="k2k-card k2k-commission-card">
+          <p class="k2k-kicker">Royal commission</p>
+          <h2>Choose the next bargain.</h2>
+          <p>One charter bends the middle game before the final crown protocol begins.</p>
+          <div class="k2k-commission-grid">
+            ${commissions()
+              .map(
+                (commission) => `
+                  <button data-commission="${commission.id}" type="button">
+                    <strong>${commission.title}</strong>
+                    <span>${commission.benefit}</span>
+                    <em>${commission.tradeoff}</em>
+                  </button>
+                `,
+              )
+              .join('')}
+          </div>
+        </div>
+      `;
+    }
+
     if (state.screen === 'ended') {
       const victory = state.ending === 'victory';
       return `
@@ -1433,9 +1576,17 @@ export function runKingdom2000(root: HTMLElement): () => void {
     const edict = target.closest<HTMLElement>('[data-edict]')?.dataset.edict as EdictId | undefined;
     const mode = target.closest<HTMLElement>('[data-mode]')?.dataset.mode as 'afk' | 'active' | undefined;
     const plan = target.closest<HTMLElement>('[data-plan]')?.dataset.plan as PlanId | undefined;
+    const commission = target.closest<HTMLElement>('[data-commission]')?.dataset.commission as CommissionId | undefined;
+
+    if (state.screen === 'commission' && !commission && action !== 'restart' && action !== 'menu') return;
 
     if (edict) {
       castEdict(edict);
+      return;
+    }
+
+    if (commission) {
+      chooseCommission(commission);
       return;
     }
 
