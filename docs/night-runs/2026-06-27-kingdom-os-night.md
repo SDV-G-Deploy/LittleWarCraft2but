@@ -202,3 +202,39 @@ Deploy:
 
 Next recommendation:
 - Implement a bounded `Final Crown Protocol`: once `crowns === 2`, call out the final crown in HUD/advisor, give a small Focus/resource push, add a controlled Threat response, and trigger a visible surge around the remaining target.
+
+## Wake 05 - Cycle 2 - Implementation
+
+Start: 2026-06-27 01:55 UTC  
+End: 2026-06-27 02:03 UTC  
+Starting HEAD: `0119a57`  
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Implemented the Wake 04 recommendation as a bounded `Final Crown Protocol`.
+- Added a one-shot final-act state that triggers after the second crown and the remaining program is selected.
+- Updated HUD/advisor copy so the current panel and crown chip clearly say `Final Crown` / `Final 2/3`.
+- Added a modest Focus/resource push, morale support, controlled Threat/enemy response, and a visible target/route surge around the final program.
+- Captured a headless Chromium screenshot of a real automated run reaching `Final 2/3`.
+
+Files changed:
+- `src/revival/kingdom2000.ts`
+- `src/revival/kingdom2000.css`
+- `docs/night-runs/artifacts/wake-05-implementation.md`
+- `docs/night-runs/artifacts/wake-05-final-protocol.png`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- `npm run build` passed.
+- `npm test` passed.
+- Headless Chromium automated a normal active run to `Final 2/3` and captured `wake-05-final-protocol.png`.
+- Screenshot state: Focus `100`, Threat `46`, crown chip `Final 2/3`, current program `Final crown protocol` on the Crystal Rite.
+
+Commit:
+- `ab4ff28` (`Add Kingdom OS final crown protocol`)
+
+Deploy:
+- GitHub Pages deploy succeeded for pushed HEAD `ab4ff28`; run `28275267888`.
+
+Next recommendation:
+- Review pass should check whether the final target surge is too large on mobile and whether the Focus/resource boost can accidentally complete the Rite too quietly after the protocol starts.
