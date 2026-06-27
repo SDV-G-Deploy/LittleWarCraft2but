@@ -546,3 +546,45 @@ Deploy:
 
 Next recommendation:
 - Implement a bounded opening decree: highlight Harvest Boom as the first command on fresh runs, show a compact `First decree` hint in the current-program card, and clear the hint immediately after the first edict is cast.
+
+## Wake 14 - Cycle 5 - Implementation
+
+Start: 2026-06-27 05:40 UTC
+End: 2026-06-27 05:51 UTC
+Starting HEAD: `7c5dafe`
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Implemented the Wake 13 recommendation as one bounded player-visible improvement.
+- Added a first-edict state flag that resets every run and clears immediately after any edict is cast.
+- Added a compact `First decree` prompt in the current-program card while the fresh Growth opener is active.
+- Made Harvest Boom immediately ready on fresh runs and highlighted it as the first command.
+- Removed the duplicate mobile Council order during the opening decree so the highlighted Harvest Boom button remains visible above the fold.
+- Added a first-decree confirmation log line after the first Harvest Boom cast.
+- Captured desktop opening, mobile opening, and post-first-decree screenshots with headless Chromium.
+
+Files changed:
+- `src/revival/kingdom2000.ts`
+- `src/revival/kingdom2000.css`
+- `docs/night-runs/artifacts/wake-14-implementation.md`
+- `docs/night-runs/artifacts/wake-14-opening-desktop.png`
+- `docs/night-runs/artifacts/wake-14-opening-mobile.png`
+- `docs/night-runs/artifacts/wake-14-after-first-decree.png`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- `npm run build` passed.
+- `npm test` passed.
+- Headless Chromium state checks passed: desktop and mobile both show `First decree` and highlighted, enabled Harvest Boom.
+- Post-edict state check passed: the hint is gone and Harvest Boom no longer has the opening-decree highlight.
+- Mobile screenshot confirmed Harvest Boom remains visible at `743-811px` in an `844px` viewport.
+- Live Pages returned HTTP 200 after deploy.
+
+Commit:
+- `53761fb` (`Add Kingdom OS opening decree`)
+
+Deploy:
+- GitHub Pages deploy succeeded for pushed HEAD `53761fb`; run `28280383098`.
+
+Next recommendation:
+- Wake 15 review should verify the opening decree in both AFK and Active starts, then check the live mobile command panel for cramped first-row edicts before finalizing the overnight report.
