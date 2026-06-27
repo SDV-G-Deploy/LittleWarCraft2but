@@ -392,6 +392,7 @@ Commit:
 
 Deploy:
 - GitHub Pages deploy succeeded for pushed HEAD `ff37d8d`; run `28277575949`.
+- Ledger commit `ddb5ada` also deployed successfully; run `28277606270`.
 
 Next recommendation:
 - Next research pass should study the late-game information layer: whether the final crown needs a clearer countdown/pressure readout, or whether the advisor feed should call out one best recovery action when Threat and Morale diverge.
