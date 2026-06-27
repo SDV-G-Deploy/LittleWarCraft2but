@@ -64,3 +64,34 @@ Append one entry per wake with:
 ## Scheduled wakes
 
 Pending scheduling from OpenClaw cron.
+
+## Wake 01 - Cycle 1 - Research
+
+Start: 2026-06-27 00:15 UTC  
+End: 2026-06-27 00:20 UTC  
+Starting HEAD: `7f41598`  
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Acquired the night-run lock with `mkdir`.
+- Inspected git status, current HEAD, ledger, Kingdom OS 2000 source, prior playable-proof note, and pass 2 screenshots.
+- Started the local Vite dev server and inspected Active mode through headless Chromium.
+- Wrote research artifact `docs/night-runs/artifacts/wake-01-research.md`.
+
+Observation:
+- Pass 2 made the HUD and objectives clearer, but the board still reads more like decorative background plus colored pips than a stateful kingdom.
+- The next high-leverage pass should make the active program and completed crowns visible directly on the map.
+
+Files changed:
+- `docs/night-runs/artifacts/wake-01-research.md`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- Docs-only research wake; no build required.
+- Local inspection used Vite dev server and headless Chromium.
+
+Commit:
+- Docs-only commit to be created immediately after this ledger entry.
+
+Next recommendation:
+- Implement a narrow program spotlight and crown ceremony layer: target-node metadata per program, pulsing current target marker, 2-3 second completion burst, and persistent crown badges on completed nodes.
