@@ -277,3 +277,40 @@ Deploy:
 
 Next recommendation:
 - Next research pass should look beyond the final-act balance and study whether the game needs a stronger second-cycle choice: alternate program order incentives, more meaningful mode contrast, or one new event-chain twist.
+
+## Wake 07 - Cycle 3 - Research
+
+Start: 2026-06-27 02:45 UTC  
+End: 2026-06-27 02:48 UTC  
+Starting HEAD: `4905336`  
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Inspected git status, current HEAD, recent commits, and the prior night-run ledger.
+- Reviewed Wake 06 desktop/mobile screenshots for the final protocol state.
+- Inspected current Kingdom OS program order, mode selection, plan rendering, and event code.
+- Checked the live GitHub Pages URL, which returned HTTP 200.
+- Wrote research artifact `docs/night-runs/artifacts/wake-07-research.md`.
+
+Observation:
+- Cycle 2 stabilized the final act, but early/mid-run replay still defaults toward a known checklist: Grow, then War, then Rite.
+- The mode picker changes pacing but not strategic direction.
+- Mobile has room for a temporary choice, but not a fourth permanent panel.
+
+Files changed:
+- `docs/night-runs/artifacts/wake-07-research.md`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- Docs-only research wake; no build required.
+- Live Pages returned HTTP 200.
+- GitHub Pages deploy succeeded for pushed artifact commit `2dec45c`; run `28276333932`.
+
+Commit:
+- `2dec45c` (`docs: research kingdom os commission choice`)
+
+Deploy:
+- GitHub Pages deploy succeeded for pushed HEAD `2dec45c`; run `28276333932`.
+
+Next recommendation:
+- Implement a bounded one-time royal commission choice after the first crown: Farm Charter, Sky-Road Contract, or Crystal Mandate. Each option should apply one small benefit, one clear tradeoff, bias the next active program, then collapse into existing plan/advisor UI.
