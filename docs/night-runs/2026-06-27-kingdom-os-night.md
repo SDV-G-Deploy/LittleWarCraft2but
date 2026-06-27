@@ -464,10 +464,10 @@ Verification:
 - Final screenshot state: program `Light the Crystal Rite`, order `Finish Rite - Cast Crystal Foundry now`, Threat `41`, Focus `100`, Morale `78`.
 
 Commit:
-- Pending.
+- `e96f5b3` (`Add Kingdom OS council orders`)
 
 Deploy:
-- Pending.
+- GitHub Pages deploy succeeded for pushed HEAD `e96f5b3`; run `28278803649`.
 
 Next recommendation:
 - Review pass should test the Council order under high-Threat and low-Morale states, and check whether the added order card makes the mobile command panel too tall during normal play.
