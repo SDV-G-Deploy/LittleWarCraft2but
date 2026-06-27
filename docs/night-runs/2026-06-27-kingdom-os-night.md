@@ -315,3 +315,42 @@ Deploy:
 
 Next recommendation:
 - Implement a bounded one-time royal commission choice after the first crown: Farm Charter, Sky-Road Contract, or Crystal Mandate. Each option should apply one small benefit, one clear tradeoff, bias the next active program, then collapse into existing plan/advisor UI.
+
+## Wake 08 - Cycle 3 - Implementation
+
+Start: 2026-06-27 03:10 UTC  
+End: 2026-06-27 03:19 UTC  
+Starting HEAD: `9db7744`  
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Implemented the Wake 07 recommendation as a bounded one-time Royal Commission choice after the first crown.
+- Added a temporary `commission` overlay state with Farm Charter, Sky-Road Contract, and Crystal Mandate.
+- Each commission applies one small benefit and one tradeoff using existing game resources.
+- Choosing a commission biases the next active program if that program is unfinished, then returns the player to normal play.
+- Surfaced the selected commission in the current program hint and mini status.
+- Captured desktop, mobile, and post-choice screenshots with headless Chromium.
+
+Files changed:
+- `src/revival/kingdom2000.ts`
+- `src/revival/kingdom2000.css`
+- `docs/night-runs/artifacts/wake-08-implementation.md`
+- `docs/night-runs/artifacts/wake-08-commission-desktop.png`
+- `docs/night-runs/artifacts/wake-08-commission-mobile.png`
+- `docs/night-runs/artifacts/wake-08-commission-post-choice.png`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- `npm run build` passed.
+- `npm test` passed.
+- Headless Chromium reached the commission overlay at `1/3` crowns on desktop and mobile.
+- Choosing Crystal Mandate returned to `playing`, showed `Commission Crystal`, and set the current program to Rite.
+
+Commit:
+- `d1d498f` (`Add Kingdom OS royal commission choice`)
+
+Deploy:
+- GitHub Pages deploy succeeded for pushed HEAD `d1d498f`; run `28277027812`.
+
+Next recommendation:
+- Review pass should check whether the commission overlay is too large on mobile, whether players can accidentally ignore it via background clicks, and whether Crystal Mandate makes Rite too attractive compared with Sky-Road Contract.
