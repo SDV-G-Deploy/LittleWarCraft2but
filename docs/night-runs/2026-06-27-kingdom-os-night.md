@@ -351,6 +351,7 @@ Commit:
 
 Deploy:
 - GitHub Pages deploy succeeded for pushed HEAD `d1d498f`; run `28277027812`.
+- Ledger commit `e34ad24` also deployed successfully; run `28277060551`.
 
 Next recommendation:
 - Review pass should check whether the commission overlay is too large on mobile, whether players can accidentally ignore it via background clicks, and whether Crystal Mandate makes Rite too attractive compared with Sky-Road Contract.
