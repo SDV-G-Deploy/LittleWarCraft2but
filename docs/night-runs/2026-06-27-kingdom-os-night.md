@@ -311,6 +311,7 @@ Commit:
 
 Deploy:
 - GitHub Pages deploy succeeded for pushed HEAD `2dec45c`; run `28276333932`.
+- Ledger commit `4aa554b` also deployed successfully; run `28276362803`.
 
 Next recommendation:
 - Implement a bounded one-time royal commission choice after the first crown: Farm Charter, Sky-Road Contract, or Crystal Mandate. Each option should apply one small benefit, one clear tradeoff, bias the next active program, then collapse into existing plan/advisor UI.
