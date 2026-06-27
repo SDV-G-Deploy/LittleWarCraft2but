@@ -625,7 +625,8 @@ Commit:
 - `e2b8acf` (`docs: review kingdom os wake 15`)
 
 Deploy:
-- Pending final ledger push.
+- GitHub Pages deploy succeeded for pushed HEAD `e955b6b`; run `28280828208`.
+- Live URL returned HTTP 200 after deploy.
 
 Morning summary:
 - Baseline: `7f41598` (`Add Kingdom OS night run ledger`)
