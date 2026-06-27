@@ -355,3 +355,43 @@ Deploy:
 
 Next recommendation:
 - Review pass should check whether the commission overlay is too large on mobile, whether players can accidentally ignore it via background clicks, and whether Crystal Mandate makes Rite too attractive compared with Sky-Road Contract.
+
+## Wake 09 - Cycle 3 - Review/Fix
+
+Start: 2026-06-27 03:35 UTC  
+End: 2026-06-27 03:43 UTC  
+Starting HEAD: `7b41914`  
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Played the local Kingdom OS 2000 build to the first crown with headless Chromium.
+- Captured the Wake 08 commission overlay on desktop and mobile.
+- Confirmed background play actions are blocked during the commission choice.
+- Fixed mobile/desktop modal readability by hiding command/advisor panels while the commission overlay is active and making the commission card more opaque.
+- Tuned Crystal Mandate into a clearer bargain: less gold, stronger morale cost, and a small Threat increase.
+- Verified choosing Crystal Mandate returns to `playing`, selects Rite, and surfaces `Commission Crystal`.
+
+Files changed:
+- `src/revival/kingdom2000.ts`
+- `src/revival/kingdom2000.css`
+- `docs/night-runs/artifacts/wake-09-review-fix.md`
+- `docs/night-runs/artifacts/wake-09-commission-desktop-fixed.png`
+- `docs/night-runs/artifacts/wake-09-commission-mobile-fixed.png`
+- `docs/night-runs/artifacts/wake-09-commission-crystal-post-choice-fixed.png`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- `npm run build` passed.
+- `npm test` passed.
+- Headless Chromium desktop/mobile screenshots captured after the fix.
+- Commission command panel opacity was `0` during the modal and returned to `1` after choosing.
+- Post-choice state: screen `playing`, current program `Light the Crystal Rite`, commission `Crystal`.
+
+Commit:
+- `ff37d8d` (`Tune Kingdom OS commission modal`)
+
+Deploy:
+- GitHub Pages deploy succeeded for pushed HEAD `ff37d8d`; run `28277575949`.
+
+Next recommendation:
+- Next research pass should study the late-game information layer: whether the final crown needs a clearer countdown/pressure readout, or whether the advisor feed should call out one best recovery action when Threat and Morale diverge.
