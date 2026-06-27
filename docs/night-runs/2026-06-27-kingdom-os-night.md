@@ -235,6 +235,7 @@ Commit:
 
 Deploy:
 - GitHub Pages deploy succeeded for pushed HEAD `ab4ff28`; run `28275267888`.
+- Ledger commit `c1e073d` also deployed successfully; run `28275302792`.
 
 Next recommendation:
 - Review pass should check whether the final target surge is too large on mobile and whether the Focus/resource boost can accidentally complete the Rite too quietly after the protocol starts.
