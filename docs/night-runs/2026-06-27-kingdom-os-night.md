@@ -508,3 +508,41 @@ Deploy:
 
 Next recommendation:
 - Next research pass should study the opening five minutes: whether the first crown needs a stronger onboarding prompt, a clearer first-click highlight, or a small early win animation before the mid-run commission appears.
+
+## Wake 13 - Cycle 5 - Research
+
+Start: 2026-06-27 05:15 UTC
+End: 2026-06-27 05:18 UTC
+Starting HEAD: `7ee0351`
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Inspected git status, current HEAD, recent commits, and the latest ledger entries.
+- Reviewed Wake 12 desktop/mobile screenshots and current opening/program render code.
+- Checked the live GitHub Pages URL, which returned HTTP 200.
+- Captured a fresh live opening screenshot at `docs/night-runs/artifacts/wake-13-opening-live.png`.
+- Wrote research artifact `docs/night-runs/artifacts/wake-13-research.md`.
+
+Observation:
+- The mid and late game now have clear guidance, choice, and final pressure.
+- The first playable minute still asks the player to infer the intended first command from multiple panels.
+- Harvest Boom is the intended opener, but the button is not specially staged and its initial cooldown makes it read inactive rather than guided.
+
+Files changed:
+- `docs/night-runs/artifacts/wake-13-research.md`
+- `docs/night-runs/artifacts/wake-13-opening-live.png`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- Docs-only research wake; no build required.
+- Live Pages returned HTTP 200.
+- Headless Chromium captured the opening live screenshot.
+
+Commit:
+- Pending.
+
+Deploy:
+- Pending.
+
+Next recommendation:
+- Implement a bounded opening decree: highlight Harvest Boom as the first command on fresh runs, show a compact `First decree` hint in the current-program card, and clear the hint immediately after the first edict is cast.
