@@ -91,7 +91,7 @@ Verification:
 - Local inspection used Vite dev server and headless Chromium.
 
 Commit:
-- Docs-only commit to be created immediately after this ledger entry.
+- `356e39b` (`docs: record kingdom os wake 01 research`) pushed to `main`.
 
 Next recommendation:
 - Implement a narrow program spotlight and crown ceremony layer: target-node metadata per program, pulsing current target marker, 2-3 second completion burst, and persistent crown badges on completed nodes.
