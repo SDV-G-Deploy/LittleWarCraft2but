@@ -132,3 +132,38 @@ Deploy:
 
 Next recommendation:
 - Review pass should check whether the spotlight is too large/bright during real play and whether the War target color competes with Shade units.
+
+## Wake 03 - Cycle 1 - Review/Fix
+
+Start: 2026-06-27 01:05 UTC  
+End: 2026-06-27 01:13 UTC  
+Starting HEAD: `55fbdbc`  
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Reviewed the Wake 02 program spotlight in local play and screenshots.
+- Confirmed the spotlight was useful but too visually heavy at desktop scale.
+- Reduced spotlight route opacity/width, target fill/ring size, and flag size.
+- Changed the War target tone from magenta to aqua so it no longer competes with Shade units.
+- Captured post-fix Grow and War target screenshots with headless Chromium.
+
+Files changed:
+- `src/revival/kingdom2000.ts`
+- `docs/night-runs/artifacts/wake-03-review-fix.md`
+- `docs/night-runs/artifacts/wake-03-spotlight-review.png`
+- `docs/night-runs/artifacts/wake-03-war-target-review.png`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- `npm run build` passed.
+- `npm test` passed.
+- Headless Chromium screenshots confirmed the target beacon remains clear without overpowering the board, and War target color is distinct from Shade units.
+
+Commit:
+- `6d8b7d1` (`Tune Kingdom OS program spotlight`)
+
+Deploy:
+- Pending push/deploy check after this ledger entry.
+
+Next recommendation:
+- Next research pass should look for a stronger short-session arc after the map is readable: a memorable final surge, event chain, or second-mode modifier.
