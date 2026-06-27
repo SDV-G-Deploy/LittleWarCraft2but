@@ -588,3 +588,68 @@ Deploy:
 
 Next recommendation:
 - Wake 15 review should verify the opening decree in both AFK and Active starts, then check the live mobile command panel for cramped first-row edicts before finalizing the overnight report.
+
+## Wake 15 - Cycle 5 - Review/Fix + Closeout
+
+Start: 2026-06-27 06:05 UTC
+End: 2026-06-27 06:13 UTC
+Starting HEAD: `a281e8c`
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Reviewed the Wake 14 opening decree locally with headless Chromium.
+- Verified the first-decree flow through Active Steward, Quick AFK Run, and post-Harvest-Boom states.
+- Captured desktop, AFK, post-edict, and mobile opening screenshots.
+- Checked the live GitHub Pages URL, which returned HTTP 200.
+- Collected commits since baseline `7f41598`.
+
+Files changed:
+- `docs/night-runs/artifacts/wake-15-review-fix.md`
+- `docs/night-runs/artifacts/wake-15-cdp-report.json`
+- `docs/night-runs/artifacts/wake-15-active-opening.png`
+- `docs/night-runs/artifacts/wake-15-after-first-decree.png`
+- `docs/night-runs/artifacts/wake-15-afk-opening.png`
+- `docs/night-runs/artifacts/wake-15-mobile-opening.png`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- `npm run build` passed.
+- `npm test` skipped because this wake changed only docs/screenshots and did not change source behavior.
+- Active opening passed: `First decree` appears, `Harvest Boom` is highlighted, and the command is enabled.
+- AFK opening passed with the same first-decree guidance.
+- Post-edict state passed: the prompt and highlight clear immediately after `Harvest Boom`.
+- Mobile opening passed at `390x844`: the first command row is readable and `Harvest Boom` remains inside the viewport at `743-811px`.
+- Live Pages returned HTTP 200 before final push.
+
+Commit:
+- `e2b8acf` (`docs: review kingdom os wake 15`)
+
+Deploy:
+- Pending final ledger push.
+
+Morning summary:
+- Baseline: `7f41598` (`Add Kingdom OS night run ledger`)
+- Final gameplay HEAD before closeout docs: `53761fb` (`Add Kingdom OS opening decree`)
+- The night added visible program targets and crown payoff, tuned target readability, added the final crown protocol, tuned its assist pacing, added royal commission choices, cleaned up the commission modal, added council orders, removed desktop order duplication, and staged the first click with the opening decree.
+- The playable proof is now clearer from first minute to final crown: the player sees what to do first, what program is active, what council command matters, when a mid-run bargain appears, and when the final push begins.
+- Remaining risks: the mobile command panel still scrolls below the first row by design, and the broader game balance still needs longer human play sessions beyond headless happy-path checks.
+
+Commits since baseline:
+- `356e39b` docs: record kingdom os wake 01 research
+- `9e94d6c` Add Kingdom OS program spotlight
+- `6d8b7d1` Tune Kingdom OS program spotlight
+- `88de51c` docs: research kingdom os final act
+- `ab4ff28` Add Kingdom OS final crown protocol
+- `e5409df` Tune Kingdom OS final crown assist
+- `2dec45c` docs: research kingdom os commission choice
+- `d1d498f` Add Kingdom OS royal commission choice
+- `ff37d8d` Tune Kingdom OS commission modal
+- `ea26a15` docs: research kingdom os council orders
+- `e96f5b3` Add Kingdom OS council orders
+- `a3e4ca8` Tune Kingdom OS council order layout
+- `b6c9e4a` docs: research kingdom os opening decree
+- `53761fb` Add Kingdom OS opening decree
+- `e2b8acf` docs: review kingdom os wake 15
+
+Next recommendation:
+- Run one manual mobile playthrough on the live URL and decide whether to make the command panel a two-stage mobile drawer for longer sessions.
