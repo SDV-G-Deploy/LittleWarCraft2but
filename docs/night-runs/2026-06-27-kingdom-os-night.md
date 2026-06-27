@@ -167,3 +167,38 @@ Deploy:
 
 Next recommendation:
 - Next research pass should look for a stronger short-session arc after the map is readable: a memorable final surge, event chain, or second-mode modifier.
+
+## Wake 04 - Cycle 2 - Research
+
+Start: 2026-06-27 01:30 UTC  
+End: 2026-06-27 01:34 UTC  
+Starting HEAD: `002849b`  
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Inspected git status, current HEAD, recent commits, and the prior night-run ledger.
+- Reviewed current Wake 03 screenshots for Grow and War target readability.
+- Inspected the current Kingdom OS program/event/endgame code path.
+- Checked the live GitHub Pages URL returned HTTP 200.
+- Wrote research artifact `docs/night-runs/artifacts/wake-04-research.md`.
+
+Observation:
+- Cycle 1 solved board readability, but the session still ends as three similar checklist completions.
+- The run needs a clearer final act after the player reaches `2/3` crowns.
+
+Files changed:
+- `docs/night-runs/artifacts/wake-04-research.md`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- Docs-only research wake; no build required.
+- Live Pages returned HTTP 200.
+
+Commit:
+- `88de51c` (`docs: research kingdom os final act`)
+
+Deploy:
+- Pending push/deploy check after this ledger entry.
+
+Next recommendation:
+- Implement a bounded `Final Crown Protocol`: once `crowns === 2`, call out the final crown in HUD/advisor, give a small Focus/resource push, add a controlled Threat response, and trigger a visible surge around the remaining target.
