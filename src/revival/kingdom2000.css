@@ -276,6 +276,57 @@ button {
     linear-gradient(140deg, rgba(255, 255, 255, 0.70), rgba(255, 230, 82, 0.28));
 }
 
+.k2k-plan-current.is-final {
+  border-color: rgba(255, 245, 145, 0.95);
+  background:
+    radial-gradient(circle at 86% 18%, rgba(255, 255, 255, 0.96), transparent 24%),
+    radial-gradient(circle at 12% 96%, rgba(63, 247, 255, 0.46), transparent 30%),
+    linear-gradient(140deg, rgba(255, 255, 255, 0.82), rgba(255, 226, 74, 0.58));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 0 0 1px rgba(255, 244, 141, 0.42),
+    0 16px 34px rgba(255, 219, 53, 0.24);
+}
+
+.k2k-plan-current.is-final::before {
+  position: absolute;
+  top: -38%;
+  right: -10%;
+  width: 46%;
+  height: 170%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+  content: "";
+  transform: rotate(18deg);
+  animation: k2k-final-sweep 1.9s ease-in-out infinite;
+}
+
+.k2k-shell[data-final-protocol="true"] .k2k-chip[data-kind="crowns"] {
+  border-color: rgba(255, 232, 92, 0.94);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 224, 80, 0.56)),
+    #fff2a3;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.90),
+    0 0 22px rgba(255, 232, 92, 0.46);
+}
+
+@keyframes k2k-final-sweep {
+  0% {
+    opacity: 0;
+    transform: translateX(-54%) rotate(18deg);
+  }
+
+  28%,
+  62% {
+    opacity: 0.72;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(130%) rotate(18deg);
+  }
+}
+
 .k2k-plan-current span,
 .k2k-plan-current strong,
 .k2k-plan-current p,

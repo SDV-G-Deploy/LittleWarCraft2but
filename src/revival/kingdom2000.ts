@@ -106,6 +106,8 @@ type GameState = {
   selectedMode: 'afk' | 'active';
   activePlan: PlanId;
   completedPlans: PlanId[];
+  finalProtocolStarted: boolean;
+  finalProtocolAge: number;
   ending: 'victory' | 'defeat' | null;
   lastEventAt: number;
   lastBattleAt: number;
@@ -260,6 +262,8 @@ export function runKingdom2000(root: HTMLElement): () => void {
     selectedMode: 'afk',
     activePlan: 'growth',
     completedPlans: [],
+    finalProtocolStarted: false,
+    finalProtocolAge: 0,
     ending: null,
     lastEventAt: 0,
     lastBattleAt: 0,
@@ -290,6 +294,8 @@ export function runKingdom2000(root: HTMLElement): () => void {
     state.selectedMode = mode;
     state.activePlan = 'growth';
     state.completedPlans = [];
+    state.finalProtocolStarted = false;
+    state.finalProtocolAge = 0;
     state.ending = null;
     state.lastEventAt = 0;
     state.lastBattleAt = 0;
@@ -559,9 +565,52 @@ export function runKingdom2000(root: HTMLElement): () => void {
     if (next) {
       state.activePlan = next.id;
       log(`Next program: ${next.title}. ${next.objective}`);
+      if (state.crowns === 2) triggerFinalProtocol(next);
     } else {
       endGame('victory');
     }
+  }
+
+  function isFinalProtocolActive(): boolean {
+    return state.finalProtocolStarted && state.crowns === 2 && !state.completedPlans.includes(state.activePlan);
+  }
+
+  function triggerFinalProtocol(plan: Plan): void {
+    if (state.finalProtocolStarted) return;
+
+    state.finalProtocolStarted = true;
+    state.finalProtocolAge = 0;
+    state.focus = clamp(state.focus + 42, 0, state.maxFocus);
+    state.resources.morale = clamp(state.resources.morale + 8, 0, 100);
+    state.threat = clamp(state.threat + 8, 0, 94);
+    state.enemyPower = clamp(state.enemyPower + 5, 8, 100);
+
+    if (plan.id === 'growth') {
+      state.workers += 2;
+      state.resources.grain += 58;
+      addFloater('+focus +farms', 0.36, 0.56, 'good');
+    } else if (plan.id === 'war') {
+      state.army += 5;
+      state.resources.gold += 36;
+      spawnUnit('royal', 2, 0.08);
+      addFloater('+focus +army', 0.68, 0.31, 'good');
+    } else {
+      state.resources.crystal += 20;
+      state.resources.gold += 28;
+      addFloater('+focus +crystal', 0.45, 0.76, 'good');
+    }
+
+    const target = nodes.find((node) => node.id === plan.targetNodeId);
+    if (target) {
+      flashNode(target.id);
+      addFloater('Final Crown', target.x, target.y - 0.08, 'good');
+      burst(target.x, target.y, plan.tone, 72);
+      burst(target.x, target.y, 'gold', 42);
+    }
+    flashNode('castle');
+    burst(0.68, 0.31, 'gold', 34);
+    spawnUnit('shade', 4, 0.96);
+    log(`Final Crown Protocol: ${plan.shortTitle} is the last crown. Focus restored, Shade answered.`);
   }
 
   function flashNode(id: string): void {
@@ -792,6 +841,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
   }
 
   function updateEffects(dt: number): void {
+    if (state.finalProtocolStarted) state.finalProtocolAge = Math.min(state.finalProtocolAge + dt, 30);
     for (const node of nodes) node.pulse = Math.max(0, node.pulse - dt * 1.4);
     if (ceremony) {
       ceremony.age += dt;
@@ -954,24 +1004,48 @@ export function runKingdom2000(root: HTMLElement): () => void {
     if (!target) return;
 
     const color = toneColor(plan.tone);
+    const finalActive = isFinalProtocolActive();
     const pulse = (Math.sin(state.elapsed * 3.4) + 1) / 2;
+    const surge = finalActive ? 0.5 + Math.sin(state.elapsed * 5.2) * 0.5 : 0;
+    const intro = finalActive ? clamp(state.finalProtocolAge / 2.4, 0, 1) : 0;
     ctx.save();
     ctx.lineCap = 'round';
-    ctx.globalAlpha = 0.46 + pulse * 0.18;
+    ctx.globalAlpha = 0.46 + pulse * 0.18 + intro * 0.16;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 0.045 + pulse * 0.060;
+    ctx.shadowBlur = 0.045 + pulse * 0.060 + intro * 0.070;
     for (const index of plan.routeEdges) {
       drawRoutePath(index);
       ctx.strokeStyle = color;
-      ctx.lineWidth = 0.014 + pulse * 0.004;
+      ctx.lineWidth = 0.014 + pulse * 0.004 + intro * 0.006;
       ctx.stroke();
+      if (finalActive) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.78)';
+        ctx.globalAlpha = 0.20 + surge * 0.28;
+        ctx.lineWidth = 0.025 + surge * 0.012;
+        ctx.stroke();
+        ctx.globalAlpha = 0.46 + pulse * 0.18 + intro * 0.16;
+      }
     }
 
     ctx.translate(target.x, target.y);
-    ctx.globalAlpha = 0.58;
+    if (finalActive) {
+      ctx.globalAlpha = 0.34 + surge * 0.22;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 0.010;
+      ctx.beginPath();
+      ctx.arc(0, 0, 0.138 + surge * 0.055, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 0.012;
+      ctx.beginPath();
+      ctx.arc(0, 0, 0.196 + intro * 0.06 + surge * 0.04, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = 0.58 + intro * 0.12;
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(0, 0, 0.058 + pulse * 0.014, 0, Math.PI * 2);
+    ctx.arc(0, 0, 0.058 + pulse * 0.014 + intro * 0.010, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.strokeStyle = 'rgba(255,255,255,0.94)';
@@ -1159,6 +1233,8 @@ export function runKingdom2000(root: HTMLElement): () => void {
 
   function renderHud(): void {
     shell.dataset.screen = state.screen;
+    if (isFinalProtocolActive()) shell.dataset.finalProtocol = 'true';
+    else delete shell.dataset.finalProtocol;
     speedButton.textContent = `${state.speed}x`;
     pauseButton.textContent = state.screen === 'paused' ? 'Resume' : 'Pause';
 
@@ -1166,7 +1242,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
       ${renderMeter('glory', 'Glory', state.glory, '#10bce3')}
       ${renderMeter('threat', 'Threat', state.threat, '#f42fbf')}
       ${renderMeter('focus', 'Focus', state.focus, '#ffe14d')}
-      ${renderChip('crowns', `${state.crowns}/3`)}
+      ${renderChip('crowns', isFinalProtocolActive() ? `Final ${state.crowns}/3` : `${state.crowns}/3`)}
       ${renderChip('gold', fmt(state.resources.gold))}
       ${renderChip('grain', fmt(state.resources.grain))}
       ${renderChip('crystal', fmt(state.resources.crystal))}
@@ -1194,10 +1270,10 @@ export function runKingdom2000(root: HTMLElement): () => void {
     advisorPanel.innerHTML = `
       <header>
         <span>Advisor Feed</span>
-        <strong>${state.ending ? titleCase(state.ending) : state.screen === 'playing' ? 'Live' : 'Ready'}</strong>
+        <strong>${state.ending ? titleCase(state.ending) : isFinalProtocolActive() ? 'Final Crown' : state.screen === 'playing' ? 'Live' : 'Ready'}</strong>
       </header>
       <ol>
-        <li class="k2k-feed-priority">${currentPlan().title}: ${currentPlan().objective}</li>
+        <li class="k2k-feed-priority">${isFinalProtocolActive() ? 'Final Crown' : currentPlan().title}: ${currentPlan().objective}</li>
         ${state.log.map((entry) => `<li>${entry}</li>`).join('')}
       </ol>
     `;
@@ -1227,13 +1303,14 @@ export function runKingdom2000(root: HTMLElement): () => void {
   function renderPlanPanel(): string {
     const plan = currentPlan();
     const progress = Math.round(plan.progress() * 100);
+    const finalActive = isFinalProtocolActive();
     return `
       <section class="k2k-plan-panel" aria-label="Current royal program">
-        <div class="k2k-plan-current">
-          <span>Current program</span>
+        <div class="k2k-plan-current ${finalActive ? 'is-final' : ''}">
+          <span>${finalActive ? 'Final crown protocol' : 'Current program'}</span>
           <strong>${plan.title}</strong>
           <p>${plan.objective}</p>
-          <em>${plan.hint}</em>
+          <em>${finalActive ? 'Last crown active. Spend the restored Focus before Shade pressure converts the surge.' : plan.hint}</em>
           <i style="--plan-progress:${progress}"></i>
         </div>
         <div class="k2k-plan-grid" aria-label="Royal programs">
