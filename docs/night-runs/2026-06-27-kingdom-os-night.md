@@ -239,3 +239,40 @@ Deploy:
 
 Next recommendation:
 - Review pass should check whether the final target surge is too large on mobile and whether the Focus/resource boost can accidentally complete the Rite too quietly after the protocol starts.
+
+## Wake 06 - Cycle 2 - Review/Fix
+
+Start: 2026-06-27 02:20 UTC  
+End: 2026-06-27 02:29 UTC  
+Starting HEAD: `95b5068`  
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Reviewed the Wake 05 `Final Crown Protocol` in local desktop and mobile play with headless Chromium.
+- Confirmed the final target surge and `Final 2/3` chip are readable on desktop and mobile.
+- Found a narrow balance risk: the protocol's resource assist could push Grow or Rite objective resources over their thresholds and make the final crown complete too quietly.
+- Capped protocol-created objective resources below final thresholds while preserving already-earned resources.
+- Captured post-fix desktop and mobile screenshots.
+
+Files changed:
+- `src/revival/kingdom2000.ts`
+- `docs/night-runs/artifacts/wake-06-review-fix.md`
+- `docs/night-runs/artifacts/wake-06-final-desktop-fixed.png`
+- `docs/night-runs/artifacts/wake-06-final-mobile-fixed.png`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- `npm run build` passed.
+- `npm test` passed.
+- Headless Chromium desktop/mobile runs reached `Final 2/3` and stayed in `playing`.
+- Post-fix desktop state: Rite `68%`, Crystal `51`, Morale `51`.
+- Post-fix mobile state: Rite `88%`, Crystal `57`, Morale `77`.
+
+Commit:
+- `e5409df` (`Tune Kingdom OS final crown assist`)
+
+Deploy:
+- GitHub Pages deploy succeeded for pushed HEAD `e5409df`; run `28275900667`.
+
+Next recommendation:
+- Next research pass should look beyond the final-act balance and study whether the game needs a stronger second-cycle choice: alternate program order incentives, more meaningful mode contrast, or one new event-chain twist.
