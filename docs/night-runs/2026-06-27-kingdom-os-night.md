@@ -501,10 +501,10 @@ Verification:
 - Final screenshot state: program `Light the Crystal Rite`, order `Steady Citizens - Cast Market Festival now`, Threat `47`, Focus `100`, Morale `46`.
 
 Commit:
-- Pending.
+- `a3e4ca8` (`Tune Kingdom OS council order layout`)
 
 Deploy:
-- Pending.
+- GitHub Pages deploy succeeded for pushed HEAD `a3e4ca8`; run `28279191920`.
 
 Next recommendation:
 - Next research pass should study the opening five minutes: whether the first crown needs a stronger onboarding prompt, a clearer first-click highlight, or a small early win animation before the mid-run commission appears.
