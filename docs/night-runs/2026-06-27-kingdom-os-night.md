@@ -396,3 +396,38 @@ Deploy:
 
 Next recommendation:
 - Next research pass should study the late-game information layer: whether the final crown needs a clearer countdown/pressure readout, or whether the advisor feed should call out one best recovery action when Threat and Morale diverge.
+
+## Wake 10 - Cycle 4 - Research
+
+Start: 2026-06-27 04:00 UTC  
+End: 2026-06-27 04:03 UTC  
+Starting HEAD: `05e20be`  
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Inspected git status, current HEAD, recent commits, and the prior night-run ledger.
+- Reviewed Wake 09 commission desktop/mobile screenshots and the current HUD/advisor rendering code.
+- Checked current CSS/mobile behavior for the advisor and command panels.
+- Checked the live GitHub Pages URL, which returned HTTP 200.
+- Wrote research artifact `docs/night-runs/artifacts/wake-10-research.md`.
+
+Observation:
+- The game now has readable map targets, a final act, and a mid-run commission choice.
+- The late-game gap is not more spectacle; it is actionable guidance. During the final crown, the player sees raw Threat/Morale/Focus values but not one clear recovery order.
+
+Files changed:
+- `docs/night-runs/artifacts/wake-10-research.md`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- Docs-only research wake; no build required.
+- Live Pages returned HTTP 200.
+
+Commit:
+- Pending.
+
+Deploy:
+- Pending.
+
+Next recommendation:
+- Implement a bounded council-order readout: derive one urgent order from existing Threat, Morale, Focus, resources, cooldowns, and active program state; show it at the top of the advisor feed on desktop and inside the current-program card on mobile.
