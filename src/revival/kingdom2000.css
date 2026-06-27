@@ -362,6 +362,83 @@ button {
   font-weight: 800;
 }
 
+.k2k-council-order {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin: 9px 0 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.70);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.84), transparent 34%),
+    linear-gradient(135deg, rgba(225, 255, 246, 0.76), rgba(83, 225, 255, 0.26)),
+    rgba(255, 255, 255, 0.48);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 10px 20px rgba(14, 99, 170, 0.12);
+}
+
+.k2k-council-order.is-warning {
+  border-color: rgba(255, 232, 92, 0.82);
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.92), transparent 34%),
+    linear-gradient(135deg, rgba(255, 248, 194, 0.84), rgba(82, 224, 255, 0.28)),
+    rgba(255, 255, 255, 0.55);
+}
+
+.k2k-council-order.is-critical {
+  border-color: rgba(255, 88, 190, 0.80);
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.94), transparent 34%),
+    linear-gradient(135deg, rgba(255, 218, 232, 0.86), rgba(255, 230, 96, 0.40)),
+    rgba(255, 255, 255, 0.62);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 0 20px rgba(255, 88, 190, 0.22);
+}
+
+.k2k-council-order span,
+.k2k-council-order strong,
+.k2k-council-order p,
+.k2k-plan-current .k2k-council-order span,
+.k2k-plan-current .k2k-council-order strong,
+.k2k-plan-current .k2k-council-order p {
+  position: relative;
+  z-index: 1;
+  display: block;
+}
+
+.k2k-council-order span,
+.k2k-plan-current .k2k-council-order span {
+  color: rgba(0, 108, 136, 0.84);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.k2k-council-order strong,
+.k2k-plan-current .k2k-council-order strong {
+  margin-top: 3px;
+  color: #042f51;
+  font-size: 0.88rem;
+  line-height: 1.05;
+}
+
+.k2k-council-order p,
+.k2k-plan-current .k2k-council-order p {
+  margin: 4px 0 0;
+  color: rgba(5, 50, 79, 0.78);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.22;
+}
+
+.k2k-advisor-panel .k2k-council-order {
+  margin-bottom: 9px;
+}
+
 .k2k-plan-current em {
   margin-top: 5px;
   font-style: normal;

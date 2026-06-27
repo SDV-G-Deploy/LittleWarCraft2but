@@ -431,3 +431,43 @@ Deploy:
 
 Next recommendation:
 - Implement a bounded council-order readout: derive one urgent order from existing Threat, Morale, Focus, resources, cooldowns, and active program state; show it at the top of the advisor feed on desktop and inside the current-program card on mobile.
+
+## Wake 11 - Cycle 4 - Implementation
+
+Start: 2026-06-27 04:25 UTC
+End: 2026-06-27 04:36 UTC
+Starting HEAD: `3fb6bb6`
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Implemented the Wake 10 recommendation as one bounded player-visible improvement.
+- Added a state-derived Council order helper that chooses one current command from existing Threat, Morale, Focus, edict availability, and active program state.
+- Rendered the Council order at the top of the desktop advisor feed.
+- Rendered the same Council order inside the current-program card so mobile still has guidance while the advisor panel is hidden.
+- Styled stable, warning, and critical order states inside the existing glass UI direction.
+- Captured desktop and mobile final-protocol screenshots through a real headless Chromium UI playthrough.
+
+Files changed:
+- `src/revival/kingdom2000.ts`
+- `src/revival/kingdom2000.css`
+- `docs/night-runs/artifacts/wake-11-implementation.md`
+- `docs/night-runs/artifacts/wake-11-council-desktop.png`
+- `docs/night-runs/artifacts/wake-11-council-mobile.png`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- `npm run build` passed.
+- `npm test` passed.
+- Headless Chromium reached `Final 2/3` through the Sky-Road commission path.
+- Desktop screenshot shows the Council order in the advisor feed.
+- Mobile screenshot shows the Council order in the current-program card.
+- Final screenshot state: program `Light the Crystal Rite`, order `Finish Rite - Cast Crystal Foundry now`, Threat `41`, Focus `100`, Morale `78`.
+
+Commit:
+- Pending.
+
+Deploy:
+- Pending.
+
+Next recommendation:
+- Review pass should test the Council order under high-Threat and low-Morale states, and check whether the added order card makes the mobile command panel too tall during normal play.

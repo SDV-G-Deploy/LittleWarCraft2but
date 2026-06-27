@@ -96,6 +96,12 @@ type Commission = {
   apply: () => void;
 };
 
+type CouncilOrder = {
+  severity: 'stable' | 'warning' | 'critical';
+  title: string;
+  body: string;
+};
+
 type GameState = {
   screen: Screen;
   elapsed: number;
@@ -616,6 +622,125 @@ export function runKingdom2000(root: HTMLElement): () => void {
 
   function commissionLabel(): string {
     return activeCommission()?.shortTitle ?? 'None';
+  }
+
+  function edictInstruction(id: EdictId): string {
+    const edict = edicts().find((item) => item.id === id);
+    if (!edict) return 'Wait for the council to recalculate.';
+
+    const cd = cooldowns.get(id) ?? 0;
+    if (state.screen === 'playing' && cd <= 0 && hasEnough(state, edict.cost)) return `Cast ${edict.title} now.`;
+    if (cd > 0) return `${edict.title} is ready in ${Math.ceil(cd)}s.`;
+    return `Prepare ${resourceText(edict.cost)} for ${edict.title}.`;
+  }
+
+  function planOrder(plan: Plan): CouncilOrder {
+    if (plan.id === 'growth') {
+      return {
+        severity: state.focus > 82 ? 'warning' : 'stable',
+        title: 'Grow Farms',
+        body:
+          state.workers < 18
+            ? `${edictInstruction('harvest')} Workers are the shortest path to the Grow crown.`
+            : `Hold grain for Grow. ${edictInstruction('harvest')}`,
+      };
+    }
+
+    if (plan.id === 'war') {
+      if (state.threat >= 58) {
+        return {
+          severity: 'warning',
+          title: 'Hold Threat',
+          body: `${edictInstruction('ward')} War needs Threat under 70 when the second patrol lands.`,
+        };
+      }
+      return {
+        severity: state.focus > 82 ? 'warning' : 'stable',
+        title: 'Win Patrols',
+        body:
+          state.battleWins < 2
+            ? `${edictInstruction('muster')} Two patrol wins finish the sky-road.`
+            : `${edictInstruction('ward')} Keep Threat under 70 to ship the War crown.`,
+      };
+    }
+
+    if (state.resources.morale < 82 && state.resources.crystal >= 70) {
+      return {
+        severity: state.resources.morale < 45 ? 'warning' : 'stable',
+        title: 'Lift Morale',
+        body: `${edictInstruction('festival')} The Rite has crystal; citizens need morale.`,
+      };
+    }
+
+    return {
+      severity: state.focus > 82 ? 'warning' : 'stable',
+      title: 'Feed the Rite',
+      body: `${edictInstruction('crystal')} Crystal is the shortest path to the final rite.`,
+    };
+  }
+
+  function councilOrder(): CouncilOrder {
+    const plan = currentPlan();
+    const finalActive = isFinalProtocolActive();
+
+    if (state.threat >= 82) {
+      return {
+        severity: 'critical',
+        title: 'Hold Threat',
+        body: `${edictInstruction('ward')} Shade Threat is near collapse pressure.`,
+      };
+    }
+
+    if (state.resources.morale <= 28) {
+      return {
+        severity: 'critical',
+        title: 'Restore Morale',
+        body: `${edictInstruction('festival')} Morale is close to ending the run.`,
+      };
+    }
+
+    if (finalActive && state.threat >= 64) {
+      return {
+        severity: 'critical',
+        title: 'Break Pressure',
+        body: `${edictInstruction('ward')} The final crown needs one clean window before Threat spikes.`,
+      };
+    }
+
+    if (finalActive && state.resources.morale < 52) {
+      return {
+        severity: 'warning',
+        title: 'Steady Citizens',
+        body: `${edictInstruction('festival')} The final push fails if Morale keeps sliding.`,
+      };
+    }
+
+    if (finalActive) {
+      const order = planOrder(plan);
+      return {
+        severity: order.severity === 'stable' ? 'warning' : order.severity,
+        title: `Finish ${plan.shortTitle}`,
+        body: order.body,
+      };
+    }
+
+    if (state.threat >= 66) {
+      return {
+        severity: 'warning',
+        title: 'Hold Threat',
+        body: `${edictInstruction('ward')} Buy room before the next Shade event.`,
+      };
+    }
+
+    if (state.resources.morale <= 42) {
+      return {
+        severity: 'warning',
+        title: 'Restore Morale',
+        body: `${edictInstruction('festival')} Low morale is the fastest losing route.`,
+      };
+    }
+
+    return planOrder(plan);
   }
 
   function canCast(edict: Edict): boolean {
@@ -1356,6 +1481,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
     shell.dataset.screen = state.screen;
     if (isFinalProtocolActive()) shell.dataset.finalProtocol = 'true';
     else delete shell.dataset.finalProtocol;
+    const order = councilOrder();
     speedButton.textContent = `${state.speed}x`;
     pauseButton.textContent = state.screen === 'paused' ? 'Resume' : 'Pause';
 
@@ -1375,7 +1501,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
         <span>Royal Desktop</span>
         <strong>Day ${state.day}</strong>
       </header>
-      ${renderPlanPanel()}
+      ${renderPlanPanel(order)}
       <div class="k2k-edict-grid">
         ${edicts().map(renderEdict).join('')}
       </div>
@@ -1394,6 +1520,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
         <span>Advisor Feed</span>
         <strong>${state.ending ? titleCase(state.ending) : isFinalProtocolActive() ? 'Final Crown' : state.screen === 'playing' ? 'Live' : 'Ready'}</strong>
       </header>
+      ${renderCouncilOrder(order)}
       <ol>
         <li class="k2k-feed-priority">${isFinalProtocolActive() ? 'Final Crown' : currentPlan().title}: ${currentPlan().objective}</li>
         ${state.log.map((entry) => `<li>${entry}</li>`).join('')}
@@ -1422,7 +1549,17 @@ export function runKingdom2000(root: HTMLElement): () => void {
     `;
   }
 
-  function renderPlanPanel(): string {
+  function renderCouncilOrder(order: CouncilOrder): string {
+    return `
+      <article class="k2k-council-order is-${order.severity}" aria-label="Council order">
+        <span>Council order</span>
+        <strong>${order.title}</strong>
+        <p>${order.body}</p>
+      </article>
+    `;
+  }
+
+  function renderPlanPanel(order: CouncilOrder): string {
     const plan = currentPlan();
     const progress = Math.round(plan.progress() * 100);
     const finalActive = isFinalProtocolActive();
@@ -1438,6 +1575,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
           <span>${finalActive ? 'Final crown protocol' : 'Current program'}</span>
           <strong>${plan.title}</strong>
           <p>${plan.objective}</p>
+          ${renderCouncilOrder(order)}
           <em>${hint}</em>
           <i style="--plan-progress:${progress}"></i>
         </div>
