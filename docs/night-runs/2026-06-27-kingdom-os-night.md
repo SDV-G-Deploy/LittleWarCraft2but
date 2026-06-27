@@ -128,7 +128,7 @@ Commit:
 - `9e94d6c` (`Add Kingdom OS program spotlight`)
 
 Deploy:
-- Pending push/deploy check after this ledger entry.
+- GitHub Pages deploy succeeded for pushed HEAD `d07e840`; run `28273384860`.
 
 Next recommendation:
 - Review pass should check whether the spotlight is too large/bright during real play and whether the War target color competes with Shade units.
