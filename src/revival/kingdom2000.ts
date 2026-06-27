@@ -354,7 +354,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
         objective: 'Win 2 patrol battles while Threat stays under 70.',
         targetNodeId: 'portal',
         routeEdges: [2, 3, 5],
-        tone: 'pink',
+        tone: 'aqua',
         ceremony: 'Sky-road crown secured',
         hint:
           state.battleWins < 2
@@ -957,37 +957,37 @@ export function runKingdom2000(root: HTMLElement): () => void {
     const pulse = (Math.sin(state.elapsed * 3.4) + 1) / 2;
     ctx.save();
     ctx.lineCap = 'round';
-    ctx.globalAlpha = 0.60 + pulse * 0.22;
+    ctx.globalAlpha = 0.46 + pulse * 0.18;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 0.06 + pulse * 0.08;
+    ctx.shadowBlur = 0.045 + pulse * 0.060;
     for (const index of plan.routeEdges) {
       drawRoutePath(index);
       ctx.strokeStyle = color;
-      ctx.lineWidth = 0.018 + pulse * 0.006;
+      ctx.lineWidth = 0.014 + pulse * 0.004;
       ctx.stroke();
     }
 
     ctx.translate(target.x, target.y);
-    ctx.globalAlpha = 0.76;
+    ctx.globalAlpha = 0.58;
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(0, 0, 0.075 + pulse * 0.020, 0, Math.PI * 2);
+    ctx.arc(0, 0, 0.058 + pulse * 0.014, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.strokeStyle = 'rgba(255,255,255,0.94)';
-    ctx.lineWidth = 0.007;
+    ctx.lineWidth = 0.006;
     ctx.beginPath();
-    ctx.arc(0, 0, 0.105 + pulse * 0.024, 0, Math.PI * 2);
+    ctx.arc(0, 0, 0.086 + pulse * 0.018, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.fillStyle = 'rgba(255,255,255,0.90)';
-    roundedRect(-0.010, -0.122, 0.020, 0.050, 0.007);
+    roundedRect(-0.008, -0.102, 0.016, 0.040, 0.006);
     ctx.fill();
     ctx.fillStyle = color;
-    ctx.fillRect(-0.010, -0.122, 0.042, 0.020);
+    ctx.fillRect(-0.008, -0.102, 0.034, 0.016);
     ctx.strokeStyle = 'rgba(255,255,255,0.90)';
     ctx.lineWidth = 0.003;
-    ctx.strokeRect(-0.010, -0.122, 0.042, 0.020);
+    ctx.strokeRect(-0.008, -0.102, 0.034, 0.016);
     ctx.restore();
   }
 
