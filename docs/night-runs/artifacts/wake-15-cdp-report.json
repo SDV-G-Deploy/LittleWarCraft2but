@@ -1,0 +1,169 @@
+{
+  "note": "Mobile command panel intentionally scrolls below the first row; acceptance checks focus on first-row readability and reachability.",
+  "checks": {
+    "activeOpening": {
+      "hasFirstDecree": true,
+      "harvestHighlighted": true,
+      "harvestEnabled": true,
+      "harvestRect": {
+        "top": 324,
+        "bottom": 453,
+        "left": 29,
+        "right": 192
+      },
+      "panelScroll": {
+        "clientHeight": 861,
+        "scrollHeight": 861
+      },
+      "firstButtons": [
+        {
+          "title": "Harvest Boom",
+          "left": 29,
+          "right": 192,
+          "top": 324,
+          "bottom": 453,
+          "disabled": false
+        },
+        {
+          "title": "Royal Muster",
+          "left": 200,
+          "right": 363,
+          "top": 324,
+          "bottom": 453,
+          "disabled": true
+        },
+        {
+          "title": "Crystal Foundry",
+          "left": 29,
+          "right": 192,
+          "top": 461,
+          "bottom": 604,
+          "disabled": false
+        }
+      ],
+      "screen": "playing"
+    },
+    "afkOpening": {
+      "hasFirstDecree": true,
+      "harvestHighlighted": true,
+      "harvestEnabled": true,
+      "harvestRect": {
+        "top": 324,
+        "bottom": 453,
+        "left": 29,
+        "right": 192
+      },
+      "panelScroll": {
+        "clientHeight": 861,
+        "scrollHeight": 861
+      },
+      "firstButtons": [
+        {
+          "title": "Harvest Boom",
+          "left": 29,
+          "right": 192,
+          "top": 324,
+          "bottom": 453,
+          "disabled": false
+        },
+        {
+          "title": "Royal Muster",
+          "left": 200,
+          "right": 363,
+          "top": 324,
+          "bottom": 453,
+          "disabled": true
+        },
+        {
+          "title": "Crystal Foundry",
+          "left": 29,
+          "right": 192,
+          "top": 461,
+          "bottom": 604,
+          "disabled": false
+        }
+      ],
+      "screen": "playing"
+    },
+    "mobileOpening": {
+      "hasFirstDecree": true,
+      "harvestHighlighted": true,
+      "harvestEnabled": true,
+      "harvestRect": {
+        "top": 743,
+        "bottom": 811,
+        "left": 17,
+        "right": 132
+      },
+      "panelScroll": {
+        "clientHeight": 302,
+        "scrollHeight": 359
+      },
+      "firstButtons": [
+        {
+          "title": "Harvest Boom",
+          "left": 17,
+          "right": 132,
+          "top": 743,
+          "bottom": 811,
+          "disabled": false
+        },
+        {
+          "title": "Royal Muster",
+          "left": 137,
+          "right": 253,
+          "top": 743,
+          "bottom": 811,
+          "disabled": true
+        },
+        {
+          "title": "Crystal Foundry",
+          "left": 258,
+          "right": 373,
+          "top": 743,
+          "bottom": 811,
+          "disabled": false
+        }
+      ],
+      "screen": "playing"
+    },
+    "postFirstDecree": {
+      "firstDecreeCleared": true,
+      "harvestHighlightCleared": true,
+      "harvestDisabledByCooldown": true,
+      "firstButtons": [
+        {
+          "title": "Harvest Boom",
+          "left": 29,
+          "right": 192,
+          "top": 324,
+          "bottom": 453,
+          "disabled": true
+        },
+        {
+          "title": "Royal Muster",
+          "left": 200,
+          "right": 363,
+          "top": 324,
+          "bottom": 453,
+          "disabled": true
+        },
+        {
+          "title": "Crystal Foundry",
+          "left": 29,
+          "right": 192,
+          "top": 461,
+          "bottom": 604,
+          "disabled": false
+        }
+      ]
+    }
+  },
+  "failures": [],
+  "screenshots": [
+    "docs/night-runs/artifacts/wake-15-active-opening.png",
+    "docs/night-runs/artifacts/wake-15-after-first-decree.png",
+    "docs/night-runs/artifacts/wake-15-afk-opening.png",
+    "docs/night-runs/artifacts/wake-15-mobile-opening.png"
+  ]
+}
