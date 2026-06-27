@@ -273,6 +273,7 @@ Commit:
 
 Deploy:
 - GitHub Pages deploy succeeded for pushed HEAD `e5409df`; run `28275900667`.
+- Ledger commit `c1acdee` also deployed successfully; run `28275927728`.
 
 Next recommendation:
 - Next research pass should look beyond the final-act balance and study whether the game needs a stronger second-cycle choice: alternate program order incentives, more meaningful mode contrast, or one new event-chain twist.
