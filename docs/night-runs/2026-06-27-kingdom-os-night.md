@@ -198,7 +198,7 @@ Commit:
 - `88de51c` (`docs: research kingdom os final act`)
 
 Deploy:
-- Pending push/deploy check after this ledger entry.
+- GitHub Pages deploy succeeded for pushed HEAD `bfab9e9`; run `28274613876`.
 
 Next recommendation:
 - Implement a bounded `Final Crown Protocol`: once `crowns === 2`, call out the final crown in HUD/advisor, give a small Focus/resource push, add a controlled Threat response, and trigger a visible surge around the remaining target.
