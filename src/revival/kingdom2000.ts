@@ -125,6 +125,7 @@ type GameState = {
   completedPlans: PlanId[];
   commissionOffered: boolean;
   activeCommission: CommissionId | null;
+  hasCastEdict: boolean;
   finalProtocolStarted: boolean;
   finalProtocolAge: number;
   ending: 'victory' | 'defeat' | null;
@@ -283,6 +284,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
     completedPlans: [],
     commissionOffered: false,
     activeCommission: null,
+    hasCastEdict: false,
     finalProtocolStarted: false,
     finalProtocolAge: 0,
     ending: null,
@@ -317,6 +319,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
     state.completedPlans = [];
     state.commissionOffered = false;
     state.activeCommission = null;
+    state.hasCastEdict = false;
     state.finalProtocolStarted = false;
     state.finalProtocolAge = 0;
     state.ending = null;
@@ -341,7 +344,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
     sparks.length = 0;
     ceremony = null;
     cooldowns.clear();
-    setCooldown('harvest', 1.5);
+    setCooldown('harvest', 0);
     setCooldown('muster', 2.5);
     spawnUnit('royal', 1, 0.15);
     spawnUnit('shade', 4, 0.2);
@@ -743,6 +746,16 @@ export function runKingdom2000(root: HTMLElement): () => void {
     return planOrder(plan);
   }
 
+  function isOpeningDecreeActive(): boolean {
+    return (
+      state.screen === 'playing' &&
+      state.activePlan === 'growth' &&
+      state.crowns === 0 &&
+      state.workers < 18 &&
+      !state.hasCastEdict
+    );
+  }
+
   function canCast(edict: Edict): boolean {
     return state.screen === 'playing' && (cooldowns.get(edict.id) ?? 0) <= 0 && hasEnough(state, edict.cost);
   }
@@ -753,7 +766,16 @@ export function runKingdom2000(root: HTMLElement): () => void {
       if (edict) log(`${edict.title} blocked: wait for Focus, resources, or cooldown.`);
       return;
     }
+    const firstEdict = !state.hasCastEdict;
     edict.apply();
+    state.hasCastEdict = true;
+    if (firstEdict) {
+      log(
+        id === 'harvest'
+          ? 'First decree fulfilled: farms wake up and the Grow crown is moving.'
+          : `First decree issued: ${edict.title} opens the reign.`,
+      );
+    }
     setCooldown(edict.id, edict.cooldown);
     checkPlanCompletion();
     renderHud();
@@ -1559,11 +1581,22 @@ export function runKingdom2000(root: HTMLElement): () => void {
     `;
   }
 
+  function renderOpeningDecree(): string {
+    return `
+      <article class="k2k-opening-decree" aria-label="First decree">
+        <span>First decree</span>
+        <strong>Press Harvest Boom</strong>
+        <p>Start farms, workers, and the first crown path.</p>
+      </article>
+    `;
+  }
+
   function renderPlanPanel(order: CouncilOrder): string {
     const plan = currentPlan();
     const progress = Math.round(plan.progress() * 100);
     const finalActive = isFinalProtocolActive();
     const commission = activeCommission();
+    const openingDecree = isOpeningDecreeActive();
     const hint = finalActive
       ? 'Last crown active. Spend the restored Focus before Shade pressure converts the surge.'
       : commission
@@ -1575,7 +1608,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
           <span>${finalActive ? 'Final crown protocol' : 'Current program'}</span>
           <strong>${plan.title}</strong>
           <p>${plan.objective}</p>
-          ${renderCouncilOrder(order)}
+          ${openingDecree ? renderOpeningDecree() : renderCouncilOrder(order)}
           <em>${hint}</em>
           <i style="--plan-progress:${progress}"></i>
         </div>
@@ -1602,8 +1635,9 @@ export function runKingdom2000(root: HTMLElement): () => void {
     const affordable = hasEnough(state, edict.cost);
     const disabled = state.screen !== 'playing' || cd > 0 || !affordable;
     const reason = cd > 0 ? `${Math.ceil(cd)}s` : affordable ? resourceText(edict.cost) : `Need ${resourceText(edict.cost)}`;
+    const openingDecree = isOpeningDecreeActive() && edict.id === 'harvest';
     return `
-      <button class="k2k-edict" data-edict="${edict.id}" type="button" ${disabled ? 'disabled' : ''}>
+      <button class="k2k-edict ${openingDecree ? 'is-opening-decree' : ''}" data-edict="${edict.id}" type="button" ${disabled ? 'disabled' : ''}>
         <span class="k2k-hotkey">${edict.hotkey}</span>
         <strong>${edict.title}</strong>
         <small>${edict.body}</small>
