@@ -163,7 +163,7 @@ Commit:
 - `6d8b7d1` (`Tune Kingdom OS program spotlight`)
 
 Deploy:
-- Pending push/deploy check after this ledger entry.
+- GitHub Pages deploy succeeded for pushed HEAD `38b7d49`; run `28274052060`.
 
 Next recommendation:
 - Next research pass should look for a stronger short-session arc after the map is readable: a memorable final surge, event chain, or second-mode modifier.
