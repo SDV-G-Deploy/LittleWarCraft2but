@@ -51,6 +51,15 @@ type Spark = {
   tone: 'aqua' | 'gold' | 'pink';
 };
 
+type Ceremony = {
+  planId: PlanId;
+  nodeId: string;
+  text: string;
+  tone: Spark['tone'];
+  age: number;
+  duration: number;
+};
+
 type Edict = {
   id: EdictId;
   title: string;
@@ -67,6 +76,10 @@ type Plan = {
   shortTitle: string;
   objective: string;
   hint: string;
+  targetNodeId: string;
+  routeEdges: number[];
+  tone: Spark['tone'];
+  ceremony: string;
   isDone: () => boolean;
   progress: () => number;
   reward: () => void;
@@ -224,6 +237,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
   const floaters: FloatingText[] = [];
   const sparks: Spark[] = [];
   const cooldowns = new Map<EdictId, number>();
+  let ceremony: Ceremony | null = null;
 
   const state: GameState = {
     screen: 'menu',
@@ -296,6 +310,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
     units.length = 0;
     floaters.length = 0;
     sparks.length = 0;
+    ceremony = null;
     cooldowns.clear();
     setCooldown('harvest', 1.5);
     setCooldown('muster', 2.5);
@@ -312,6 +327,10 @@ export function runKingdom2000(root: HTMLElement): () => void {
         title: 'Grow the Realm',
         shortTitle: 'Grow',
         objective: 'Reach 18 Workers and 220 Grain.',
+        targetNodeId: 'mill',
+        routeEdges: [0, 1, 2],
+        tone: 'gold',
+        ceremony: 'Farm crown installed',
         hint:
           state.workers < 18
             ? 'Use Harvest Boom. It turns morale and Focus into workers.'
@@ -333,6 +352,10 @@ export function runKingdom2000(root: HTMLElement): () => void {
         title: 'Win the Sky-Road',
         shortTitle: 'War',
         objective: 'Win 2 patrol battles while Threat stays under 70.',
+        targetNodeId: 'portal',
+        routeEdges: [2, 3, 5],
+        tone: 'pink',
+        ceremony: 'Sky-road crown secured',
         hint:
           state.battleWins < 2
             ? 'Muster first, then Scout or Ward if Threat climbs.'
@@ -354,6 +377,10 @@ export function runKingdom2000(root: HTMLElement): () => void {
         title: 'Light the Crystal Rite',
         shortTitle: 'Rite',
         objective: 'Reach 70 Crystal and 82 Morale.',
+        targetNodeId: 'mine',
+        routeEdges: [0, 1],
+        tone: 'aqua',
+        ceremony: 'Crystal crown lit',
         hint:
           state.resources.crystal < 70
             ? 'Crystal Foundry builds the rite. Scout helps the mine breathe.'
@@ -525,6 +552,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
 
     state.completedPlans.push(plan.id);
     state.crowns = state.completedPlans.length;
+    startCrownCeremony(plan);
     plan.reward();
 
     const next = plans().find((item) => !state.completedPlans.includes(item.id));
@@ -543,6 +571,23 @@ export function runKingdom2000(root: HTMLElement): () => void {
 
   function addFloater(text: string, x: number, y: number, tone: FloatingText['tone']): void {
     floaters.push({ text, x, y, age: 0, tone });
+  }
+
+  function startCrownCeremony(plan: Plan): void {
+    const node = nodes.find((item) => item.id === plan.targetNodeId);
+    if (!node) return;
+
+    ceremony = {
+      planId: plan.id,
+      nodeId: node.id,
+      text: plan.ceremony,
+      tone: plan.tone,
+      age: 0,
+      duration: 2.8,
+    };
+    addFloater(plan.ceremony, node.x, node.y - 0.06, 'good');
+    burst(node.x, node.y, 'gold', 46);
+    log(`Crown ceremony: ${plan.ceremony}.`);
   }
 
   function burst(x: number, y: number, tone: Spark['tone'], count: number): void {
@@ -748,6 +793,10 @@ export function runKingdom2000(root: HTMLElement): () => void {
 
   function updateEffects(dt: number): void {
     for (const node of nodes) node.pulse = Math.max(0, node.pulse - dt * 1.4);
+    if (ceremony) {
+      ceremony.age += dt;
+      if (ceremony.age > ceremony.duration) ceremony = null;
+    }
     for (let i = floaters.length - 1; i >= 0; i--) {
       floaters[i].age += dt;
       if (floaters[i].age > 1.7) floaters.splice(i, 1);
@@ -849,8 +898,11 @@ export function runKingdom2000(root: HTMLElement): () => void {
     ctx.scale(mapRect.w, mapRect.h);
 
     drawRoutes();
+    drawProgramSpotlight();
     for (const unit of units) drawUnit(unit);
     for (const node of nodes) drawNode(node);
+    drawCompletedCrowns();
+    if (ceremony) drawCeremony(ceremony);
     for (const spark of sparks) drawSpark(spark);
     for (const floater of floaters) drawFloater(floater);
 
@@ -867,14 +919,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
   function drawRoutes(): void {
     ctx.lineCap = 'round';
     for (let i = 0; i < EDGES.length; i++) {
-      const [from, to] = EDGES[i];
-      const a = nodes[from];
-      const b = nodes[to];
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      const mx = (a.x + b.x) / 2;
-      const my = (a.y + b.y) / 2 - 0.05;
-      ctx.quadraticCurveTo(mx, my, b.x, b.y);
+      drawRoutePath(i);
       ctx.strokeStyle = 'rgba(255,255,255,0.72)';
       ctx.lineWidth = 0.014;
       ctx.stroke();
@@ -882,6 +927,129 @@ export function runKingdom2000(root: HTMLElement): () => void {
       ctx.lineWidth = 0.006;
       ctx.stroke();
     }
+  }
+
+  function drawRoutePath(index: number): void {
+    const [from, to] = EDGES[index];
+    const a = nodes[from];
+    const b = nodes[to];
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2 - 0.05;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.quadraticCurveTo(mx, my, b.x, b.y);
+  }
+
+  function toneColor(tone: Spark['tone']): string {
+    if (tone === 'aqua') return '#3ff7ff';
+    if (tone === 'gold') return '#ffe85c';
+    return '#ff5df1';
+  }
+
+  function drawProgramSpotlight(): void {
+    if (state.screen !== 'playing' && state.screen !== 'paused') return;
+    const plan = currentPlan();
+    if (state.completedPlans.includes(plan.id)) return;
+    const target = nodes.find((node) => node.id === plan.targetNodeId);
+    if (!target) return;
+
+    const color = toneColor(plan.tone);
+    const pulse = (Math.sin(state.elapsed * 3.4) + 1) / 2;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.60 + pulse * 0.22;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 0.06 + pulse * 0.08;
+    for (const index of plan.routeEdges) {
+      drawRoutePath(index);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 0.018 + pulse * 0.006;
+      ctx.stroke();
+    }
+
+    ctx.translate(target.x, target.y);
+    ctx.globalAlpha = 0.76;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(0, 0, 0.075 + pulse * 0.020, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(255,255,255,0.94)';
+    ctx.lineWidth = 0.007;
+    ctx.beginPath();
+    ctx.arc(0, 0, 0.105 + pulse * 0.024, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.90)';
+    roundedRect(-0.010, -0.122, 0.020, 0.050, 0.007);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.fillRect(-0.010, -0.122, 0.042, 0.020);
+    ctx.strokeStyle = 'rgba(255,255,255,0.90)';
+    ctx.lineWidth = 0.003;
+    ctx.strokeRect(-0.010, -0.122, 0.042, 0.020);
+    ctx.restore();
+  }
+
+  function drawCompletedCrowns(): void {
+    for (const plan of plans()) {
+      if (!state.completedPlans.includes(plan.id)) continue;
+      const node = nodes.find((item) => item.id === plan.targetNodeId);
+      if (!node) continue;
+      drawCrownBadge(node.x + 0.054, node.y - 0.052, plan.tone);
+    }
+  }
+
+  function drawCrownBadge(x: number, y: number, tone: Spark['tone']): void {
+    const color = toneColor(tone);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 0.045;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 0.030, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffd84f';
+    ctx.beginPath();
+    ctx.moveTo(-0.017, 0.010);
+    ctx.lineTo(-0.017, -0.010);
+    ctx.lineTo(-0.007, -0.002);
+    ctx.lineTo(0, -0.018);
+    ctx.lineTo(0.007, -0.002);
+    ctx.lineTo(0.017, -0.010);
+    ctx.lineTo(0.017, 0.010);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(7,49,77,0.42)';
+    ctx.lineWidth = 0.003;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawCeremony(activeCeremony: Ceremony): void {
+    const node = nodes.find((item) => item.id === activeCeremony.nodeId);
+    if (!node) return;
+    const t = clamp(activeCeremony.age / activeCeremony.duration, 0, 1);
+    const color = toneColor(activeCeremony.tone);
+    const alpha = t < 0.72 ? 1 : 1 - (t - 0.72) / 0.28;
+
+    ctx.save();
+    ctx.translate(node.x, node.y);
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 0.14;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 0.012;
+    ctx.beginPath();
+    ctx.arc(0, 0, 0.13 + t * 0.13, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, 0.19 + t * 0.12, 0, Math.PI * 2);
+    ctx.stroke();
+
+    drawCrownBadge(0, -0.148, activeCeremony.tone);
+    ctx.restore();
   }
 
   function drawNode(node: Node): void {
