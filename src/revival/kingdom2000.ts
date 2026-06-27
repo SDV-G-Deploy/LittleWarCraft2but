@@ -581,13 +581,16 @@ export function runKingdom2000(root: HTMLElement): () => void {
     state.finalProtocolStarted = true;
     state.finalProtocolAge = 0;
     state.focus = clamp(state.focus + 42, 0, state.maxFocus);
-    state.resources.morale = clamp(state.resources.morale + 8, 0, 100);
+    state.resources.morale =
+      plan.id === 'ritual'
+        ? raiseToward(state.resources.morale, 8, 78)
+        : clamp(state.resources.morale + 8, 0, 100);
     state.threat = clamp(state.threat + 8, 0, 94);
     state.enemyPower = clamp(state.enemyPower + 5, 8, 100);
 
     if (plan.id === 'growth') {
-      state.workers += 2;
-      state.resources.grain += 58;
+      state.workers = raiseToward(state.workers, 2, 17);
+      state.resources.grain = raiseToward(state.resources.grain, 58, 210);
       addFloater('+focus +farms', 0.36, 0.56, 'good');
     } else if (plan.id === 'war') {
       state.army += 5;
@@ -595,7 +598,7 @@ export function runKingdom2000(root: HTMLElement): () => void {
       spawnUnit('royal', 2, 0.08);
       addFloater('+focus +army', 0.68, 0.31, 'good');
     } else {
-      state.resources.crystal += 20;
+      state.resources.crystal = raiseToward(state.resources.crystal, 20, 66);
       state.resources.gold += 28;
       addFloater('+focus +crystal', 0.45, 0.76, 'good');
     }
@@ -611,6 +614,10 @@ export function runKingdom2000(root: HTMLElement): () => void {
     burst(0.68, 0.31, 'gold', 34);
     spawnUnit('shade', 4, 0.96);
     log(`Final Crown Protocol: ${plan.shortTitle} is the last crown. Focus restored, Shade answered.`);
+  }
+
+  function raiseToward(value: number, gain: number, cap: number): number {
+    return value >= cap ? value : Math.min(value + gain, cap);
   }
 
   function flashNode(id: string): void {
