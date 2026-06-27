@@ -95,3 +95,40 @@ Commit:
 
 Next recommendation:
 - Implement a narrow program spotlight and crown ceremony layer: target-node metadata per program, pulsing current target marker, 2-3 second completion burst, and persistent crown badges on completed nodes.
+
+## Wake 02 - Cycle 1 - Implementation
+
+Start: 2026-06-27 00:40 UTC  
+End: 2026-06-27 00:49 UTC  
+Starting HEAD: `4afb74b`  
+Dirty-tree status: clean except this wake's lock/temp files
+
+Attempted:
+- Implemented the Wake 01 recommendation as one bounded pass.
+- Added program target metadata for Grow, War, and Rite.
+- Added a pulsing route/node spotlight for the active royal program.
+- Added a short crown ceremony and persistent crown badges for completed program nodes.
+- Captured desktop, mobile, and first-crown screenshots with headless Chromium.
+
+Files changed:
+- `src/revival/kingdom2000.ts`
+- `docs/night-runs/artifacts/wake-02-implementation.md`
+- `docs/night-runs/artifacts/wake-02-desktop-spotlight.png`
+- `docs/night-runs/artifacts/wake-02-mobile-spotlight.png`
+- `docs/night-runs/artifacts/wake-02-first-crown.png`
+- `docs/night-runs/2026-06-27-kingdom-os-night.md`
+
+Verification:
+- `npm run build` passed.
+- `npm test` passed.
+- Headless Chromium screenshots confirmed the spotlight is visible on desktop and mobile.
+- Forced first-program completion reached `1/3` crowns and showed a persistent completed crown badge while the War target lit up.
+
+Commit:
+- `9e94d6c` (`Add Kingdom OS program spotlight`)
+
+Deploy:
+- Pending push/deploy check after this ledger entry.
+
+Next recommendation:
+- Review pass should check whether the spotlight is too large/bright during real play and whether the War target color competes with Shade units.
