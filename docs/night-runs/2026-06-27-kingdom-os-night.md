@@ -400,7 +400,7 @@ Next recommendation:
 ## Wake 10 - Cycle 4 - Research
 
 Start: 2026-06-27 04:00 UTC  
-End: 2026-06-27 04:03 UTC  
+End: 2026-06-27 04:04 UTC  
 Starting HEAD: `05e20be`  
 Dirty-tree status: clean except this wake's lock/temp files
 
@@ -424,10 +424,10 @@ Verification:
 - Live Pages returned HTTP 200.
 
 Commit:
-- Pending.
+- `ea26a15` (`docs: research kingdom os council orders`)
 
 Deploy:
-- Pending.
+- GitHub Pages deploy succeeded for pushed HEAD `ea26a15`; run `28278028486`.
 
 Next recommendation:
 - Implement a bounded council-order readout: derive one urgent order from existing Threat, Morale, Focus, resources, cooldowns, and active program state; show it at the top of the advisor feed on desktop and inside the current-program card on mobile.
