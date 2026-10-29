@@ -38,7 +38,9 @@ export function createMouseState(canvas: HTMLCanvasElement): MouseInput {
   const state: MouseState = {
     x: 0, y: 0, buttons: 0, onCanvas: false, shiftHeld: false,
     clicks: [], dragSelects: [], activeDrag: null,
-    touch: false, touchPanX: 0, touchPanY: 0,
+    // Coarse primary pointer (phone/tablet) → assume touch until proven otherwise.
+    touch: typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches,
+    touchPanX: 0, touchPanY: 0,
   };
 
   const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Shift') state.shiftHeld = true; };

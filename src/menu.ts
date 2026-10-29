@@ -123,6 +123,16 @@ function getThumbnail(mapId: MapId): HTMLCanvasElement {
   return off;
 }
 
+/** Set ctx.font to the largest size (down to 8px) at which `text` fits in maxW. */
+function fitFont(ctx: CanvasRenderingContext2D, text: string, maxW: number, size: number, family: string): void {
+  let s = size;
+  ctx.font = `${s}px ${family}`;
+  while (s > 8 && ctx.measureText(text).width > maxW) {
+    s--;
+    ctx.font = `${s}px ${family}`;
+  }
+}
+
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
   const out: string[] = [];
   let cur = '';
@@ -483,6 +493,7 @@ export function runMenu(
     ctx.textAlign = 'center';
     ctx.fillStyle = WHITE;
     ctx.font = '14px monospace';
+    fitFont(ctx, t('menu_pitch'), canvas.width - 24, 14, 'monospace');
     ctx.fillText(t('menu_pitch'), cx, cy - 84);
 
     // Decorative divider
@@ -517,7 +528,7 @@ export function runMenu(
     ctx.textAlign = 'center';
     ctx.fillStyle = GREY;
     ctx.font = '11px monospace';
-    ctx.fillText(t('menu_quick_start_hint'), cx, cy + 6);
+    ctx.fillText(t('menu_quick_start_hint'), cx, cy + 10);
 
     // Small link to the Kingdom OS side experiment that also ships in this build.
     ctx.font = '12px monospace';
@@ -531,7 +542,7 @@ export function runMenu(
     ctx.fillStyle = '#5a6070';
     ctx.font = '12px monospace';
     const footer = canvas.width < 760 ? t('menu_touch_note') : t('menu_footer_hint');
-    ctx.font = canvas.width < 760 ? '10px monospace' : '12px monospace';
+    fitFont(ctx, footer, canvas.width - 16, 12, 'monospace');
     ctx.fillText(footer, cx, canvas.height - 14);
   }
 
@@ -612,7 +623,11 @@ export function runMenu(
     ctx.textAlign = 'center';
     ctx.fillStyle = GOLD;
     ctx.font      = MENU_TOKENS.font.h1;
-    ctx.fillText(t('choose_race'), cx, Math.max(80, raceLayout.cardY - 26));
+    // Keep the heading clear of both the Back button and the first card.
+    const minTitleY = canvas.width < 560 ? 84 : 44;
+    const titleY = Math.max(minTitleY, raceLayout.cardY - 14);
+    const firstCardY = Math.max(raceLayout.cardY, titleY + 14);
+    ctx.fillText(t('choose_race'), cx, titleY);
 
     const cardW = raceLayout.cardW;
     const cardH = raceLayout.cardH;
@@ -628,8 +643,8 @@ export function runMenu(
         ? raceLayout.startX
         : raceLayout.startX + i * (cardW + raceLayout.gap);
       const cardY = raceLayout.cols === 1
-        ? raceLayout.cardY + i * (cardH + raceLayout.rowGap)
-        : raceLayout.cardY;
+        ? firstCardY + i * (cardH + raceLayout.rowGap)
+        : firstCardY;
       const action = actions[i];
       const accent = rc.accentColor;
 

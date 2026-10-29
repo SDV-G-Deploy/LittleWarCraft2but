@@ -25,7 +25,7 @@ import { t } from './i18n';
 import { createMatchStats, observeMatchTick, measureIncome, matchDurationSeconds, formatDuration } from './sim/match-stats';
 import { createObjectiveTracker, updateObjectives, compassDirection, idleWorkerIds } from './sim/objectives';
 import {
-  drawObjectivesPanel, drawHudButtons, drawIdleWorkersChip, layoutHudButtons, drawPausedBanner, drawHelpOverlay, drawEndScreen,
+  drawObjectivesPanel, drawHudButtons, drawIdleWorkersChip, drawRotateHint, layoutHudButtons, drawPausedBanner, drawHelpOverlay, drawEndScreen,
   type HudButton,
 } from './render/hud-overlays';
 
@@ -1041,7 +1041,8 @@ export function startGame(
     if (!observerMode && gameResult === 'playing' && !openingPending) {
       const views = updateObjectives(objectiveTracker, state, myOwner, gameResult);
       const maxW = narrow ? Math.min(300, viewW - 16 - 180) : Math.floor((viewW - 420) / 2) - 16;
-      drawObjectivesPanel(ctx, views, 8, sideY, maxW, enemyDir, narrow && viewW < 700, now);
+      const compact = (narrow && viewW < 700) || canvas.height < 600;
+      drawObjectivesPanel(ctx, views, 8, sideY, maxW, enemyDir, compact, now);
     }
 
     if (gameResult === 'playing') {
@@ -1057,6 +1058,7 @@ export function startGame(
 
     if (paused && !helpOpen && gameResult === 'playing') drawPausedBanner(ctx, viewW, viewH);
     if (helpOpen) drawHelpOverlay(ctx, viewW, canvas.height, mouse.touch);
+    if (viewW < 600 && canvas.height > viewW) drawRotateHint(ctx, viewW, canvas.height);
   }
 
   // Dev-only fast-forward for playtesting: window.__lw2b.speed = 8
@@ -1095,7 +1097,8 @@ export function startGame(
     handleInput();
 
     let renderAlpha = 1;
-    const simFrozen = canPause && (paused || helpOpen);
+    const portraitBlocked = canvas.width < 600 && canvas.height > canvas.width;
+    const simFrozen = canPause && (paused || helpOpen || portraitBlocked);
     if (gameResult === 'playing' && !simFrozen) {
       simAccum += dt * debugSpeed;
       while (simAccum >= SIM_TICK_MS) { simTick(); simAccum -= SIM_TICK_MS; }

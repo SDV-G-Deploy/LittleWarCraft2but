@@ -241,24 +241,52 @@ export function drawPausedBanner(ctx: CanvasRenderingContext2D, viewW: number, v
 
 // ─── Help / controls card ────────────────────────────────────────────────────
 
+function wrapLine(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  if (ctx.measureText(text).width <= maxW) return [text];
+  const out: string[] = [];
+  let cur = '';
+  for (const word of text.split(' ')) {
+    const next = cur ? `${cur} ${word}` : word;
+    if (cur && ctx.measureText(next).width > maxW) { out.push(cur); cur = word; }
+    else cur = next;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
 export function drawHelpOverlay(ctx: CanvasRenderingContext2D, viewW: number, viewH: number, touch: boolean): void {
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.fillRect(0, 0, viewW, viewH);
 
-  const lines = [
+  const raw = [
+    ...(touch ? [t('help_touch'), ''] : []),
     t('help_l1'), t('help_l2'), t('help_l3'), t('help_l4'),
     '', t('help_l5'), t('help_l6'), t('help_l7'),
     '', t('help_l8'), t('help_l9'),
   ];
-  if (touch) lines.push('', t('help_touch'));
 
-  const w = Math.min(640, viewW - 24);
+  const w = Math.min(640, viewW - 16);
+  const textW = w - 32;
   const lineH = 18;
-  const naturalH = 70 + 36 + lines.length * lineH + 64;
-  const scale = Math.min(1, (viewH - 24) / naturalH);
-  const h = naturalH;
+  const BODY = 'normal 13px monospace';
+  const GOAL = 'bold 13px monospace';
+  const TIP = 'normal 12px monospace';
+
+  ctx.font = GOAL;
+  const goal = wrapLine(ctx, t('help_goal'), textW);
+  ctx.font = BODY;
+  const body: string[] = [];
+  for (const line of raw) {
+    if (!line) { body.push(''); continue; }
+    body.push(...wrapLine(ctx, line, textW));
+  }
+  ctx.font = TIP;
+  const tip = wrapLine(ctx, t('help_tip'), textW);
+
+  const h = 54 + goal.length * lineH + 12 + body.length * lineH + 10 + tip.length * 16 + 44;
+  const scale = Math.min(1, (viewH - 16) / h);
   const x = (viewW - w * scale) / 2;
-  const y = Math.max(12, (viewH - h * scale) / 2);
+  const y = Math.max(8, (viewH - h * scale) / 2);
 
   ctx.save();
   ctx.translate(x, y);
@@ -268,34 +296,51 @@ export function drawHelpOverlay(ctx: CanvasRenderingContext2D, viewW: number, vi
   ctx.textAlign = 'center';
   ctx.fillStyle = C.gold;
   ctx.font = 'bold 26px serif';
-  ctx.fillText(t('help_title'), w / 2, 38);
+  ctx.fillText(t('help_title'), w / 2, 36);
 
+  let ly = 54 + 4;
   ctx.fillStyle = C.text;
-  fitText(ctx, t('help_goal'), w - 32, 'bold', 13);
-  ctx.fillText(t('help_goal'), w / 2, 66);
+  ctx.font = GOAL;
+  for (const line of goal) { ctx.fillText(line, w / 2, ly); ly += lineH; }
+  ly += 12;
 
   ctx.textAlign = 'left';
-  let ly = 100;
-  for (const line of lines) {
+  ctx.font = BODY;
+  for (const line of body) {
     if (line) {
       ctx.fillStyle = C.text;
-      fitText(ctx, line, w - 40, 'normal', 13);
-      ctx.fillText(line, 20, ly);
+      ctx.fillText(line, 16, ly);
     }
     ly += lineH;
   }
-  ly += 4;
+  ly += 6;
   ctx.textAlign = 'center';
   ctx.fillStyle = C.done;
-  fitText(ctx, t('help_tip'), w - 32, 'normal', 12);
-  ctx.fillText(t('help_tip'), w / 2, ly);
-  ly += 28;
+  ctx.font = TIP;
+  for (const line of tip) { ctx.fillText(line, w / 2, ly); ly += 16; }
+  ly += 18;
   const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 300);
   ctx.fillStyle = `rgba(255,233,122,${pulse})`;
   ctx.font = 'bold 15px monospace';
   ctx.fillText(t('help_dismiss'), w / 2, ly);
   ctx.textAlign = 'left';
   ctx.restore();
+}
+
+/** Portrait phones: the dock does not fit, so suggest landscape. */
+export function drawRotateHint(ctx: CanvasRenderingContext2D, viewW: number, viewH: number): void {
+  ctx.fillStyle = 'rgba(0,0,0,0.78)';
+  ctx.fillRect(0, 0, viewW, viewH);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = C.gold;
+  ctx.font = 'bold 40px monospace';
+  ctx.fillText('⟲', viewW / 2, viewH / 2 - 30);
+  ctx.fillStyle = C.text;
+  ctx.font = 'bold 15px monospace';
+  for (const [i, line] of wrapLine(ctx, t('rotate_hint'), viewW - 40).entries()) {
+    ctx.fillText(line, viewW / 2, viewH / 2 + 10 + i * 20);
+  }
+  ctx.textAlign = 'left';
 }
 
 // ─── End-of-match summary ────────────────────────────────────────────────────
@@ -323,14 +368,15 @@ export function drawEndScreen(
   ctx.fillRect(0, 0, viewW, viewH);
 
   const [a, b] = input.sides;
-  const rows: Array<[string, number, number]> = [
-    [t('stat_gold'), a.goldMined, b.goldMined],
-    [t('stat_wood'), a.woodHarvested, b.woodHarvested],
-    [t('stat_trained'), a.unitsTrained, b.unitsTrained],
-    [t('stat_peak'), a.peakArmy, b.peakArmy],
-    [t('stat_lost'), a.unitsLost, b.unitsLost],
-    [t('stat_built'), a.buildingsBuilt, b.buildingsBuilt],
-    [t('stat_bldg_lost'), a.buildingsLost, b.buildingsLost],
+  // [label, left, right, lowerIsBetter]
+  const rows: Array<[string, number, number, boolean]> = [
+    [t('stat_gold'), a.goldMined, b.goldMined, false],
+    [t('stat_wood'), a.woodHarvested, b.woodHarvested, false],
+    [t('stat_trained'), a.unitsTrained, b.unitsTrained, false],
+    [t('stat_peak'), a.peakArmy, b.peakArmy, false],
+    [t('stat_lost'), a.unitsLost, b.unitsLost, true],
+    [t('stat_built'), a.buildingsBuilt, b.buildingsBuilt, false],
+    [t('stat_bldg_lost'), a.buildingsLost, b.buildingsLost, true],
   ];
 
   const w = Math.min(520, viewW - 24);
@@ -369,16 +415,18 @@ export function drawEndScreen(
   ctx.strokeStyle = 'rgba(232,200,74,0.3)';
   ctx.beginPath(); ctx.moveTo(20, ty); ctx.lineTo(w - 20, ty); ctx.stroke();
   ty += 20;
-  for (const [label, va, vb] of rows) {
+  for (const [label, va, vb, lowerIsBetter] of rows) {
+    const aBetter = lowerIsBetter ? va < vb : va > vb;
+    const bBetter = lowerIsBetter ? vb < va : vb > va;
     ctx.textAlign = 'left';
     ctx.fillStyle = C.text;
     fitText(ctx, label, colA - 70, 'normal', 13);
     ctx.fillText(label, 24, ty);
     ctx.textAlign = 'center';
     ctx.font = 'bold 14px monospace';
-    ctx.fillStyle = va > vb ? C.win : C.text;
+    ctx.fillStyle = aBetter ? C.win : C.text;
     ctx.fillText(String(va), colA, ty);
-    ctx.fillStyle = vb > va ? C.win : C.text;
+    ctx.fillStyle = bBetter ? C.win : C.text;
     ctx.fillText(String(vb), colB, ty);
     ty += rowH;
   }
