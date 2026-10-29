@@ -5,8 +5,8 @@ How to run the playable demo and a 3-minute walkthrough for showing it to someon
 ## Run it
 
 Hosted: the GitHub Pages build of `main` serves the RTS at the site root
-(`index.html`). The Kingdom OS 2000 idle experiment is at `kingdom.html`,
-linked from the bottom of the main menu.
+(`index.html`). Kingdom OS 2000, an idle kingdom-builder side game, is at
+`kingdom.html`, linked from the bottom of the main menu (see `docs/KINGDOM_OS.md`).
 
 Local:
 

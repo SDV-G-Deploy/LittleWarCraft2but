@@ -10,6 +10,7 @@ LW2B is no longer in active gameplay expansion. The project reached a useful dem
 
 See:
 - `docs/DEMO_SCRIPT.md` (run it + 3-minute walkthrough)
+- `docs/KINGDOM_OS.md` (Kingdom OS 2000, the idle side game at `kingdom.html`)
 - `PROJECT_STATUS.md`
 - `docs/LW2B_CURRENT_STATE.md`
 - `docs/FINAL_ASSESSMENT.md`
@@ -55,7 +56,7 @@ Reference commands:
 
 ```bash
 npm ci
-npm run dev        # play locally (RTS at /, Kingdom OS experiment at /kingdom.html)
+npm run dev        # play locally (RTS at /, Kingdom OS idle side game at /kingdom.html)
 npm run build
 npm test
 npm run balance:report
