@@ -7,7 +7,8 @@ export interface Rect {
   h: number;
 }
 
-export const UI_PANEL_HEIGHT = 132;
+// Tall enough for the 128px minimap (64 tiles × MINI_SCALE) plus pane padding.
+export const UI_PANEL_HEIGHT = 148;
 
 export const MINI_SCALE = 2;
 export const MINI_W = MAP_W * MINI_SCALE;
