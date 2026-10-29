@@ -1,8 +1,12 @@
-import { runKingdom2000 } from './revival/kingdom2000';
-import './revival/kingdom2000.css';
+import { runMenu } from './menu';
+import { startGame, type GameOptions } from './game';
 
-const root = document.getElementById('app');
+const canvas = document.getElementById('game') as HTMLCanvasElement;
 
-if (!root) throw new Error('App root not found');
+function showMenu(): void {
+  runMenu(canvas, (options: GameOptions) => {
+    startGame(canvas, options, showMenu);
+  });
+}
 
-runKingdom2000(root);
+showMenu();
