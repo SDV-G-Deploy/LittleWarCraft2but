@@ -1,8 +1,16 @@
-import { runKingdom2000 } from './revival/kingdom2000';
-import './revival/kingdom2000.css';
+import { runMenu } from './menu';
+import { startGame, type GameOptions } from './game';
 
-const root = document.getElementById('app');
+const canvas = document.getElementById('game') as HTMLCanvasElement;
 
-if (!root) throw new Error('App root not found');
+function play(options: GameOptions): void {
+  // Online sessions cannot be reused, so only offline matches offer a rematch.
+  const rematch = options.net ? undefined : () => play(options);
+  startGame(canvas, options, showMenu, rematch);
+}
 
-runKingdom2000(root);
+function showMenu(): void {
+  runMenu(canvas, play);
+}
+
+showMenu();

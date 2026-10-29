@@ -4,11 +4,12 @@ A small RTS demo built around deterministic client-hosted simulation, readable e
 
 ## Project status
 
-**Archived, demo complete.**
+**Archived, demo complete — polished playable demo (2026-10).** Quick Start vs an Easy AI, an in-game objectives checklist, a controls card, pause, end-of-match stats and touch support. See `docs/DEMO_SCRIPT.md` for how to run it and a 3-minute walkthrough.
 
 LW2B is no longer in active gameplay expansion. The project reached a useful demo/research endpoint, and further growth would require a broader content/design phase rather than routine continuation.
 
 See:
+- `docs/DEMO_SCRIPT.md` (run it + 3-minute walkthrough)
 - `PROJECT_STATUS.md`
 - `docs/LW2B_CURRENT_STATE.md`
 - `docs/FINAL_ASSESSMENT.md`
@@ -53,7 +54,8 @@ This repository remains useful as:
 Reference commands:
 
 ```bash
-npm install
+npm ci
+npm run dev        # play locally (RTS at /, Kingdom OS experiment at /kingdom.html)
 npm run build
 npm test
 npm run balance:report

@@ -123,6 +123,28 @@ function getThumbnail(mapId: MapId): HTMLCanvasElement {
   return off;
 }
 
+/** Set ctx.font to the largest size (down to 8px) at which `text` fits in maxW. */
+function fitFont(ctx: CanvasRenderingContext2D, text: string, maxW: number, size: number, family: string): void {
+  let s = size;
+  ctx.font = `${s}px ${family}`;
+  while (s > 8 && ctx.measureText(text).width > maxW) {
+    s--;
+    ctx.font = `${s}px ${family}`;
+  }
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  const out: string[] = [];
+  let cur = '';
+  for (const word of text.split(/\s+/)) {
+    const next = cur ? `${cur} ${word}` : word;
+    if (cur && ctx.measureText(next).width > maxW) { out.push(cur); cur = word; }
+    else cur = next;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
 // ─── Entry ────────────────────────────────────────────────────────────────────
 
 export function runMenu(
@@ -136,7 +158,9 @@ export function runMenu(
     mode:       'offline_skirmish',
     playerRace: 'human',
     mapId:      1,
-    aiDifficulty: 'medium',
+    // Easy by default: a first-time player should be able to finish (and win)
+    // a match. Medium/Hard are one click away on the map screen.
+    aiDifficulty: 'easy',
     simSides:   [
       { race: 'human', aiDifficulty: 'medium' },
       { race: 'orc', aiDifficulty: 'medium' },
@@ -199,6 +223,14 @@ export function runMenu(
   // ── Action handler ─────────────────────────────────────────────────────────
   async function handleAction(action: string): Promise<void> {
     switch (action) {
+      case 'quick_start':
+        ms.mode = 'offline_skirmish';
+        ms.playerRace = 'human';
+        ms.mapId = 1;
+        ms.aiDifficulty = 'easy';
+        startGame();
+        break;
+      case 'kingdom_os':  window.location.href = './kingdom.html'; break;
       case 'new_game':    ms.mode = 'offline_skirmish'; ms.screen = 'race';     break;
       case 'simulation':  ms.mode = 'offline_simulation'; ms.screen = 'simulation'; break;
       case 'online':      ms.screen = 'online';   break;
@@ -297,6 +329,8 @@ export function runMenu(
     canvas.removeEventListener('click', onClick);
     canvas.removeEventListener('mousemove', onMouseMove);
     canvas.removeEventListener('wheel', onWheel);
+    canvas.removeEventListener('touchstart', onTouchStart);
+    canvas.removeEventListener('touchmove', onTouchMove);
     window.removeEventListener('resize', resize);
     window.removeEventListener('keydown', onKeyDown);
   };
@@ -404,6 +438,22 @@ export function runMenu(
   };
   canvas.addEventListener('wheel', onWheel, { passive: false });
 
+  // Touch drag scrolls the map list on small screens.
+  let touchLastY: number | null = null;
+  const onTouchStart = (e: TouchEvent) => {
+    touchLastY = e.touches.length === 1 ? e.touches[0].clientY : null;
+  };
+  const onTouchMove = (e: TouchEvent) => {
+    if (ms.screen !== 'map' || touchLastY === null || e.touches.length !== 1) return;
+    const y = e.touches[0].clientY;
+    const range = getMapScrollRange(canvas.width, canvas.height, MAP_CATALOG.length);
+    mapScrollY = clampMapScroll(mapScrollY + (y - touchLastY), range);
+    touchLastY = y;
+    e.preventDefault();
+  };
+  canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+  canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+
   function isHovered(btn: MenuButton): boolean {
     return mouseX >= btn.x && mouseX <= btn.x + btn.w &&
            mouseY >= btn.y && mouseY <= btn.y + btn.h;
@@ -435,35 +485,65 @@ export function runMenu(
   // ─── Screen: Title ─────────────────────────────────────────────────────────
   function drawTitle_screen(): void {
     const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    // Keep the whole stack (title → last button) on screen on short viewports.
+    const cy = Math.max(190, Math.min(canvas.height / 2, canvas.height - 250));
 
-    drawTitle(cy - 80);
+    drawTitle(cy - 140);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = WHITE;
+    ctx.font = '14px monospace';
+    fitFont(ctx, t('menu_pitch'), canvas.width - 24, 14, 'monospace');
+    ctx.fillText(t('menu_pitch'), cx, cy - 84);
 
     // Decorative divider
     ctx.strokeStyle = GOLD_DIM;
     ctx.lineWidth   = 1;
     ctx.setLineDash([4, 6]);
     ctx.beginPath();
-    ctx.moveTo(cx - 140, cy - 40);
-    ctx.lineTo(cx + 140, cy - 40);
+    ctx.moveTo(cx - 140, cy - 68);
+    ctx.lineTo(cx + 140, cy - 68);
     ctx.stroke();
     ctx.setLineDash([]);
 
+    const quick: MenuButton = { x: cx - 130, y: cy - 54, w: 260, h: 48, label: t('menu_quick_start'), action: 'quick_start', accent: '#ffe97a' };
     const btns: MenuButton[] = [
-      { x: cx - 100, y: cy - 28,  w: 200, h: 40, label: t('menu_new_game'),    action: 'new_game',    accent: GOLD },
-      { x: cx - 100, y: cy + 22,  w: 200, h: 36, label: t('menu_simulation'),  action: 'simulation',  accent: '#d9b84a' },
-      { x: cx - 100, y: cy + 68,  w: 200, h: 36, label: t('menu_online'),      action: 'online',      accent: '#44ddaa' },
-      { x: cx - 100, y: cy + 114, w: 200, h: 32, label: t('menu_how_to_play'), action: 'how_to_play', accent: '#88bbff' },
+      quick,
+      { x: cx - 110, y: cy + 16,  w: 220, h: 36, label: t('menu_new_game'),    action: 'new_game',    accent: GOLD },
+      { x: cx - 110, y: cy + 60,  w: 220, h: 36, label: t('menu_simulation'),  action: 'simulation',  accent: '#d9b84a' },
+      { x: cx - 110, y: cy + 104, w: 220, h: 36, label: t('menu_online'),      action: 'online',      accent: '#44ddaa' },
+      { x: cx - 110, y: cy + 148, w: 220, h: 32, label: t('menu_how_to_play'), action: 'how_to_play', accent: '#88bbff' },
     ];
 
     drawLanguageToggle(btns);
     buttons = btns;
     for (const b of btns) drawButton(b, isHovered(b));
 
+    // Quick start gets a highlighted frame so the first click is obvious.
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 380);
+    ctx.strokeStyle = `rgba(255,233,122,${0.35 + pulse * 0.45})`;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(quick.x - 3.5, quick.y - 3.5, quick.w + 7, quick.h + 7);
+
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#444a5a';
+    ctx.fillStyle = GREY;
+    ctx.font = '11px monospace';
+    ctx.fillText(t('menu_quick_start_hint'), cx, cy + 10);
+
+    // Small link to the Kingdom OS side experiment that also ships in this build.
     ctx.font = '12px monospace';
-    ctx.fillText(t('menu_footer_hint'), cx, canvas.height - 14);
+    const linkLabel = t('menu_kingdom_link');
+    const linkW = ctx.measureText(linkLabel).width + 16;
+    const link: MenuButton = { x: cx - linkW / 2, y: canvas.height - 58, w: linkW, h: 22, label: linkLabel, action: 'kingdom_os' };
+    ctx.fillStyle = isHovered(link) ? '#88bbff' : '#5f6b84';
+    ctx.fillText(linkLabel, cx, canvas.height - 42);
+    btns.push(link);
+
+    ctx.fillStyle = '#5a6070';
+    ctx.font = '12px monospace';
+    const footer = canvas.width < 760 ? t('menu_touch_note') : t('menu_footer_hint');
+    fitFont(ctx, footer, canvas.width - 16, 12, 'monospace');
+    ctx.fillText(footer, cx, canvas.height - 14);
   }
 
   // ─── Screen: How To Play ───────────────────────────────────────────────────
@@ -543,7 +623,11 @@ export function runMenu(
     ctx.textAlign = 'center';
     ctx.fillStyle = GOLD;
     ctx.font      = MENU_TOKENS.font.h1;
-    ctx.fillText(t('choose_race'), cx, Math.max(80, raceLayout.cardY - 26));
+    // Keep the heading clear of both the Back button and the first card.
+    const minTitleY = canvas.width < 560 ? 84 : 44;
+    const titleY = Math.max(minTitleY, raceLayout.cardY - 14);
+    const firstCardY = Math.max(raceLayout.cardY, titleY + 14);
+    ctx.fillText(t('choose_race'), cx, titleY);
 
     const cardW = raceLayout.cardW;
     const cardH = raceLayout.cardH;
@@ -559,8 +643,8 @@ export function runMenu(
         ? raceLayout.startX
         : raceLayout.startX + i * (cardW + raceLayout.gap);
       const cardY = raceLayout.cols === 1
-        ? raceLayout.cardY + i * (cardH + raceLayout.rowGap)
-        : raceLayout.cardY;
+        ? firstCardY + i * (cardH + raceLayout.rowGap)
+        : firstCardY;
       const action = actions[i];
       const accent = rc.accentColor;
 
@@ -609,16 +693,16 @@ export function runMenu(
       }
 
       // Description (multi-line, each line on its own row)
-      let descY = cardY + 210;
+      let descY = cardY + 226;
       ctx.textAlign = 'center';
       ctx.fillStyle = GREY;
       ctx.font      = '11px monospace';
-      const descriptionLines = races[i] === 'human'
-        ? [t('race_desc_humans_1'), t('race_desc_humans_2')]
-        : [t('race_desc_orcs_1'), t('race_desc_orcs_2')];
-      for (const line of descriptionLines) {
+      const description = races[i] === 'human'
+        ? `${t('race_desc_humans_1')} ${t('race_desc_humans_2')}`
+        : `${t('race_desc_orcs_1')} ${t('race_desc_orcs_2')}`;
+      for (const line of wrapText(ctx, description, cardW - 28).slice(0, 3)) {
         ctx.fillText(line, cardX + cardW / 2, descY);
-        descY += 15;
+        descY += 14;
       }
 
       // Select button

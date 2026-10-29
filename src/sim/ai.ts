@@ -256,6 +256,10 @@ export interface AIController {
   nextDecisionTick: number;
   maxFarms: number;
   maxTowers: number;
+  /** Hard ceiling on military units (beginner handicap on Easy). */
+  maxArmy: number;
+  /** Highest Lumber Mill upgrade tier this AI will research. */
+  maxUpgradeTier: number;
   workerTarget: number;
   openingPlan: 'eco' | 'tempo' | 'pressure';
   openingChoiceDelayTicks: number;
@@ -312,6 +316,11 @@ type ArmyRolePlan = {
 
 type TargetSelectionRole = 'frontline' | 'rangedFollow' | 'harassment';
 
+/** Military cap for the Easy AI (see createAIBase). */
+export const EASY_MAX_ARMY = 6;
+/** Lumber Mill research cap for the Easy AI (0 = no upgrades, no doctrine). */
+export const EASY_MAX_UPGRADE_TIER = 0;
+
 function createAIBase(difficulty: AIDifficulty): AIController {
   return {
     phase: 'economy',
@@ -320,7 +329,14 @@ function createAIBase(difficulty: AIDifficulty): AIController {
     reactionDelayTicks: difficulty === 'easy' ? Math.round(SIM_HZ * 1.4) : difficulty === 'hard' ? Math.round(SIM_HZ * 0.55) : SIM_HZ,
     nextDecisionTick: 0,
     maxFarms: difficulty === 'easy' ? 2 : difficulty === 'hard' ? 4 : 3,
-    maxTowers: difficulty === 'easy' ? 1 : difficulty === 'hard' ? 4 : 2,
+    // Easy is the first-time-player default: no towers and a small army cap
+    // so a player who masses a modest force can actually finish the match.
+    maxTowers: difficulty === 'easy' ? 0 : difficulty === 'hard' ? 4 : 2,
+    maxArmy: difficulty === 'easy' ? EASY_MAX_ARMY : Number.POSITIVE_INFINITY,
+    // Stacked attack/armor/doctrine bonuses make defenders nearly unkillable
+    // for an un-upgraded army; Easy researches nothing so new players can
+    // break it without first learning the Lumber Mill.
+    maxUpgradeTier: difficulty === 'easy' ? EASY_MAX_UPGRADE_TIER : Number.POSITIVE_INFINITY,
     workerTarget: difficulty === 'easy' ? 3 : difficulty === 'hard' ? 5 : 4,
     openingPlan: difficulty === 'easy' ? 'eco' : difficulty === 'hard' ? 'pressure' : 'tempo',
     openingChoiceDelayTicks: difficulty === 'easy' ? Math.round(SIM_HZ * 8) : difficulty === 'hard' ? Math.round(SIM_HZ * 4) : Math.round(SIM_HZ * 6),
@@ -513,7 +529,7 @@ export function tickAI(state: GameState, ai: AIController, owner: 0 | 1 = 1): vo
         const nextUnit = wantHeavy ? rc.heavy : wantRanged ? rc.ranged : rc.soldier;
         const canTrainNext = wantHeavy ? canHeavy : wantRanged ? canRanged : canSoldier;
         const barracksBusy = myBarracks.cmd?.type === 'train';
-        if (!barracksBusy && canTrainNext) issueTrainCommand(state, myBarracks, nextUnit);
+        if (!barracksBusy && canTrainNext && totalArmy < ai.maxArmy) issueTrainCommand(state, myBarracks, nextUnit);
       }
       if (!buildingFarm && state.popCap[owner] - state.pop[owner] <= 2 && farmCount < ai.maxFarms) {
         const w = freeWorker(myWorkers);
@@ -1265,6 +1281,7 @@ function doctrineKind(choice: AIController['doctrineChoice']): LumberUpgradeKind
 function pickNextUpgrade(state: GameState, ai: AIController, owner: 0 | 1): LumberUpgradeKind | null {
   const upgrades = state.upgrades[owner];
   if (upgrades.pendingLumberUpgrade) return null;
+  if (ai.maxUpgradeTier <= 0) return null;
 
   if (!upgrades.doctrine && state.gold[owner] >= DOCTRINE_COST.gold && state.wood[owner] >= DOCTRINE_COST.wood) {
     return doctrineKind(ai.doctrineChoice);
@@ -1298,7 +1315,7 @@ function pickNextUpgrade(state: GameState, ai: AIController, owner: 0 | 1): Lumb
     },
   ];
 
-  const maxTier = Math.max(...ladder.map(entry => entry.max));
+  const maxTier = Math.min(ai.maxUpgradeTier, Math.max(...ladder.map(entry => entry.max)));
   for (let tier = 1; tier <= maxTier; tier++) {
     for (const entry of ladder) {
       if (entry.current >= tier || entry.max < tier) continue;

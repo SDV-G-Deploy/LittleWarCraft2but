@@ -104,7 +104,12 @@ export function clampMapScroll(v: number, range: { min: number; max: number }): 
 }
 
 export function getResponsiveRaceLayout(viewW: number, viewH: number): RaceLayout {
-  const cols = viewW < MENU_BREAKPOINTS.raceStack ? 1 : 2;
+  const cardHForFit = MENU_TOKENS.layout.raceCardH;
+  // Stack on narrow screens, but not when two stacked cards would not fit
+  // vertically (e.g. a phone in landscape) and two columns still fit.
+  const stackedFits = cardHForFit * 2 + 20 + 40 <= viewH;
+  const sideBySideFits = viewW >= MENU_TOKENS.layout.raceCardMinW * 2 + MENU_TOKENS.layout.raceGap + 16;
+  const cols = viewW < MENU_BREAKPOINTS.raceStack && (stackedFits || !sideBySideFits) ? 1 : 2;
   const gap = MENU_TOKENS.layout.raceGap;
   const cardH = MENU_TOKENS.layout.raceCardH;
   const sidePad = Math.max(20, Math.round(viewW * 0.05));

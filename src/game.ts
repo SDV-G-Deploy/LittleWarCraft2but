@@ -22,6 +22,22 @@ import { buildMapById } from './data/maps';
 import type { NetSession, SessionStats } from './net/session';
 import { applyNetCmds, type NetCmd } from './net/netcmd';
 import { t } from './i18n';
+import { createMatchStats, observeMatchTick, measureIncome, matchDurationSeconds, formatDuration } from './sim/match-stats';
+import { createObjectiveTracker, updateObjectives, compassDirection, idleWorkerIds } from './sim/objectives';
+import {
+  drawObjectivesPanel, drawHudButtons, drawIdleWorkersChip, drawRotateHint, layoutHudButtons, drawPausedBanner, drawHelpOverlay, drawEndScreen,
+  type HudButton,
+} from './render/hud-overlays';
+
+const HELP_SEEN_KEY = 'lw2b_help_seen';
+
+function readHelpSeen(): boolean {
+  try { return window.localStorage.getItem(HELP_SEEN_KEY) === '1'; } catch { return false; }
+}
+
+function markHelpSeen(): void {
+  try { window.localStorage.setItem(HELP_SEEN_KEY, '1'); } catch { /* storage unavailable */ }
+}
 
 const CAM_SPEED   = 400;
 const EDGE_ZONE   = 20;
@@ -79,6 +95,7 @@ export function startGame(
   canvas: HTMLCanvasElement,
   options: GameOptions,
   onBackToMenu: () => void,
+  onRematch?: () => void,
 ): void {
   const ctx = canvas.getContext('2d')!;
 
@@ -205,6 +222,24 @@ export function startGame(
   // ── Initial fog reveal ─────────────────────────────────────────────────────
   updateFog(state, myOwner);
 
+  // ── First-time-player layer (read-only observers + overlays) ──────────────
+  const matchStats = createMatchStats(state);
+  const objectiveTracker = createObjectiveTracker();
+  const enemyStart = effectiveMyOwner === 0 ? mapData.aiStart : mapData.playerStart;
+  const enemyDir = compassDirection(myStart, enemyStart);
+  // Offline modes can pause; online lockstep must keep ticking.
+  const canPause = !net;
+  let paused = false;
+  // Show the controls card automatically on a player's first offline skirmish.
+  let helpOpen = mode === 'offline_skirmish' && !readHelpSeen();
+  let hudButtons: HudButton[] = [];
+  let endButtons: HudButton[] = [];
+
+  function closeHelp(): void {
+    helpOpen = false;
+    markHelpSeen();
+  }
+
   // ── Selection & UI state ───────────────────────────────────────────────────
   const selectedIds = new Set<number>();
   let uiButtons: UiButton[] = [];
@@ -229,6 +264,25 @@ export function startGame(
 
   // ── Keyboard ───────────────────────────────────────────────────────────────
   function onKeyDown(e: KeyboardEvent): void {
+    if (helpOpen) {
+      if (e.key === 'F1') e.preventDefault();
+      closeHelp();
+      return;
+    }
+    if (gameResult !== 'playing') {
+      if (e.key === 'Enter' && onRematch) { rematch(); return; }
+      if (e.key === 'r' || e.key === 'R' || e.key === 'Escape') { backToMenu(); return; }
+      return;
+    }
+    if (e.key === 'F1' || e.key === '?') {
+      e.preventDefault();
+      helpOpen = true;
+      return;
+    }
+    if ((e.key === 'p' || e.key === 'P') && canPause) {
+      paused = !paused;
+      return;
+    }
     if (observerMode) {
       if (e.key === 'Escape') { placementMode = null; return; }
       if ((e.key === 'r' || e.key === 'R') && gameResult !== 'playing') {
@@ -282,6 +336,12 @@ export function startGame(
       backToMenu(); return;
     }
 
+    // . = select idle workers (press again to cycle the camera through them)
+    if (e.key === '.') {
+      selectIdleWorkers();
+      return;
+    }
+
     // S = Stop all selected player entities
     if (e.key === 's' || e.key === 'S') {
       const ids = [...selectedIds].filter(id => state.entities.some(en => en.id === id && en.owner === myOwner));
@@ -311,6 +371,8 @@ export function startGame(
       if (firstSel.kind === 'barracks') {
         if (e.key === 't' || e.key === 'T') { emit({ k: 'train', buildingId: firstSel.id, unit: myRC.soldier }); return; }
         if (e.key === 'h' || e.key === 'H') { emit({ k: 'train', buildingId: firstSel.id, unit: myRC.heavy   }); return; }
+        // [A] = ranged, matching the command-card label (attack-move needs units selected anyway)
+        if (e.key === 'a' || e.key === 'A') { emit({ k: 'train', buildingId: firstSel.id, unit: myRC.ranged  }); return; }
       }
     }
 
@@ -333,6 +395,21 @@ export function startGame(
   window.addEventListener('keyup',   onKeyUp);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
+  let idleCycle = 0;
+  function selectIdleWorkers(): void {
+    const ids = idleWorkerIds(state, myOwner);
+    if (ids.length === 0) return;
+    selectedIds.clear();
+    ids.forEach(id => selectedIds.add(id));
+    const focus = state.entityById?.get(ids[idleCycle % ids.length]) ?? state.entities.find(en => en.id === ids[idleCycle % ids.length]);
+    idleCycle++;
+    if (focus) {
+      cam.x = (focus.pos.x + 0.5) * TILE_SIZE - canvas.width / 2;
+      cam.y = (focus.pos.y + 0.5) * TILE_SIZE - (canvas.height - UI_HEIGHT) / 2;
+      clampCamera(cam, canvas.width, canvas.height - UI_HEIGHT);
+    }
+  }
+
   function unitAtWorld(wx: number, wy: number) {
     return state.entities.find(e => {
       if (!isUnitKind(e.kind)) return false;
@@ -354,6 +431,48 @@ export function startGame(
   function handleInput(): void {
     const viewH_game = canvas.height - UI_HEIGHT;
     const minimapRect = getDockLayout(canvas.width, canvas.height).minimapRect;
+
+    // Touch: one-finger drag pans the camera.
+    if (mouse.touchPanX !== 0 || mouse.touchPanY !== 0) {
+      cam.x -= mouse.touchPanX;
+      cam.y -= mouse.touchPanY;
+      mouse.touchPanX = 0;
+      mouse.touchPanY = 0;
+      clampCamera(cam, canvas.width, viewH_game);
+    }
+
+    // Modal overlays swallow input.
+    if (helpOpen) {
+      if (mouse.clicks.length > 0 || mouse.dragSelects.length > 0) closeHelp();
+      mouse.clicks.length = 0;
+      mouse.dragSelects.length = 0;
+      return;
+    }
+    if (gameResult !== 'playing') {
+      for (const click of mouse.clicks) {
+        if (click.button !== 0) continue;
+        const btn = endButtons.find(b => click.x >= b.x && click.x <= b.x + b.w && click.y >= b.y && click.y <= b.y + b.h);
+        if (btn?.action === 'end:rematch' && onRematch) { mouse.clicks.length = 0; rematch(); return; }
+        if (btn?.action === 'end:menu') { mouse.clicks.length = 0; backToMenu(); return; }
+      }
+      mouse.clicks.length = 0;
+      mouse.dragSelects.length = 0;
+      return;
+    }
+    {
+      const remaining = [];
+      for (const click of mouse.clicks) {
+        const btn = click.button === 0
+          ? hudButtons.find(b => click.x >= b.x && click.x <= b.x + b.w && click.y >= b.y && click.y <= b.y + b.h)
+          : undefined;
+        if (btn?.action === 'hud:help') { helpOpen = true; continue; }
+        if (btn?.action === 'hud:pause') { paused = !paused; continue; }
+        if (btn?.action === 'hud:idle') { selectIdleWorkers(); continue; }
+        remaining.push(click);
+      }
+      mouse.clicks.length = 0;
+      mouse.clicks.push(...remaining);
+    }
 
     if (observerMode) {
       for (const click of mouse.clicks) {
@@ -433,6 +552,14 @@ export function startGame(
           placementMode = null;
         }
         continue;
+      }
+
+      // Touch has no right button: a tap that does not hit one of my own
+      // entities acts as a right-click command for the current selection.
+      if (click.button === 0 && click.touch) {
+        const hitOwn = unitAtWorld(wx, wy) ?? buildingAtTile(tx, ty);
+        const hasMine = [...selectedIds].some(id => state.entities.some(en => en.id === id && en.owner === myOwner));
+        if (hasMine && (!hitOwn || hitOwn.owner !== myOwner)) click.button = 2;
       }
 
       if (click.button === 0) {
@@ -705,7 +832,7 @@ export function startGame(
     }
 
     let p0 = profiler.now();
-    processCommandPass(state);
+    measureIncome(matchStats, state, () => processCommandPass(state));
     profiler.recordPhase('processCommand', profiler.now() - p0);
 
     p0 = profiler.now();
@@ -746,6 +873,7 @@ export function startGame(
     }
 
     checkWinLose();
+    observeMatchTick(matchStats, state);
     profiler.sampleState(state);
 
     // Online: terminal net states
@@ -755,28 +883,41 @@ export function startGame(
     }
   }
 
-  // ── Result overlay ─────────────────────────────────────────────────────────
+  // ── Result overlay (end-of-match summary) ─────────────────────────────────
   function drawResultOverlay(): void {
-    if (gameResult === 'playing') return;
-    const w = canvas.width; const h = canvas.height;
-    ctx.fillStyle = 'rgba(0,0,0,0.65)';
-    ctx.fillRect(0, 0, w, h);
-    ctx.textAlign = 'center';
+    if (gameResult === 'playing') { endButtons = []; return; }
+    const raceName = (r: Race) => (r === 'human' ? t('race_humans') : t('race_orcs'));
+    const difficulty = options.aiDifficulty ?? 'medium';
+    const levelLabel = difficulty === 'easy' ? t('ai_easy') : difficulty === 'hard' ? t('ai_hard') : t('ai_medium');
+    const time = formatDuration(matchDurationSeconds(matchStats));
+    const mapLabel = state.mapName ?? '';
+    let input;
     if (observerMode) {
-      const winningRace = observerWinner === PLAYER_2 ? state.races[1] : state.races[0];
-      const winnerLabel = winningRace === 'human' ? t('race_humans') : t('race_orcs');
-      ctx.fillStyle = '#ffe97a';
-      ctx.font = 'bold 58px monospace';
-      ctx.fillText(`${winnerLabel} win`, w / 2, h / 2 - 24);
+      const winnerSide = observerWinner === PLAYER_2 ? 1 : 0;
+      input = {
+        title: t('end_sim_winner', { name: raceName(state.races[winnerSide]) }),
+        titleColor: 'win' as const,
+        subtitle: `${raceName(state.races[0])} vs ${raceName(state.races[1])}`,
+        meta: `${time} · ${mapLabel}`,
+        leftLabel: raceName(state.races[0]),
+        rightLabel: raceName(state.races[1]),
+        sides: [matchStats.sides[0], matchStats.sides[1]] as [typeof matchStats.sides[0], typeof matchStats.sides[1]],
+        canRematch: !!onRematch,
+      };
     } else {
-      ctx.fillStyle = gameResult === 'win' ? '#ffe97a' : '#ff5555';
-      ctx.font = 'bold 72px monospace';
-      ctx.fillText(gameResult === 'win' ? t('victory') : t('defeat'), w / 2, h / 2 - 24);
+      const won = gameResult === 'win';
+      input = {
+        title: won ? t('victory') : t('defeat'),
+        titleColor: won ? 'win' as const : 'lose' as const,
+        subtitle: won ? t('end_sub_win') : t('end_sub_lose'),
+        meta: net ? `${time} · ${mapLabel}` : t('end_meta', { time, map: mapLabel, level: levelLabel }),
+        leftLabel: t('end_col_you'),
+        rightLabel: t('end_col_enemy'),
+        sides: [matchStats.sides[myOwner], matchStats.sides[peerOwner]] as [typeof matchStats.sides[0], typeof matchStats.sides[1]],
+        canRematch: !!onRematch && !net,
+      };
     }
-    ctx.fillStyle = '#ccc';
-    ctx.font = '22px monospace';
-    ctx.fillText(t('press_r_menu'), w / 2, h / 2 + 30);
-    ctx.textAlign = 'left';
+    endButtons = drawEndScreen(ctx, canvas.width, canvas.height, input, mouse.x, mouse.y);
   }
 
   function drawDragBox(): void {
@@ -868,22 +1009,70 @@ export function startGame(
 
   function drawGroupBadges(): void {
     let gx = 4;
+    const gy = canvas.height - UI_HEIGHT - 24;
     controlGroups.forEach((ids, slot) => {
       if (ids.length === 0) return;
       const alive = ids.filter(id => state.entities.some(e => e.id === id));
       if (alive.length === 0) return;
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(gx, 28, 28, 18);
+      ctx.fillRect(gx, gy, 28, 18);
       ctx.strokeStyle = '#666';
       ctx.lineWidth = 1;
-      ctx.strokeRect(gx + 0.5, 28.5, 27, 17);
+      ctx.strokeRect(gx + 0.5, gy + 0.5, 27, 17);
       ctx.fillStyle = '#ffee88';
       ctx.font = 'bold 11px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`${slot}:${alive.length}`, gx + 14, 41);
+      ctx.fillText(`${slot}:${alive.length}`, gx + 14, gy + 13);
       ctx.textAlign = 'left';
       gx += 32;
     });
+  }
+
+  // ── Objectives / HUD buttons / pause / help ───────────────────────────────
+  function drawFirstTimeLayer(now: number): void {
+    const viewW = canvas.width;
+    const viewH = canvas.height - UI_HEIGHT;
+    const openingPending = !state.openingPlanSelected[myOwner] && state.tick <= OPENING_PLAN_LOCK_TICKS;
+    // The top resource bar is centred and ~410px wide; below ~1000px wide the
+    // side widgets drop under it instead of sitting beside it.
+    const narrow = viewW < 1000;
+    const sideY = narrow ? 56 : 8;
+
+    if (!observerMode && gameResult === 'playing' && !openingPending) {
+      const views = updateObjectives(objectiveTracker, state, myOwner, gameResult);
+      const maxW = narrow ? Math.min(300, viewW - 16 - 180) : Math.floor((viewW - 420) / 2) - 16;
+      const compact = (narrow && viewW < 700) || canvas.height < 600;
+      drawObjectivesPanel(ctx, views, 8, sideY, maxW, enemyDir, compact, now);
+    }
+
+    if (gameResult === 'playing') {
+      hudButtons = layoutHudButtons(viewW, sideY, canPause);
+      drawHudButtons(ctx, hudButtons, paused, mouse.x, mouse.y);
+      if (!observerMode) {
+        const idle = drawIdleWorkersChip(ctx, idleWorkerIds(state, myOwner).length, viewW - 8, viewH - 32, mouse.x, mouse.y, now);
+        if (idle) hudButtons.push(idle);
+      }
+    } else {
+      hudButtons = [];
+    }
+
+    if (paused && !helpOpen && gameResult === 'playing') drawPausedBanner(ctx, viewW, viewH);
+    if (helpOpen) drawHelpOverlay(ctx, viewW, canvas.height, mouse.touch);
+    if (viewW < 600 && canvas.height > viewW) drawRotateHint(ctx, viewW, canvas.height);
+  }
+
+  // Dev-only fast-forward for playtesting: window.__lw2b.speed = 8
+  let debugSpeed = 1;
+  if (import.meta.env?.DEV) {
+    (window as unknown as { __lw2b: unknown }).__lw2b = {
+      state,
+      matchStats,
+      cam,
+      issue: (cmd: NetCmd) => emit(cmd),
+      tileSize: TILE_SIZE,
+      get speed() { return debugSpeed; },
+      set speed(v: number) { debugSpeed = Math.max(1, Math.min(32, v)); },
+    };
   }
 
   // ── Main loop ──────────────────────────────────────────────────────────────
@@ -908,8 +1097,10 @@ export function startGame(
     handleInput();
 
     let renderAlpha = 1;
-    if (gameResult === 'playing') {
-      simAccum += dt;
+    const portraitBlocked = canvas.width < 600 && canvas.height > canvas.width;
+    const simFrozen = canPause && (paused || helpOpen || portraitBlocked);
+    if (gameResult === 'playing' && !simFrozen) {
+      simAccum += dt * debugSpeed;
       while (simAccum >= SIM_TICK_MS) { simTick(); simAccum -= SIM_TICK_MS; }
       renderAlpha = simAccum / SIM_TICK_MS;
     }
@@ -933,6 +1124,7 @@ export function startGame(
     uiButtons = drawUi(ctx, state, selectedIds, canvas.width, viewH, myOwner, onlineStatus, openingPlanFeedback);
     drawMinimap(ctx, state, cam, canvas.width, viewH - UI_HEIGHT, myOwner, dockLayout.minimapRect, observerMode);
     drawGroupBadges();
+    drawFirstTimeLayer(now);
     if (onlineStatus && netDebugOverlayEnabled) drawNetDebugOverlay(onlineStatus.stats);
     drawOnlineStartupOverlay();
     drawResultOverlay();
@@ -942,7 +1134,7 @@ export function startGame(
 
   // ── Cleanup on back-to-menu ────────────────────────────────────────────────
   // Re-assign `backToMenu` so the onKeyDown closure picks up the cleanup version
-  backToMenu = () => {
+  function teardown(): void {
     running = false;
     net?.destroy();
     keysInput.destroy();
@@ -950,8 +1142,16 @@ export function startGame(
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup',   onKeyUp);
     window.removeEventListener('resize',  resize);
+  }
+  backToMenu = () => {
+    teardown();
     onBackToMenu();
   };
+  function rematch(): void {
+    if (!onRematch) return;
+    teardown();
+    onRematch();
+  }
 
   requestAnimationFrame((t) => { lastTime = t; requestAnimationFrame(loop); });
 }

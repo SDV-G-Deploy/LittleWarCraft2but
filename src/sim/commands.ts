@@ -440,6 +440,17 @@ export function processCommand(state: GameState, entity: Entity): void {
       break;
     }
     case 'attack': {
+      // A unit busy hitting a structure turns on hostile units that are
+      // hitting it, instead of dying while it chips at a wall or farm.
+      if (isUnitKind(entity.kind)) {
+        const current = getEntity(state, entity.cmd.targetId);
+        if (!current || !isUnitKind(current.kind)) {
+          const attacker = acquireRecentAttackerTarget(state, entity);
+          if (attacker && isUnitKind(attacker.kind) && attacker.id !== entity.cmd.targetId) {
+            issueAttackCommand(entity, attacker.id, state.tick, state);
+          }
+        }
+      }
       processAttack(state, entity);
       break;
     }

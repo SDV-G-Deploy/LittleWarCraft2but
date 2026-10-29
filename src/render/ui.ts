@@ -304,8 +304,14 @@ export function drawUi(
 
   if (sel.length === 1) {
     const e = sel[0];
+    // Clip so long detail lines never spill out of the selection pane.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(layout.leftPane.x, layout.leftPane.y, layout.leftPane.w, layout.leftPane.h);
+    ctx.clip();
     drawPortrait(ctx, e, layout.leftPane);
     drawEntityInfo(ctx, e, state, layout.leftPane, myOwner);
+    ctx.restore();
     drawCommandPane(ctx, e, state, layout.centerPane, buttons, myOwner);
   } else {
     // Multiple — show small icons for each
@@ -435,7 +441,7 @@ function drawOpeningChoiceOverlay(
   const veryNarrow = overlayW < 400;
   const gap = compact ? 8 : 12;
   const columns = veryNarrow ? 1 : (compact ? 2 : 3);
-  const buttonH = veryNarrow ? 34 : (compact ? 38 : 42);
+  const buttonH = veryNarrow ? 40 : (compact ? 44 : 48);
   const buttonAreaW = overlayW - 32;
   const buttonW = columns === 1
     ? buttonAreaW
@@ -550,7 +556,7 @@ function drawPortrait(
   pane: Rect,
 ): void {
   const px = pane.x + 8; const py = pane.y + 8;
-  const pw = PORTRAIT_W - 16; const ph = PANEL_H - 16;
+  const pw = PORTRAIT_W - 16; const ph = pane.h - 16;
   const color = isNeutralOwner(e.owner) ? '#5a5248' : ['#4f6e96', '#965b52'][e.owner];
   ctx.fillStyle = 'rgba(20,16,12,0.7)';
   ctx.fillRect(px - 2, py - 2, pw + 4, ph + 4);
@@ -769,8 +775,8 @@ function drawEntityInfo(
   const x = pane.x + PORTRAIT_W + 12;
   const baseY = pane.y + 8;
   const infoW = pane.w - PORTRAIT_W - 20;
-  const idRect: Rect = { x: x - 4, y: baseY, w: infoW, h: 32 };
-  const coreRect: Rect = { x: x - 4, y: idRect.y + idRect.h + 4, w: infoW, h: 34 };
+  const idRect: Rect = { x: x - 4, y: baseY, w: infoW, h: 36 };
+  const coreRect: Rect = { x: x - 4, y: idRect.y + idRect.h + 4, w: infoW, h: 38 };
   const detailRect: Rect = { x: x - 4, y: coreRect.y + coreRect.h + 4, w: infoW, h: pane.h - (coreRect.y + coreRect.h + 4 - pane.y) - 8 };
 
   // ── Race-aware display name ─────────────────────────────────────────────────
@@ -795,8 +801,8 @@ function drawEntityInfo(
   drawSectionCard(ctx, detailRect.x, detailRect.y, detailRect.w, detailRect.h, 'DETAILS', 'rgba(62,48,35,0.54)');
 
   ctx.fillStyle = UI_THEME.text.primary;
-  ctx.font = 'bold 15px monospace';
-  ctx.fillText(displayName.toUpperCase(), x, idRect.y + 19);
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText(displayName.toUpperCase(), x, idRect.y + 29);
 
   type BadgeInfo = { priority: number; text: string; bg: string; fg?: string };
   const badgeCandidates: BadgeInfo[] = [];
@@ -808,12 +814,12 @@ function drawEntityInfo(
   badgeCandidates.sort((a, b) => a.priority - b.priority);
   let badgeX = x + Math.min(150, infoW - 114);
   badgeCandidates.slice(0, 2).forEach((badge) => {
-    badgeX += drawBadge(ctx, badgeX, idRect.y + 8, badge.text, badge.bg, badge.fg) + 6;
+    badgeX += drawBadge(ctx, badgeX, idRect.y + 16, badge.text, badge.bg, badge.fg) + 6;
   });
 
   ctx.fillStyle = UI_THEME.text.secondary;
   ctx.font = 'bold 12px monospace';
-  ctx.fillText(`HP: ${e.hp} / ${getResolvedHpMax(e)}`, x, coreRect.y + 18);
+  ctx.fillText(`HP: ${e.hp} / ${getResolvedHpMax(e)}`, x, coreRect.y + 23);
 
   // ── Combat stats (mobile units only) ───────────────────────────────────────
   if (stats && stats.speed > 0) {
@@ -830,7 +836,7 @@ function drawEntityInfo(
     ctx.font = '11px monospace';
     ctx.fillText(
       `ATK:${shownAtk}  DEF:${shownDef}  RNG:${rngStr}  SPD:${atkSpd}`,
-      x, coreRect.y + 30,
+      x, coreRect.y + 34,
     );
 
     const roleLabel = rc
@@ -1320,11 +1326,48 @@ function drawButton(
   ctx.fillStyle = enabled
     ? (danger ? UI_THEME.button.dangerText : UI_THEME.button.enabledText)
     : UI_THEME.button.disabledText;
-  ctx.font = 'bold 11px monospace';
   ctx.textAlign = 'center';
-  const lines = label.split('\n');
-  const lineH = 13;
-  const startY = y + h / 2 - (lines.length - 1) * lineH / 2;
+  const { lines, size } = fitButtonLabel(ctx, label, w - 8, h - 4);
+  const lineH = size + 2;
+  const startY = y + h / 2 - (lines.length - 1) * lineH / 2 + Math.round(size * 0.35);
   lines.forEach((line, i) => ctx.fillText(line, x + w / 2, startY + i * lineH));
   ctx.textAlign = 'left';
+}
+
+/**
+ * Shrink a (possibly multi-line) button label until it fits; if it still
+ * overflows at the minimum size, word-wrap it. Leaves ctx.font set.
+ */
+function fitButtonLabel(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  maxW: number,
+  maxH: number,
+): { lines: string[]; size: number } {
+  let lines = label.split('\n');
+  let size = 11;
+  const widest = () => Math.max(...lines.map(l => ctx.measureText(l).width));
+  ctx.font = `bold ${size}px monospace`;
+  while (size > 9 && widest() > maxW) {
+    size--;
+    ctx.font = `bold ${size}px monospace`;
+  }
+  if (widest() > maxW) {
+    const wrapped: string[] = [];
+    for (const line of lines) {
+      let cur = '';
+      for (const word of line.split(' ')) {
+        const next = cur ? `${cur} ${word}` : word;
+        if (cur && ctx.measureText(next).width > maxW) { wrapped.push(cur); cur = word; }
+        else cur = next;
+      }
+      if (cur) wrapped.push(cur);
+    }
+    lines = wrapped;
+    while (size > 8 && lines.length * (size + 2) > maxH) {
+      size--;
+      ctx.font = `bold ${size}px monospace`;
+    }
+  }
+  return { lines, size };
 }
