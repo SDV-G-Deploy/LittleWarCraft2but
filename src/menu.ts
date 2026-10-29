@@ -530,13 +530,19 @@ export function runMenu(
     ctx.font = '11px monospace';
     ctx.fillText(t('menu_quick_start_hint'), cx, cy + 10);
 
-    // Small link to the Kingdom OS side experiment that also ships in this build.
-    ctx.font = '12px monospace';
+    // Link to Kingdom OS, the idle side game that also ships in this build (kingdom.html).
+    ctx.font = 'bold 14px monospace';
     const linkLabel = t('menu_kingdom_link');
-    const linkW = ctx.measureText(linkLabel).width + 16;
-    const link: MenuButton = { x: cx - linkW / 2, y: canvas.height - 58, w: linkW, h: 22, label: linkLabel, action: 'kingdom_os' };
-    ctx.fillStyle = isHovered(link) ? '#88bbff' : '#5f6b84';
-    ctx.fillText(linkLabel, cx, canvas.height - 42);
+    const linkW = ctx.measureText(linkLabel).width + 24;
+    const link: MenuButton = { x: cx - linkW / 2, y: canvas.height - 66, w: linkW, h: 28, label: linkLabel, action: 'kingdom_os' };
+    const linkHot = isHovered(link);
+    ctx.fillStyle = linkHot ? 'rgba(24, 199, 240, 0.22)' : 'rgba(24, 199, 240, 0.10)';
+    ctx.fillRect(link.x, link.y, link.w, link.h);
+    ctx.strokeStyle = linkHot ? '#7fe3ff' : '#3a88a8';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(link.x + 0.5, link.y + 0.5, link.w - 1, link.h - 1);
+    ctx.fillStyle = linkHot ? '#ffffff' : '#9fdcff';
+    ctx.fillText(linkLabel, cx, link.y + 19);
     btns.push(link);
 
     ctx.fillStyle = '#5a6070';

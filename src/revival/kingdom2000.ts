@@ -1,1865 +1,1147 @@
-type Screen = 'menu' | 'mode' | 'playing' | 'commission' | 'paused' | 'ended';
-type EdictId = 'harvest' | 'muster' | 'crystal' | 'festival' | 'ward' | 'scout';
-type EventKind = 'blessing' | 'raid' | 'market' | 'storm' | 'festival';
-type PlanId = 'growth' | 'war' | 'ritual';
-type CommissionId = 'farm' | 'skyroad' | 'crystal';
+/**
+ * Kingdom OS 2000 — an idle kingdom builder dressed as a retro desktop OS.
+ *
+ * This file is the UI shell only: DOM, input, animation, sound, storage.
+ * All game rules live in ./kingdom-economy.ts (pure, unit-tested).
+ */
+import {
+  ACHIEVEMENTS,
+  BUILDINGS,
+  ERA_GOAL,
+  POLICIES,
+  type BuildingId,
+  type KingdomState,
+  type PolicyId,
+  applyOffline,
+  availableUpgrades,
+  baseGoldPerSecond,
+  boostActive,
+  buildingUnitGps,
+  buildingVisible,
+  buyBuilding,
+  buyUpgrade,
+  canPrestige,
+  checkAchievements,
+  choosePolicy,
+  click,
+  clickValue,
+  createState,
+  currentGoal,
+  deserialize,
+  eraName,
+  formatDuration,
+  formatNumber,
+  globalMultiplier,
+  goldPerSecond,
+  mailInterval,
+  nextBuildingCost,
+  offlineRate,
+  openMail,
+  policyUnlocked,
+  prestige,
+  prestigeGain,
+  serialize,
+  tick,
+  UPGRADES,
+} from './kingdom-economy';
+import { createSoundBoard, type Sfx } from './kingdom-sound';
 
-type Resources = {
-  gold: number;
-  grain: number;
-  crystal: number;
-  morale: number;
-};
-
-type Cost = Partial<Resources> & {
-  focus?: number;
-};
-
-type Node = {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
-  owner: 'royal' | 'neutral' | 'shade';
-  kind: 'castle' | 'farm' | 'mine' | 'tower' | 'portal' | 'market';
-  pulse: number;
-};
-
-type Unit = {
-  id: number;
-  side: 'royal' | 'shade';
-  lane: number;
-  progress: number;
-  speed: number;
-  hp: number;
-  power: number;
-};
-
-type FloatingText = {
-  text: string;
-  x: number;
-  y: number;
-  age: number;
-  tone: 'good' | 'bad' | 'neutral';
-};
-
-type Spark = {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  tone: 'aqua' | 'gold' | 'pink';
-};
-
-type Ceremony = {
-  planId: PlanId;
-  nodeId: string;
-  text: string;
-  tone: Spark['tone'];
-  age: number;
-  duration: number;
-};
-
-type Edict = {
-  id: EdictId;
-  title: string;
-  hotkey: string;
-  body: string;
-  cost: Cost;
-  cooldown: number;
-  apply: () => void;
-};
-
-type Plan = {
-  id: PlanId;
-  title: string;
-  shortTitle: string;
-  objective: string;
-  hint: string;
-  targetNodeId: string;
-  routeEdges: number[];
-  tone: Spark['tone'];
-  ceremony: string;
-  isDone: () => boolean;
-  progress: () => number;
-  reward: () => void;
-};
-
-type Commission = {
-  id: CommissionId;
-  title: string;
-  shortTitle: string;
-  planId: PlanId;
-  benefit: string;
-  tradeoff: string;
-  apply: () => void;
-};
-
-type CouncilOrder = {
-  severity: 'stable' | 'warning' | 'critical';
-  title: string;
-  body: string;
-};
-
-type GameState = {
-  screen: Screen;
-  elapsed: number;
-  day: number;
-  resources: Resources;
-  focus: number;
-  maxFocus: number;
-  crowns: number;
-  army: number;
-  workers: number;
-  wards: number;
-  insight: number;
-  battleWins: number;
-  glory: number;
-  threat: number;
-  enemyPower: number;
-  speed: 1 | 2 | 4;
-  pausedBeforeOverlay: Screen;
-  selectedMode: 'afk' | 'active';
-  activePlan: PlanId;
-  completedPlans: PlanId[];
-  commissionOffered: boolean;
-  activeCommission: CommissionId | null;
-  hasCastEdict: boolean;
-  finalProtocolStarted: boolean;
-  finalProtocolAge: number;
-  ending: 'victory' | 'defeat' | null;
-  lastEventAt: number;
-  lastBattleAt: number;
-  lastAutosaveAt: number;
-  log: string[];
-};
-
+const SAVE_KEY = 'kingdom-os-2000:save:v2';
+const UI_KEY = 'kingdom-os-2000:ui:v2';
+const AUTOSAVE_SECONDS = 10;
+const RTS_URL = './index.html';
 const BG_URL = `${import.meta.env.BASE_URL}assets/revival/kingdom2000-bg.png`;
 
-const EDGES: Array<[number, number]> = [
-  [0, 1],
-  [1, 2],
-  [1, 4],
-  [2, 3],
-  [4, 5],
-  [5, 3],
-];
+type Tab = 'build' | 'upgrades' | 'trophies' | 'os';
 
-const NODE_DATA: Node[] = [
-  { id: 'castle', label: 'Glass Keep', x: 0.68, y: 0.31, owner: 'royal', kind: 'castle', pulse: 0 },
-  { id: 'mill', label: 'Sunmill', x: 0.36, y: 0.56, owner: 'royal', kind: 'farm', pulse: 0 },
-  { id: 'mine', label: 'Blue Mine', x: 0.45, y: 0.76, owner: 'royal', kind: 'mine', pulse: 0 },
-  { id: 'portal', label: 'Violet Gate', x: 0.78, y: 0.60, owner: 'shade', kind: 'portal', pulse: 0 },
-  { id: 'market', label: 'Bubble Market', x: 0.55, y: 0.47, owner: 'neutral', kind: 'market', pulse: 0 },
-  { id: 'tower', label: 'Cloud Tower', x: 0.70, y: 0.70, owner: 'neutral', kind: 'tower', pulse: 0 },
-];
-
-const RESOURCE_LABELS: Record<keyof Resources, string> = {
-  gold: 'Gold',
-  grain: 'Grain',
-  crystal: 'Crystal',
-  morale: 'Morale',
-};
-
-const COST_LABELS: Record<keyof Resources | 'focus', string> = {
-  ...RESOURCE_LABELS,
-  focus: 'Focus',
-};
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+interface UiMeta {
+  /** Onboarding step; see TUTORIAL. -1 = finished/dismissed. */
+  tutorial: number;
+  muted: boolean;
+  tab: Tab;
+  policyPrompted: boolean;
+  installPrompted: boolean;
 }
 
-function fmt(value: number): string {
-  return `${Math.floor(value)}`;
-}
+// ---------------------------------------------------------------------------
+// Storage helpers (every access guarded: private mode / blocked storage)
+// ---------------------------------------------------------------------------
 
-function titleCase(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function hasEnough(state: GameState, cost: Cost): boolean {
-  if (state.focus < (cost.focus ?? 0)) return false;
-  return (Object.keys(RESOURCE_LABELS) as Array<keyof Resources>).every(
-    (key) => state.resources[key] >= (cost[key] ?? 0),
-  );
-}
-
-function spend(state: GameState, cost: Cost): void {
-  for (const key of Object.keys(RESOURCE_LABELS) as Array<keyof Resources>) {
-    state.resources[key] -= cost[key] ?? 0;
+function storageGet(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
   }
-  state.focus -= cost.focus ?? 0;
 }
 
-function resourceText(cost: Cost): string {
-  const order: Array<keyof Resources | 'focus'> = ['focus', 'gold', 'grain', 'crystal', 'morale'];
-  const entries = order
-    .map((key) => [key, cost[key] ?? 0] as const)
-    .filter(([, value]) => value > 0);
-  if (!entries.length) return 'Free';
-  return entries.map(([key, value]) => `${value} ${COST_LABELS[key]}`).join(' / ');
+function storageSet(key: string, value: string): boolean {
+  try {
+    window.localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
 }
+
+function storageRemove(key: string): void {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadUi(): UiMeta {
+  const fallback: UiMeta = { tutorial: 0, muted: false, tab: 'build', policyPrompted: false, installPrompted: false };
+  try {
+    const raw = storageGet(UI_KEY);
+    if (!raw) return fallback;
+    const data = JSON.parse(raw) as Partial<UiMeta>;
+    return {
+      tutorial: typeof data.tutorial === 'number' ? data.tutorial : 0,
+      muted: data.muted === true,
+      tab: (['build', 'upgrades', 'trophies', 'os'] as Tab[]).includes(data.tab as Tab) ? (data.tab as Tab) : 'build',
+      policyPrompted: data.policyPrompted === true,
+      installPrompted: data.installPrompted === true,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Icons (inline SVG, glassy toy style)
+// ---------------------------------------------------------------------------
+
+const ICONS: Record<BuildingId | 'crown', string> = {
+  crown:
+    '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 46 L12 18 L24 32 L32 12 L40 32 L52 18 L56 46 Z" fill="#ffd84f" stroke="#a86b00" stroke-width="3" stroke-linejoin="round"/><rect x="8" y="46" width="48" height="8" rx="3" fill="#ffb800" stroke="#a86b00" stroke-width="3"/><circle cx="32" cy="36" r="4" fill="#ff4bd8"/><circle cx="20" cy="40" r="3" fill="#3edcff"/><circle cx="44" cy="40" r="3" fill="#3edcff"/></svg>',
+  peasant:
+    '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="15" r="7" fill="#ffd9b0" stroke="#7a4b1f" stroke-width="2"/><path d="M9 13 Q20 2 31 13 Z" fill="#e2a640" stroke="#7a4b1f" stroke-width="2"/><path d="M10 37 Q10 24 20 24 Q30 24 30 37 Z" fill="#3fa34d" stroke="#1d5a26" stroke-width="2"/></svg>',
+  farm:
+    '<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="14" y="18" width="12" height="19" fill="#f4e3c1" stroke="#7a4b1f" stroke-width="2"/><path d="M12 19 L20 11 L28 19 Z" fill="#d9534f" stroke="#7a2b1f" stroke-width="2"/><g stroke="#2f6fd6" stroke-width="3" stroke-linecap="round"><line x1="20" y1="13" x2="20" y2="2"/><line x1="20" y1="13" x2="31" y2="13"/><line x1="20" y1="13" x2="9" y2="13"/><line x1="20" y1="13" x2="20" y2="24"/></g><circle cx="20" cy="13" r="2.5" fill="#fff"/></svg>',
+  market:
+    '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 16 L20 5 L36 16 Z" fill="#ff5df1" stroke="#8a1a7e" stroke-width="2"/><path d="M4 16 h32 v4 a4 4 0 0 1 -8 0 a4 4 0 0 1 -8 0 a4 4 0 0 1 -8 0 a4 4 0 0 1 -8 0 Z" fill="#fff" stroke="#8a1a7e" stroke-width="2"/><rect x="8" y="22" width="24" height="14" fill="#ffe66d" stroke="#8a6a00" stroke-width="2"/><circle cx="20" cy="29" r="3" fill="#ffb800"/></svg>',
+  mine:
+    '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 37 Q20 6 36 37 Z" fill="#7a6a5a" stroke="#3b2f25" stroke-width="2"/><path d="M14 30 L20 14 L26 30 L20 35 Z" fill="#3ff7ff" stroke="#0b6f8f" stroke-width="2"/><path d="M20 14 L20 35" stroke="#bffcff" stroke-width="1.5"/></svg>',
+  tower:
+    '<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="13" y="14" width="14" height="23" fill="#c9d6ff" stroke="#3a3f8f" stroke-width="2"/><path d="M10 15 L20 2 L30 15 Z" fill="#6b4bff" stroke="#2a1a8f" stroke-width="2"/><rect x="17" y="20" width="6" height="7" rx="3" fill="#ffe85c"/><circle cx="20" cy="2.5" r="2" fill="#ffe85c"/></svg>',
+  portal:
+    '<svg viewBox="0 0 40 40" aria-hidden="true"><ellipse cx="20" cy="20" rx="13" ry="17" fill="#8d22ff" stroke="#3f0b8f" stroke-width="2"/><ellipse cx="20" cy="20" rx="8" ry="12" fill="#3ff7ff" opacity=".85"/><ellipse cx="20" cy="20" rx="3" ry="6" fill="#fff"/></svg>',
+};
+
+const UPGRADE_ICON =
+  '<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="5" y="8" width="30" height="24" rx="3" fill="#e9f6ff" stroke="#235a9f" stroke-width="2"/><rect x="5" y="8" width="30" height="6" fill="#2f6fd6"/><path d="M13 27 L20 18 L27 27 Z" fill="#3fbf5a" stroke="#1d5a26" stroke-width="2"/></svg>';
+
+// ---------------------------------------------------------------------------
+// Onboarding script
+// ---------------------------------------------------------------------------
+
+interface TutorialStep {
+  text: string;
+  target?: string;
+  button?: string;
+  /** Step is finished when this returns true (checked every frame). */
+  done?: (s: KingdomState) => boolean;
+}
+
+const TUTORIAL: TutorialStep[] = [
+  {
+    text: "Hi, I'm <b>Crownie</b>, your Royal Assistant! Your kingdom runs on gold. <b>Click the Royal Coin</b> to mint some.",
+    target: '[data-coin]',
+    done: (s) => s.gold >= 10 || s.buildings.peasant > 0,
+  },
+  {
+    text: 'Great! Now <b>hire a Peasant</b>. Peasants mint gold <b>every second</b> — even while this tab is closed.',
+    target: '[data-building="peasant"]',
+    done: (s) => s.buildings.peasant > 0,
+  },
+  {
+    text: 'See <b>gold/sec</b> go up? That is the whole game: buy things that make gold, to afford bigger things. The <b>Goal bar</b> at the top always says what to do next.',
+    target: '[data-goal]',
+    button: 'Got it',
+    done: (s) => s.upgrades.length > 0 || s.buildings.farm > 0,
+  },
+  {
+    text: 'Pro tip: <b>Upgrades</b> double what things make. And if a <b>Royal Mail</b> window pops up, open it for free gold. The big goal: earn <b>1M gold</b> to install the next Kingdom OS.',
+    button: 'Let me play',
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Shell
+// ---------------------------------------------------------------------------
 
 export function runKingdom2000(root: HTMLElement): () => void {
+  const ui = loadUi();
+  const sound = createSoundBoard(ui.muted);
+
+  const loaded = deserialize(storageGet(SAVE_KEY));
+  let state: KingdomState = loaded ? loaded.state : createState();
+  const hadSave = !!loaded && (loaded.state.lifetimeEarned > 0 || loaded.state.clicks > 0);
+  let offlineReport: { earned: number; seconds: number } | null = null;
+  if (loaded && loaded.savedAt > 0) {
+    const away = (Date.now() - loaded.savedAt) / 1000;
+    const r = applyOffline(state, away);
+    state = r.state;
+    if (r.earned > 0 && r.seconds >= 30) offlineReport = { earned: r.earned, seconds: r.seconds };
+  }
+  // Trophies earned offline are granted silently.
+  state = checkAchievements(state).state;
+
   root.innerHTML = `
-    <main class="k2k-shell" aria-label="Kingdom OS 2000 playable proof">
-      <canvas class="k2k-canvas" aria-hidden="true"></canvas>
-      <section class="k2k-topbar">
-        <button class="k2k-logo" data-action="menu" type="button">
-          <span class="k2k-logo-mark"></span>
-          <span>
-            <strong>Kingdom OS 2000</strong>
-            <small>Playable proof build</small>
-          </span>
-        </button>
-        <div class="k2k-system-buttons" aria-label="System controls">
-          <button data-action="speed" type="button" title="Simulation speed">1x</button>
-          <button data-action="pause" type="button" title="Pause">Pause</button>
-          <button data-action="restart" type="button" title="Restart">Restart</button>
+    <div class="kos" data-screen="boot">
+      <div class="kos-wallpaper" style="background-image:url('${BG_URL}')" aria-hidden="true"></div>
+
+      <section class="kos-boot" aria-labelledby="kos-boot-title">
+        <div class="kos-boot-card">
+          <div class="kos-boot-logo">${ICONS.crown}</div>
+          <p class="kos-kicker">Idle kingdom builder · LittleWarCraft2but side game</p>
+          <h1 id="kos-boot-title">Kingdom OS <span>2000</span></h1>
+          <p class="kos-pitch">Your kingdom is an operating system. <b>Click</b> to mint gold, <b>build</b> things that mint it for you, then <b>upgrade the OS</b> for permanent boosts.</p>
+          <ol class="kos-steps">
+            <li><span>1</span><b>Click</b> the Royal Coin</li>
+            <li><span>2</span><b>Build</b> peasants, farms, mines…</li>
+            <li><span>3</span><b>Install</b> the next Kingdom OS</li>
+          </ol>
+          <div class="kos-boot-actions">
+            <button type="button" class="kos-btn kos-btn-primary" data-action="boot">${hadSave ? 'Continue my kingdom' : 'Start my kingdom'}</button>
+            <a class="kos-btn kos-btn-ghost" href="${RTS_URL}">← Back to the RTS</a>
+          </div>
+          <p class="kos-boot-meta" data-boot-meta></p>
         </div>
       </section>
-      <section class="k2k-resource-strip" aria-label="Resources"></section>
-      <aside class="k2k-command-panel" aria-label="Edicts"></aside>
-      <aside class="k2k-advisor-panel" aria-label="Advisor log"></aside>
-      <section class="k2k-overlay" aria-live="polite"></section>
-    </main>
+
+      <div class="kos-desktop" aria-hidden="true">
+        <header class="kos-goalbar" data-goal role="status" aria-live="polite">
+          <span class="kos-goal-label">Goal</span>
+          <span class="kos-goal-text" data-goal-text></span>
+          <span class="kos-goal-bar"><i data-goal-fill></i></span>
+        </header>
+
+        <section class="kos-win kos-win-treasury" aria-label="Treasury">
+          <div class="kos-titlebar"><span class="kos-titlebar-icon">${ICONS.crown}</span><span>Treasury.exe</span><span class="kos-titlebar-btns" aria-hidden="true"><i>_</i><i>□</i><i>×</i></span></div>
+          <div class="kos-treasury-body">
+            <div class="kos-wealth">
+              <div class="kos-gold"><strong data-gold>0</strong><span>gold</span></div>
+              <div class="kos-gps"><b data-gps>0</b> gold/sec <em data-boost hidden>×5 FRENZY</em></div>
+              <div class="kos-era-chip" data-era-chip></div>
+            </div>
+            <button type="button" class="kos-coin" data-coin aria-label="Royal Coin: click to mint gold">
+              <span class="kos-coin-face">${ICONS.crown}</span>
+              <span class="kos-coin-value" data-click-value>+1</span>
+            </button>
+            <div class="kos-realm" data-realm aria-label="Your realm"></div>
+            <dl class="kos-stats" aria-label="Kingdom stats">
+              <div><dt>Per click</dt><dd data-stat="click"></dd></div>
+              <div><dt>Buildings</dt><dd data-stat="buildings"></dd></div>
+              <div><dt>Bonus multiplier</dt><dd data-stat="mult"></dd></div>
+              <div><dt>Time this era</dt><dd data-stat="time"></dd></div>
+              <div><dt>Gold earned (all eras)</dt><dd data-stat="lifetime"></dd></div>
+            </dl>
+          </div>
+        </section>
+
+        <section class="kos-win kos-win-shop" aria-label="Kingdom control panel">
+          <div class="kos-titlebar"><span class="kos-titlebar-icon">${UPGRADE_ICON}</span><span>Control Panel</span><span class="kos-titlebar-btns" aria-hidden="true"><i>_</i><i>□</i><i>×</i></span></div>
+          <nav class="kos-tabs" role="tablist" aria-label="Panels">
+            <button type="button" role="tab" data-tab="build">Build</button>
+            <button type="button" role="tab" data-tab="upgrades">Upgrades <span class="kos-badge" data-badge="upgrades" hidden></span></button>
+            <button type="button" role="tab" data-tab="trophies">Trophies <span class="kos-count" data-badge="trophies"></span></button>
+            <button type="button" role="tab" data-tab="os">Next OS <span class="kos-badge" data-badge="os" hidden></span></button>
+          </nav>
+          <div class="kos-panel" data-panel="build" role="tabpanel"></div>
+          <div class="kos-panel" data-panel="upgrades" role="tabpanel"></div>
+          <div class="kos-panel" data-panel="trophies" role="tabpanel"></div>
+          <div class="kos-panel" data-panel="os" role="tabpanel"></div>
+        </section>
+      </div>
+
+      <div class="kos-assistant" data-assistant hidden role="dialog" aria-label="Royal Assistant">
+        <div class="kos-crownie" aria-hidden="true">${ICONS.crown}<i></i><i></i></div>
+        <div class="kos-bubble">
+          <p data-assistant-text></p>
+          <div class="kos-bubble-actions">
+            <button type="button" class="kos-btn kos-btn-small kos-btn-primary" data-action="assistant-next" hidden></button>
+            <button type="button" class="kos-btn kos-btn-small kos-btn-ghost" data-action="assistant-skip">Skip tips</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="kos-mail-layer" data-mail-layer></div>
+      <div class="kos-fx" data-fx aria-hidden="true"></div>
+      <div class="kos-toasts" data-toasts aria-live="polite"></div>
+
+      <div class="kos-startmenu" data-startmenu hidden role="menu" aria-label="Start menu">
+        <div class="kos-startmenu-side" aria-hidden="true">Kingdom<b>OS</b></div>
+        <div class="kos-startmenu-items">
+          <button type="button" role="menuitem" data-action="help">❓ How to play</button>
+          <button type="button" role="menuitem" data-action="save">💾 Save now</button>
+          <button type="button" role="menuitem" data-action="mute-menu">🔊 Sound on/off</button>
+          <a role="menuitem" href="${RTS_URL}">⚔️ Back to the RTS</a>
+          <hr />
+          <button type="button" role="menuitem" data-action="reset" class="is-danger">⏻ Reset kingdom…</button>
+        </div>
+      </div>
+
+      <footer class="kos-taskbar" aria-label="Taskbar">
+        <button type="button" class="kos-start" data-action="start" aria-haspopup="menu" aria-expanded="false"><span class="kos-start-icon">${ICONS.crown}</span>Start</button>
+        <a class="kos-task kos-task-rts" href="${RTS_URL}" title="Back to the LittleWarCraft2but RTS">⚔️ <span>RTS</span></a>
+        <span class="kos-task kos-task-era" data-task-era></span>
+        <span class="kos-tray">
+          <span class="kos-saved" data-saved aria-live="off">saved</span>
+          <button type="button" class="kos-tray-btn" data-action="mute" aria-pressed="false" aria-label="Mute sound"></button>
+          <span class="kos-clock" data-clock></span>
+        </span>
+      </footer>
+
+      <div class="kos-modal-layer" data-modal hidden>
+        <div class="kos-win kos-dialog" role="dialog" aria-modal="true" aria-labelledby="kos-dialog-title">
+          <div class="kos-titlebar"><span class="kos-titlebar-icon">${ICONS.crown}</span><span id="kos-dialog-title" data-dialog-title></span><button type="button" class="kos-titlebar-close" data-action="close-modal" aria-label="Close">×</button></div>
+          <div class="kos-dialog-body" data-dialog-body></div>
+        </div>
+      </div>
+    </div>
   `;
 
-  function mustGet<T extends Element>(selector: string): T {
-    const found = root.querySelector<T>(selector);
-    if (!found) throw new Error(`Kingdom OS 2000 shell missing ${selector}`);
-    return found;
-  }
-
-  const shell = mustGet<HTMLElement>('.k2k-shell');
-  const canvas = mustGet<HTMLCanvasElement>('.k2k-canvas');
-  const resourceStrip = mustGet<HTMLElement>('.k2k-resource-strip');
-  const commandPanel = mustGet<HTMLElement>('.k2k-command-panel');
-  const advisorPanel = mustGet<HTMLElement>('.k2k-advisor-panel');
-  const overlay = mustGet<HTMLElement>('.k2k-overlay');
-  const speedButton = mustGet<HTMLButtonElement>('[data-action="speed"]');
-  const pauseButton = mustGet<HTMLButtonElement>('[data-action="pause"]');
-
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('Canvas 2D context unavailable');
-  const ctx: CanvasRenderingContext2D = context;
-
-  const background = new Image();
-  background.src = BG_URL;
-
-  let raf = 0;
-  let lastFrame = performance.now();
-  let unitId = 1;
-  let debug = false;
-
-  const nodes = NODE_DATA.map((node) => ({ ...node }));
-  const units: Unit[] = [];
-  const floaters: FloatingText[] = [];
-  const sparks: Spark[] = [];
-  const cooldowns = new Map<EdictId, number>();
-  let ceremony: Ceremony | null = null;
-
-  const state: GameState = {
-    screen: 'menu',
-    elapsed: 0,
-    day: 1,
-    resources: { gold: 120, grain: 90, crystal: 18, morale: 72 },
-    focus: 76,
-    maxFocus: 100,
-    crowns: 0,
-    army: 8,
-    workers: 10,
-    wards: 1,
-    insight: 0,
-    battleWins: 0,
-    glory: 8,
-    threat: 18,
-    enemyPower: 18,
-    speed: 1,
-    pausedBeforeOverlay: 'playing',
-    selectedMode: 'afk',
-    activePlan: 'growth',
-    completedPlans: [],
-    commissionOffered: false,
-    activeCommission: null,
-    hasCastEdict: false,
-    finalProtocolStarted: false,
-    finalProtocolAge: 0,
-    ending: null,
-    lastEventAt: 0,
-    lastBattleAt: 0,
-    lastAutosaveAt: 0,
-    log: [
-      'Royal desktop loaded. The kingdom is waiting for a first edict.',
-      'Goal: complete 3 royal programs before Shade Threat reaches 100.',
-    ],
+  const $ = <T extends Element = HTMLElement>(sel: string): T => {
+    const el = root.querySelector<T>(sel);
+    if (!el) throw new Error(`Kingdom OS: missing ${sel}`);
+    return el;
   };
 
-  function resetGame(mode: 'afk' | 'active' = state.selectedMode): void {
-    state.screen = 'playing';
-    state.elapsed = 0;
-    state.day = 1;
-    state.resources = { gold: 120, grain: 90, crystal: 18, morale: 72 };
-    state.focus = mode === 'active' ? 82 : 74;
-    state.maxFocus = 100;
-    state.crowns = 0;
-    state.army = mode === 'active' ? 10 : 8;
-    state.workers = mode === 'active' ? 11 : 10;
-    state.wards = 1;
-    state.insight = 0;
-    state.battleWins = 0;
-    state.glory = 8;
-    state.threat = 18;
-    state.enemyPower = 18;
-    state.speed = 1;
-    state.selectedMode = mode;
-    state.activePlan = 'growth';
-    state.completedPlans = [];
-    state.commissionOffered = false;
-    state.activeCommission = null;
-    state.hasCastEdict = false;
-    state.finalProtocolStarted = false;
-    state.finalProtocolAge = 0;
-    state.ending = null;
-    state.lastEventAt = 0;
-    state.lastBattleAt = 0;
-    state.lastAutosaveAt = 0;
-    state.log = [
-      mode === 'afk'
-        ? 'AFK Sovereign: it is slower, but not self-winning. Check the current program and spend Focus.'
-        : 'Active Steward: faster incidents, sharper reward, but Focus blocks button spam.',
-      'First program: Grow the realm. Harvest Boom is the clean opening.',
-    ];
-    for (const node of nodes) {
-      const base = NODE_DATA.find((item) => item.id === node.id);
-      if (base) {
-        node.owner = base.owner;
-        node.pulse = 0;
-      }
+  const shell = $('.kos');
+  const desktop = $('.kos-desktop');
+  const goldEl = $('[data-gold]');
+  const gpsEl = $('[data-gps]');
+  const boostEl = $('[data-boost]');
+  const eraChip = $('[data-era-chip]');
+  const coin = $<HTMLButtonElement>('[data-coin]');
+  const clickValueEl = $('[data-click-value]');
+  const realm = $('[data-realm]');
+  const goalText = $('[data-goal-text]');
+  const goalFill = $('[data-goal-fill]');
+  const goalBar = $('[data-goal]');
+  const panels: Record<Tab, HTMLElement> = {
+    build: $('[data-panel="build"]'),
+    upgrades: $('[data-panel="upgrades"]'),
+    trophies: $('[data-panel="trophies"]'),
+    os: $('[data-panel="os"]'),
+  };
+  const badgeUpgrades = $('[data-badge="upgrades"]');
+  const badgeTrophies = $('[data-badge="trophies"]');
+  const badgeOs = $('[data-badge="os"]');
+  const assistant = $('[data-assistant]');
+  const assistantText = $('[data-assistant-text]');
+  const assistantNext = $<HTMLButtonElement>('[data-action="assistant-next"]');
+  const mailLayer = $('[data-mail-layer]');
+  const fx = $('[data-fx]');
+  const toasts = $('[data-toasts]');
+  const startMenu = $('[data-startmenu]');
+  const startButton = $<HTMLButtonElement>('[data-action="start"]');
+  const muteButton = $<HTMLButtonElement>('[data-action="mute"]');
+  const savedEl = $('[data-saved]');
+  const clockEl = $('[data-clock]');
+  const taskEra = $('[data-task-era]');
+  const modal = $('[data-modal]');
+  const dialogTitle = $('[data-dialog-title]');
+  const dialogBody = $('[data-dialog-body]');
+  const bootMeta = $('[data-boot-meta]');
+
+  let raf = 0;
+  let last = performance.now();
+  let timeScale = 1;
+  let sinceSave = 0;
+  let sinceHud = 1;
+  let booted = false;
+  let mailTimer = 25; // first mail after ~25s of an era with income
+  let mailOpen = false;
+  let lastModalFocus: HTMLElement | null = null;
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+
+  // Structure keys: panels are rebuilt only when what they list changes.
+  const keys: Record<Tab, string> = { build: '', upgrades: '', trophies: '', os: '' };
+  const seenBuildings = new Set<BuildingId>(BUILDINGS.filter((b) => buildingVisible(state, b.id)).map((b) => b.id));
+  const seenUpgrades = new Set<string>(availableUpgrades(state).map((u) => u.id));
+  let realmKey = '';
+
+  if (loaded) bootMeta.textContent = `${eraName(state.era)} · ${formatNumber(state.gold)} gold · ${formatNumber(baseGoldPerSecond(state))}/sec`;
+
+  // ------------------------------------------------------------------ save
+
+  function save(manual = false): void {
+    const ok = storageSet(SAVE_KEY, serialize(state, Date.now()));
+    sinceSave = 0;
+    if (ok) {
+      savedEl.classList.remove('is-flash');
+      void savedEl.offsetWidth;
+      savedEl.classList.add('is-flash');
+    } else if (manual) {
+      toast('Could not save', 'Your browser is blocking storage. Progress lasts until you close the tab.', 'bad');
     }
-    units.length = 0;
-    floaters.length = 0;
-    sparks.length = 0;
-    ceremony = null;
-    cooldowns.clear();
-    setCooldown('harvest', 0);
-    setCooldown('muster', 2.5);
-    spawnUnit('royal', 1, 0.15);
-    spawnUnit('shade', 4, 0.2);
-    flashNode('castle');
-    renderHud();
   }
 
-  function plans(): Plan[] {
-    return [
-      {
-        id: 'growth',
-        title: 'Grow the Realm',
-        shortTitle: 'Grow',
-        objective: 'Reach 18 Workers and 220 Grain.',
-        targetNodeId: 'mill',
-        routeEdges: [0, 1, 2],
-        tone: 'gold',
-        ceremony: 'Farm crown installed',
-        hint:
-          state.workers < 18
-            ? 'Use Harvest Boom. It turns morale and Focus into workers.'
-            : 'Stockpile grain. Festivals can wait until the farms are stable.',
-        isDone: () => state.workers >= 18 && state.resources.grain >= 220,
-        progress: () => (clamp(state.workers / 18, 0, 1) + clamp(state.resources.grain / 220, 0, 1)) / 2,
-        reward: () => {
-          state.glory = clamp(state.glory + 16, 0, 100);
-          state.resources.morale = clamp(state.resources.morale + 9, 0, 100);
-          state.resources.gold += 42;
-          addFloater('+1 crown', 0.36, 0.56, 'good');
-          burst(0.36, 0.56, 'gold', 34);
-          flashNode('mill');
-          log('Program complete: Grow the Realm. Farms now fund the crown.');
-        },
-      },
-      {
-        id: 'war',
-        title: 'Win the Sky-Road',
-        shortTitle: 'War',
-        objective: 'Win 2 patrol battles while Threat stays under 70.',
-        targetNodeId: 'portal',
-        routeEdges: [2, 3, 5],
-        tone: 'aqua',
-        ceremony: 'Sky-road crown secured',
-        hint:
-          state.battleWins < 2
-            ? 'Muster first, then Scout or Ward if Threat climbs.'
-            : 'You have the victories. Keep Threat under 70 until the crown ships.',
-        isDone: () => state.battleWins >= 2 && state.threat < 70,
-        progress: () => (clamp(state.battleWins / 2, 0, 1) + clamp((70 - state.threat) / 70, 0, 1)) / 2,
-        reward: () => {
-          state.glory = clamp(state.glory + 20, 0, 100);
-          state.threat = clamp(state.threat - 14, 0, 100);
-          state.enemyPower = clamp(state.enemyPower - 12, 8, 100);
-          addFloater('+1 crown', 0.78, 0.60, 'good');
-          burst(0.78, 0.60, 'gold', 38);
-          flashNode('portal');
-          log('Program complete: Win the Sky-Road. The Shade Gate lost tempo.');
-        },
-      },
-      {
-        id: 'ritual',
-        title: 'Light the Crystal Rite',
-        shortTitle: 'Rite',
-        objective: 'Reach 70 Crystal and 82 Morale.',
-        targetNodeId: 'mine',
-        routeEdges: [0, 1],
-        tone: 'aqua',
-        ceremony: 'Crystal crown lit',
-        hint:
-          state.resources.crystal < 70
-            ? 'Crystal Foundry builds the rite. Scout helps the mine breathe.'
-            : 'Now lift morale with Market Festival before the desktop darkens.',
-        isDone: () => state.resources.crystal >= 70 && state.resources.morale >= 82,
-        progress: () =>
-          (clamp(state.resources.crystal / 70, 0, 1) + clamp(state.resources.morale / 82, 0, 1)) / 2,
-        reward: () => {
-          state.glory = clamp(state.glory + 24, 0, 100);
-          state.wards += 1;
-          state.threat = clamp(state.threat - 10, 0, 100);
-          addFloater('+1 crown', 0.45, 0.76, 'good');
-          burst(0.45, 0.76, 'aqua', 42);
-          flashNode('mine');
-          log('Program complete: Light the Crystal Rite. The kingdom gleams harder.');
-        },
-      },
-    ];
+  function saveUi(): void {
+    storageSet(UI_KEY, JSON.stringify(ui));
   }
 
-  function currentPlan(): Plan {
-    return plans().find((plan) => plan.id === state.activePlan) ?? plans()[0];
+  // ------------------------------------------------------------------ fx
+
+  function play(sfx: Sfx): void {
+    sound.play(sfx);
   }
 
-  function log(message: string): void {
-    state.log.unshift(message);
-    state.log = state.log.slice(0, 7);
+  function floatText(text: string, x: number, y: number, tone: 'gold' | 'good' | 'bad' = 'gold'): void {
+    const el = document.createElement('span');
+    el.className = `kos-float is-${tone}`;
+    el.textContent = text;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    fx.appendChild(el);
+    window.setTimeout(() => el.remove(), 1000);
   }
 
-  function setCooldown(id: EdictId, seconds: number): void {
-    cooldowns.set(id, seconds);
-  }
-
-  function edicts(): Edict[] {
-    return [
-      {
-        id: 'harvest',
-        title: 'Harvest Boom',
-        hotkey: 'Q',
-        body: 'Best for Grow: workers and grain now, morale later.',
-        cost: { focus: 18, morale: 6 },
-        cooldown: 8,
-        apply: () => {
-          spend(state, { focus: 18, morale: 6 });
-          state.workers += 3;
-          state.resources.gold += 34;
-          state.resources.grain += 42;
-          state.glory += 2;
-          state.threat = clamp(state.threat + 2, 0, 100);
-          addFloater('+3 workers', 0.36, 0.56, 'good');
-          burst(0.36, 0.56, 'gold', 18);
-          flashNode('mill');
-          log('Harvest Boom: growth jumps, but overworked farms add a little Threat.');
-        },
-      },
-      {
-        id: 'muster',
-        title: 'Royal Muster',
-        hotkey: 'W',
-        body: 'Best for War: more army, more noise at the gate.',
-        cost: { focus: 24, gold: 42, grain: 18 },
-        cooldown: 10,
-        apply: () => {
-          spend(state, { focus: 24, gold: 42, grain: 18 });
-          state.army += 6;
-          state.resources.morale = clamp(state.resources.morale + 4, 0, 100);
-          state.threat = clamp(state.threat + 3, 0, 100);
-          spawnUnit('royal', 2, 0.05);
-          addFloater('+6 army', 0.68, 0.31, 'good');
-          burst(0.68, 0.31, 'aqua', 22);
-          flashNode('castle');
-          log('Royal Muster: glass knights queue onto the sky-road and draw attention.');
-        },
-      },
-      {
-        id: 'crystal',
-        title: 'Crystal Foundry',
-        hotkey: 'E',
-        body: 'Best for Rite: crystal surge, morale gets brittle.',
-        cost: { focus: 24, gold: 36, grain: 12 },
-        cooldown: 12,
-        apply: () => {
-          spend(state, { focus: 24, gold: 36, grain: 12 });
-          state.resources.crystal += 20;
-          state.resources.morale = clamp(state.resources.morale - 3, 0, 100);
-          state.glory += 6;
-          addFloater('+20 crystal', 0.45, 0.76, 'good');
-          burst(0.45, 0.76, 'aqua', 24);
-          flashNode('mine');
-          log('Crystal Foundry: the mine sings, but citizens squint at the glare.');
-        },
-      },
-      {
-        id: 'festival',
-        title: 'Market Festival',
-        hotkey: 'A',
-        body: 'Morale rescue and safe Glory, paid in crystal.',
-        cost: { focus: 28, crystal: 12, grain: 20 },
-        cooldown: 14,
-        apply: () => {
-          spend(state, { focus: 28, crystal: 12, grain: 20 });
-          state.resources.morale = clamp(state.resources.morale + 22, 0, 100);
-          state.resources.gold += 24;
-          state.glory += 8;
-          addFloater('+22 morale', 0.55, 0.47, 'good');
-          burst(0.55, 0.47, 'pink', 26);
-          flashNode('market');
-          log('Market Festival: citizens installed joy.exe successfully.');
-        },
-      },
-      {
-        id: 'ward',
-        title: 'Guardian Ward',
-        hotkey: 'S',
-        body: 'Threat brake. Saves bad runs, delays economy.',
-        cost: { focus: 22, crystal: 10, gold: 24 },
-        cooldown: 15,
-        apply: () => {
-          spend(state, { focus: 22, crystal: 10, gold: 24 });
-          state.wards += 1;
-          state.threat = clamp(state.threat - 12, 0, 100);
-          state.glory += 3;
-          addFloater('-12 threat', 0.70, 0.70, 'good');
-          burst(0.70, 0.70, 'aqua', 30);
-          flashNode('tower');
-          log('Guardian Ward: a translucent firewall wraps the kingdom.');
-        },
-      },
-      {
-        id: 'scout',
-        title: 'Scout Sky-Road',
-        hotkey: 'D',
-        body: 'Cheap read: lower enemy power, gain insight.',
-        cost: { focus: 16, grain: 16, morale: 4 },
-        cooldown: 9,
-        apply: () => {
-          spend(state, { focus: 16, grain: 16, morale: 4 });
-          state.insight += 1;
-          state.enemyPower = clamp(state.enemyPower - 8, 8, 90);
-          state.glory += 2;
-          addFloater('+1 insight', 0.70, 0.70, 'good');
-          burst(0.70, 0.70, 'gold', 16);
-          flashNode('tower');
-          log('Scout Sky-Road: patrols found a softer route through the clouds.');
-        },
-      },
-    ];
-  }
-
-  function commissions(): Commission[] {
-    return [
-      {
-        id: 'farm',
-        title: 'Farm Charter',
-        shortTitle: 'Farm',
-        planId: 'growth',
-        benefit: 'Workers and grain climb toward Grow.',
-        tradeoff: '+6 Threat from overworked farms.',
-        apply: () => {
-          state.workers = raiseToward(state.workers, 2, 17);
-          state.resources.grain = raiseToward(state.resources.grain, 52, 210);
-          state.threat = clamp(state.threat + 6, 0, 96);
-          addFloater('Farm Charter', 0.36, 0.56, 'good');
-          burst(0.36, 0.56, 'gold', 28);
-          flashNode('mill');
-        },
-      },
-      {
-        id: 'skyroad',
-        title: 'Sky-Road Contract',
-        shortTitle: 'Sky-Road',
-        planId: 'war',
-        benefit: 'Army and insight arrive for War.',
-        tradeoff: '+8 enemy power as Shade mobilizes.',
-        apply: () => {
-          state.army += 5;
-          state.insight += 1;
-          state.enemyPower = clamp(state.enemyPower + 8, 8, 100);
-          state.threat = clamp(state.threat + 3, 0, 96);
-          spawnUnit('royal', 2, 0.06);
-          addFloater('Sky-Road Contract', 0.78, 0.60, 'good');
-          burst(0.78, 0.60, 'aqua', 30);
-          flashNode('portal');
-        },
-      },
-      {
-        id: 'crystal',
-        title: 'Crystal Mandate',
-        shortTitle: 'Crystal',
-        planId: 'ritual',
-        benefit: 'Crystal and gold jump toward Rite.',
-        tradeoff: '-10 Morale and +4 Threat from glare fatigue.',
-        apply: () => {
-          state.resources.crystal = raiseToward(state.resources.crystal, 18, 66);
-          state.resources.gold += 18;
-          state.resources.morale = clamp(state.resources.morale - 10, 0, 100);
-          state.threat = clamp(state.threat + 4, 0, 96);
-          addFloater('Crystal Mandate', 0.45, 0.76, 'good');
-          burst(0.45, 0.76, 'aqua', 30);
-          flashNode('mine');
-        },
-      },
-    ];
-  }
-
-  function activeCommission(): Commission | null {
-    if (!state.activeCommission) return null;
-    return commissions().find((commission) => commission.id === state.activeCommission) ?? null;
-  }
-
-  function commissionLabel(): string {
-    return activeCommission()?.shortTitle ?? 'None';
-  }
-
-  function edictInstruction(id: EdictId): string {
-    const edict = edicts().find((item) => item.id === id);
-    if (!edict) return 'Wait for the council to recalculate.';
-
-    const cd = cooldowns.get(id) ?? 0;
-    if (state.screen === 'playing' && cd <= 0 && hasEnough(state, edict.cost)) return `Cast ${edict.title} now.`;
-    if (cd > 0) return `${edict.title} is ready in ${Math.ceil(cd)}s.`;
-    return `Prepare ${resourceText(edict.cost)} for ${edict.title}.`;
-  }
-
-  function planOrder(plan: Plan): CouncilOrder {
-    if (plan.id === 'growth') {
-      return {
-        severity: state.focus > 82 ? 'warning' : 'stable',
-        title: 'Grow Farms',
-        body:
-          state.workers < 18
-            ? `${edictInstruction('harvest')} Workers are the shortest path to the Grow crown.`
-            : `Hold grain for Grow. ${edictInstruction('harvest')}`,
-      };
+  function sparkle(x: number, y: number, count: number): void {
+    if (reducedMotion) return;
+    if (fx.childElementCount > 120) return;
+    for (let i = 0; i < count; i++) {
+      const el = document.createElement('i');
+      el.className = 'kos-spark';
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 30 + Math.random() * 60;
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      el.style.setProperty('--dx', `${Math.cos(angle) * dist}px`);
+      el.style.setProperty('--dy', `${Math.sin(angle) * dist}px`);
+      el.style.setProperty('--hue', `${[48, 186, 310][i % 3]}`);
+      fx.appendChild(el);
+      window.setTimeout(() => el.remove(), 700);
     }
-
-    if (plan.id === 'war') {
-      if (state.threat >= 58) {
-        return {
-          severity: 'warning',
-          title: 'Hold Threat',
-          body: `${edictInstruction('ward')} War needs Threat under 70 when the second patrol lands.`,
-        };
-      }
-      return {
-        severity: state.focus > 82 ? 'warning' : 'stable',
-        title: 'Win Patrols',
-        body:
-          state.battleWins < 2
-            ? `${edictInstruction('muster')} Two patrol wins finish the sky-road.`
-            : `${edictInstruction('ward')} Keep Threat under 70 to ship the War crown.`,
-      };
-    }
-
-    if (state.resources.morale < 82 && state.resources.crystal >= 70) {
-      return {
-        severity: state.resources.morale < 45 ? 'warning' : 'stable',
-        title: 'Lift Morale',
-        body: `${edictInstruction('festival')} The Rite has crystal; citizens need morale.`,
-      };
-    }
-
-    return {
-      severity: state.focus > 82 ? 'warning' : 'stable',
-      title: 'Feed the Rite',
-      body: `${edictInstruction('crystal')} Crystal is the shortest path to the final rite.`,
-    };
   }
 
-  function councilOrder(): CouncilOrder {
-    const plan = currentPlan();
-    const finalActive = isFinalProtocolActive();
-
-    if (state.threat >= 82) {
-      return {
-        severity: 'critical',
-        title: 'Hold Threat',
-        body: `${edictInstruction('ward')} Shade Threat is near collapse pressure.`,
-      };
-    }
-
-    if (state.resources.morale <= 28) {
-      return {
-        severity: 'critical',
-        title: 'Restore Morale',
-        body: `${edictInstruction('festival')} Morale is close to ending the run.`,
-      };
-    }
-
-    if (finalActive && state.threat >= 64) {
-      return {
-        severity: 'critical',
-        title: 'Break Pressure',
-        body: `${edictInstruction('ward')} The final crown needs one clean window before Threat spikes.`,
-      };
-    }
-
-    if (finalActive && state.resources.morale < 52) {
-      return {
-        severity: 'warning',
-        title: 'Steady Citizens',
-        body: `${edictInstruction('festival')} The final push fails if Morale keeps sliding.`,
-      };
-    }
-
-    if (finalActive) {
-      const order = planOrder(plan);
-      return {
-        severity: order.severity === 'stable' ? 'warning' : order.severity,
-        title: `Finish ${plan.shortTitle}`,
-        body: order.body,
-      };
-    }
-
-    if (state.threat >= 66) {
-      return {
-        severity: 'warning',
-        title: 'Hold Threat',
-        body: `${edictInstruction('ward')} Buy room before the next Shade event.`,
-      };
-    }
-
-    if (state.resources.morale <= 42) {
-      return {
-        severity: 'warning',
-        title: 'Restore Morale',
-        body: `${edictInstruction('festival')} Low morale is the fastest losing route.`,
-      };
-    }
-
-    return planOrder(plan);
+  function centerOf(el: Element): { x: number; y: number } {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }
 
-  function isOpeningDecreeActive(): boolean {
-    return (
-      state.screen === 'playing' &&
-      state.activePlan === 'growth' &&
-      state.crowns === 0 &&
-      state.workers < 18 &&
-      !state.hasCastEdict
-    );
+  function toast(title: string, body: string, tone: 'good' | 'bad' | 'trophy' | 'info' = 'info'): void {
+    const el = document.createElement('div');
+    el.className = `kos-toast is-${tone}`;
+    el.innerHTML = `<b></b><span></span>`;
+    (el.querySelector('b') as HTMLElement).textContent = title;
+    (el.querySelector('span') as HTMLElement).textContent = body;
+    toasts.prepend(el);
+    while (toasts.childElementCount > 3) toasts.lastElementChild?.remove();
+    window.setTimeout(() => el.classList.add('is-leaving'), 3600);
+    window.setTimeout(() => el.remove(), 4000);
   }
 
-  function canCast(edict: Edict): boolean {
-    return state.screen === 'playing' && (cooldowns.get(edict.id) ?? 0) <= 0 && hasEnough(state, edict.cost);
+  // ------------------------------------------------------------------ rules glue
+
+  function afterChange(): void {
+    const r = checkAchievements(state);
+    state = r.state;
+    for (const a of r.unlocked) {
+      toast(`🏆 Trophy: ${a.name}`, `${a.hint} (+2% production)`, 'trophy');
+      play('trophy');
+    }
+    sinceHud = 1; // refresh now
   }
 
-  function castEdict(id: EdictId): void {
-    const edict = edicts().find((item) => item.id === id);
-    if (!edict || !canCast(edict)) {
-      if (edict) log(`${edict.title} blocked: wait for Focus, resources, or cooldown.`);
+  function doClick(e?: MouseEvent | KeyboardEvent): void {
+    const r = click(state);
+    state = r.state;
+    play('click');
+    coin.classList.remove('is-pressed');
+    void coin.offsetWidth;
+    coin.classList.add('is-pressed');
+    let x: number;
+    let y: number;
+    if (e instanceof MouseEvent && e.clientX > 0) {
+      x = e.clientX;
+      y = e.clientY;
+    } else {
+      ({ x, y } = centerOf(coin));
+    }
+    floatText(`+${formatNumber(r.gained)}`, x, y - 10);
+    sparkle(x, y, 5);
+    afterChange();
+  }
+
+  function doBuyBuilding(id: BuildingId, button: HTMLElement): void {
+    const before = state;
+    state = buyBuilding(state, id);
+    if (state === before) {
+      play('error');
+      button.classList.remove('is-denied');
+      void button.offsetWidth;
+      button.classList.add('is-denied');
       return;
     }
-    const firstEdict = !state.hasCastEdict;
-    edict.apply();
-    state.hasCastEdict = true;
-    if (firstEdict) {
-      log(
-        id === 'harvest'
-          ? 'First decree fulfilled: farms wake up and the Grow crown is moving.'
-          : `First decree issued: ${edict.title} opens the reign.`,
-      );
+    play('buy');
+    const { x, y } = centerOf(button);
+    floatText(`+1 ${BUILDINGS.find((b) => b.id === id)?.name ?? ''}`, x, y, 'good');
+    sparkle(x, y, 8);
+    afterChange();
+  }
+
+  function doBuyUpgrade(id: string, button: HTMLElement): void {
+    const before = state;
+    state = buyUpgrade(state, id);
+    if (state === before) {
+      play('error');
+      return;
     }
-    setCooldown(edict.id, edict.cooldown);
-    checkPlanCompletion();
-    renderHud();
+    play('upgrade');
+    const { x, y } = centerOf(button);
+    sparkle(x, y, 14);
+    const def = UPGRADES.find((u) => u.id === id);
+    if (def) toast(`Installed ${def.name}`, def.effect, 'good');
+    afterChange();
   }
 
-  function checkPlanCompletion(): void {
-    const plan = currentPlan();
-    if (state.completedPlans.includes(plan.id) || !plan.isDone()) return;
-
-    state.completedPlans.push(plan.id);
-    state.crowns = state.completedPlans.length;
-    startCrownCeremony(plan);
-    plan.reward();
-
-    const next = plans().find((item) => !state.completedPlans.includes(item.id));
-    if (next) {
-      state.activePlan = next.id;
-      log(`Next program: ${next.title}. ${next.objective}`);
-      if (state.crowns === 1 && !state.commissionOffered) {
-        offerRoyalCommission();
-        return;
-      }
-      if (state.crowns === 2) triggerFinalProtocol(next);
-    } else {
-      endGame('victory');
-    }
+  function doPolicy(id: PolicyId): void {
+    const before = state;
+    state = choosePolicy(state, id);
+    if (state === before) return;
+    play('upgrade');
+    const def = POLICIES.find((p) => p.id === id);
+    if (def) toast(`Signed: ${def.name}`, def.effect, 'good');
+    closeModal();
+    afterChange();
+    save();
   }
 
-  function offerRoyalCommission(): void {
-    state.commissionOffered = true;
-    state.pausedBeforeOverlay = 'playing';
-    state.screen = 'commission';
-    log('Royal commission opened: choose a charter to bend the next crown route.');
-    renderHud();
-  }
-
-  function chooseCommission(id: CommissionId): void {
-    const commission = commissions().find((item) => item.id === id);
-    if (!commission || state.activeCommission) return;
-
-    state.activeCommission = commission.id;
-    commission.apply();
-
-    const biased = plans().find((plan) => plan.id === commission.planId && !state.completedPlans.includes(plan.id));
-    const fallback = plans().find((plan) => !state.completedPlans.includes(plan.id));
-    const next = biased ?? fallback;
-    if (next) state.activePlan = next.id;
-
-    state.screen = 'playing';
-    log(
-      `Commission chosen: ${commission.title}. ${commission.benefit} ${commission.tradeoff} ${next ? `Next: ${next.shortTitle}.` : ''}`,
+  function doInstall(): void {
+    if (!canPrestige(state)) return;
+    const gain = prestigeGain(state);
+    const nextName = eraName(state.era + 1);
+    closeModal();
+    play('install');
+    shell.classList.add('is-installing');
+    const overlay = document.createElement('div');
+    overlay.className = 'kos-install';
+    overlay.innerHTML = `<div class="kos-install-card"><div class="kos-boot-logo">${ICONS.crown}</div><p>Installing</p><h2></h2><div class="kos-install-bar"><i></i></div><small>Keeping trophies · adding ${gain} patches</small></div>`;
+    (overlay.querySelector('h2') as HTMLElement).textContent = nextName;
+    shell.appendChild(overlay);
+    window.setTimeout(
+      () => {
+        state = prestige(state);
+        ui.policyPrompted = false;
+        ui.installPrompted = false;
+        saveUi();
+        for (const k of Object.keys(keys) as Tab[]) keys[k] = '';
+        seenBuildings.clear();
+        seenUpgrades.clear();
+        mailTimer = 25;
+        afterChange();
+        save();
+        shell.classList.remove('is-installing');
+        overlay.classList.add('is-done');
+        window.setTimeout(() => overlay.remove(), 500);
+        toast(`Welcome to ${nextName}`, `+${gain} patches: everything now makes ${formatNumber(state.patches * 10)}% more.`, 'trophy');
+        setTab('build');
+      },
+      reducedMotion ? 300 : 2200,
     );
-    checkPlanCompletion();
-    renderHud();
   }
 
-  function isFinalProtocolActive(): boolean {
-    return state.finalProtocolStarted && state.crowns === 2 && !state.completedPlans.includes(state.activePlan);
-  }
+  // ------------------------------------------------------------------ mail
 
-  function triggerFinalProtocol(plan: Plan): void {
-    if (state.finalProtocolStarted) return;
-
-    state.finalProtocolStarted = true;
-    state.finalProtocolAge = 0;
-    state.focus = clamp(state.focus + 42, 0, state.maxFocus);
-    state.resources.morale =
-      plan.id === 'ritual'
-        ? raiseToward(state.resources.morale, 8, 78)
-        : clamp(state.resources.morale + 8, 0, 100);
-    state.threat = clamp(state.threat + 8, 0, 94);
-    state.enemyPower = clamp(state.enemyPower + 5, 8, 100);
-
-    if (plan.id === 'growth') {
-      state.workers = raiseToward(state.workers, 2, 17);
-      state.resources.grain = raiseToward(state.resources.grain, 58, 210);
-      addFloater('+focus +farms', 0.36, 0.56, 'good');
-    } else if (plan.id === 'war') {
-      state.army += 5;
-      state.resources.gold += 36;
-      spawnUnit('royal', 2, 0.08);
-      addFloater('+focus +army', 0.68, 0.31, 'good');
-    } else {
-      state.resources.crystal = raiseToward(state.resources.crystal, 20, 66);
-      state.resources.gold += 28;
-      addFloater('+focus +crystal', 0.45, 0.76, 'good');
-    }
-
-    const target = nodes.find((node) => node.id === plan.targetNodeId);
-    if (target) {
-      flashNode(target.id);
-      addFloater('Final Crown', target.x, target.y - 0.08, 'good');
-      burst(target.x, target.y, plan.tone, 72);
-      burst(target.x, target.y, 'gold', 42);
-    }
-    flashNode('castle');
-    burst(0.68, 0.31, 'gold', 34);
-    spawnUnit('shade', 4, 0.96);
-    log(`Final Crown Protocol: ${plan.shortTitle} is the last crown. Focus restored, Shade answered.`);
-  }
-
-  function raiseToward(value: number, gain: number, cap: number): number {
-    return value >= cap ? value : Math.min(value + gain, cap);
-  }
-
-  function flashNode(id: string): void {
-    const node = nodes.find((item) => item.id === id);
-    if (node) node.pulse = 1;
-  }
-
-  function addFloater(text: string, x: number, y: number, tone: FloatingText['tone']): void {
-    floaters.push({ text, x, y, age: 0, tone });
-  }
-
-  function startCrownCeremony(plan: Plan): void {
-    const node = nodes.find((item) => item.id === plan.targetNodeId);
-    if (!node) return;
-
-    ceremony = {
-      planId: plan.id,
-      nodeId: node.id,
-      text: plan.ceremony,
-      tone: plan.tone,
-      age: 0,
-      duration: 2.8,
-    };
-    addFloater(plan.ceremony, node.x, node.y - 0.06, 'good');
-    burst(node.x, node.y, 'gold', 46);
-    log(`Crown ceremony: ${plan.ceremony}.`);
-  }
-
-  function burst(x: number, y: number, tone: Spark['tone'], count: number): void {
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 0.08 + Math.random() * 0.22;
-      sparks.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 0.8 + Math.random() * 0.7,
-        tone,
-      });
-    }
-  }
-
-  function spawnUnit(side: Unit['side'], lane: number, progress = side === 'royal' ? 0 : 1): void {
-    units.push({
-      id: unitId++,
-      side,
-      lane,
-      progress,
-      speed: side === 'royal' ? 0.034 + Math.random() * 0.018 : 0.026 + Math.random() * 0.018,
-      hp: side === 'royal' ? 12 : 10,
-      power: side === 'royal' ? 3 + Math.random() * 2 : 2.8 + Math.random() * 2.5,
+  function spawnMail(): void {
+    if (mailOpen) return;
+    mailOpen = true;
+    play('mail');
+    const el = document.createElement('div');
+    el.className = 'kos-win kos-mail';
+    el.setAttribute('role', 'alertdialog');
+    el.setAttribute('aria-label', 'Royal Mail');
+    const maxX = Math.max(8, window.innerWidth - 250);
+    const maxY = Math.max(70, window.innerHeight - 220);
+    el.style.left = `${8 + Math.random() * (maxX - 8)}px`;
+    el.style.top = `${70 + Math.random() * (maxY - 70)}px`;
+    el.innerHTML = `
+      <div class="kos-titlebar"><span>📨 Royal Mail</span></div>
+      <div class="kos-mail-body"><p>You've got mail from the Crown!</p>
+      <button type="button" class="kos-btn kos-btn-primary kos-btn-small" data-mail-open>Open it</button></div>`;
+    mailLayer.appendChild(el);
+    const btn = el.querySelector<HTMLButtonElement>('[data-mail-open]');
+    const expire = window.setTimeout(() => {
+      el.classList.add('is-leaving');
+      window.setTimeout(() => el.remove(), 400);
+      mailOpen = false;
+    }, 13000);
+    btn?.addEventListener('click', () => {
+      window.clearTimeout(expire);
+      const r = openMail(state, Math.random());
+      state = r.state;
+      play('open');
+      const { x, y } = centerOf(el);
+      sparkle(x, y, 18);
+      if (r.kind === 'treasure') {
+        floatText(`+${formatNumber(r.gained)}`, x, y, 'good');
+        toast('Royal Mail: treasure!', `The Crown sent ${formatNumber(r.gained)} gold.`, 'good');
+      } else {
+        toast('Royal Mail: FRENZY!', 'All production ×5 for 20 seconds.', 'good');
+      }
+      el.remove();
+      mailOpen = false;
+      afterChange();
     });
   }
 
-  function triggerEvent(): void {
-    const events: Array<{ kind: EventKind; run: () => void }> = [
-      {
-        kind: 'blessing',
-        run: () => {
-          state.resources.crystal += 8 + state.insight * 2;
-          state.glory += 3;
-          addFloater('sky blessing', 0.50, 0.28, 'good');
-          burst(0.50, 0.28, 'aqua', 20);
-          log('Event: sky blessing cached fresh crystal packets.');
-        },
-      },
-      {
-        kind: 'raid',
-        run: () => {
-          state.threat += 9;
-          state.enemyPower += 6;
-          spawnUnit('shade', 4, 0.95);
-          addFloater('shade raid', 0.78, 0.60, 'bad');
-          burst(0.78, 0.60, 'pink', 18);
-          log('Event: Shade Gate opened a raid window.');
-        },
-      },
-      {
-        kind: 'market',
-        run: () => {
-          state.resources.gold += 28;
-          state.resources.grain += 18;
-          addFloater('market ping', 0.55, 0.47, 'good');
-          burst(0.55, 0.47, 'gold', 16);
-          log('Event: Bubble Market paid out old invoices.');
-        },
-      },
-      {
-        kind: 'storm',
-        run: () => {
-          const wardBlock = state.wards > 0;
-          if (wardBlock) {
-            state.wards -= 1;
-            state.glory += 2;
-            log('Event: glass storm hit, but a Guardian Ward absorbed it.');
-          } else {
-            state.resources.grain = clamp(state.resources.grain - 28, 0, 999);
-            state.resources.morale = clamp(state.resources.morale - 10, 0, 100);
-            state.threat += 5;
-            log('Event: glass storm cracked farms and morale.');
-          }
-          addFloater(wardBlock ? 'ward block' : 'storm damage', 0.36, 0.56, wardBlock ? 'good' : 'bad');
-          burst(0.36, 0.56, wardBlock ? 'aqua' : 'pink', 22);
-        },
-      },
-      {
-        kind: 'festival',
-        run: () => {
-          state.resources.morale = clamp(state.resources.morale + 12, 0, 100);
-          state.glory += 5;
-          log('Event: spontaneous festival made the UI sparkle.');
-          addFloater('+festival', 0.68, 0.31, 'good');
-          burst(0.68, 0.31, 'pink', 24);
-        },
-      },
-    ];
-    const index = Math.floor(Math.random() * events.length);
-    events[index].run();
+  // ------------------------------------------------------------------ modal
+
+  function openModal(title: string, html: string): void {
+    lastModalFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogTitle.textContent = title;
+    dialogBody.innerHTML = html;
+    modal.hidden = false;
+    const focusable = dialogBody.querySelector<HTMLElement>('button, a') ?? $<HTMLElement>('[data-action="close-modal"]');
+    focusable.focus();
   }
 
-  function resolveBattle(): void {
-    const royal = state.army + state.resources.morale * 0.12 + state.wards * 2 + Math.random() * 10;
-    const shade = state.enemyPower + state.threat * 0.08 + Math.random() * 12;
-    if (royal >= shade) {
-      const gloryGain = 8 + Math.floor((royal - shade) / 5);
-      state.glory = clamp(state.glory + gloryGain, 0, 100);
-      state.enemyPower = clamp(state.enemyPower - 7, 8, 100);
-      state.army = Math.max(3, state.army - Math.floor(3 + Math.random() * 4));
-      state.battleWins += 1;
-      addFloater(`+${gloryGain} glory`, 0.78, 0.60, 'good');
-      burst(0.78, 0.60, 'gold', 30);
-      log(`Battle: royal patrol won lane ${state.battleWins}/2 for the War program.`);
-    } else {
-      const threatGain = 8 + Math.floor((shade - royal) / 6);
-      state.threat = clamp(state.threat + threatGain, 0, 100);
-      state.army = Math.max(0, state.army - Math.floor(4 + Math.random() * 5));
-      state.resources.morale = clamp(state.resources.morale - 8, 0, 100);
-      addFloater(`+${threatGain} threat`, 0.70, 0.70, 'bad');
-      burst(0.70, 0.70, 'pink', 26);
-      log(`Battle: Shade pressure broke through for +${threatGain} Threat.`);
-    }
+  function closeModal(): void {
+    if (modal.hidden) return;
+    modal.hidden = true;
+    lastModalFocus?.focus?.();
   }
 
-  function tick(dt: number): void {
-    if (state.screen !== 'playing') return;
-
-    const scaled = dt * state.speed;
-    state.elapsed += scaled;
-    state.day = 1 + Math.floor(state.elapsed / 12);
-
-    for (const id of Array.from(cooldowns.keys())) {
-      cooldowns.set(id, Math.max(0, (cooldowns.get(id) ?? 0) - scaled));
-    }
-
-    const activeBonus = state.selectedMode === 'active' ? 1.16 : 1;
-    state.focus = clamp(
-      state.focus + scaled * (state.selectedMode === 'active' ? 2.3 : 1.45),
-      0,
-      state.maxFocus,
+  function showPolicyModal(): void {
+    ui.policyPrompted = true;
+    saveUi();
+    openModal(
+      'Sign a Royal Policy',
+      `<p>Pick <b>one</b> policy for this era. It lasts until you install the next Kingdom OS, then you can pick again.</p>
+       <div class="kos-policy-grid">${POLICIES.map(
+         (p) => `<button type="button" class="kos-policy" data-policy="${p.id}"><strong>${p.name}</strong><em>${p.pitch}</em><span>${p.effect}</span></button>`,
+       ).join('')}</div>`,
     );
-    state.resources.gold += scaled * (2.1 + state.workers * 0.16) * activeBonus;
-    state.resources.grain += scaled * (1.6 + state.workers * 0.15) * activeBonus;
-    state.resources.crystal += scaled * (0.25 + state.insight * 0.035);
-    state.resources.morale = clamp(state.resources.morale + scaled * 0.17 - scaled * state.threat * 0.012, 0, 100);
-    state.glory = clamp(state.glory + scaled * (state.resources.morale > 80 ? 0.025 : 0.01), 0, 100);
-    state.threat = clamp(state.threat + scaled * (0.16 + state.enemyPower * 0.005) - state.wards * scaled * 0.02, 0, 100);
-    state.enemyPower = clamp(state.enemyPower + scaled * 0.07, 8, 100);
+  }
 
-    if (Math.floor(state.elapsed) % 7 === 0 && state.elapsed - state.lastAutosaveAt > 6.5) {
-      state.lastAutosaveAt = state.elapsed;
-      if (state.resources.gold > 140 && state.army < 18) {
-        state.resources.gold -= 32;
-        state.resources.grain = Math.max(0, state.resources.grain - 12);
-        state.army += 2;
-        spawnUnit('royal', 1, 0.08);
-        log('Autopilot: barracks bought two units from surplus gold.');
+  function showInstallModal(): void {
+    const gain = prestigeGain(state);
+    openModal(
+      `Install ${eraName(state.era + 1)}?`,
+      `<p class="kos-dialog-lede">A fresh install wipes this era but makes every future era faster.</p>
+       <ul class="kos-install-list">
+         <li class="is-good">+${gain} patches → +${gain * 10}% to all gold, forever (now ${state.patches})</li>
+         <li class="is-good">Keep all ${state.achievements.length} trophies (+2% each)</li>
+         <li class="is-bad">Reset gold, buildings, upgrades and your Royal Policy</li>
+       </ul>
+       <div class="kos-dialog-actions">
+         <button type="button" class="kos-btn kos-btn-primary" data-action="install-confirm">Install now</button>
+         <button type="button" class="kos-btn kos-btn-ghost" data-action="close-modal">Not yet</button>
+       </div>`,
+    );
+  }
+
+  function showHelp(): void {
+    openModal(
+      'How to play Kingdom OS 2000',
+      `<ol class="kos-help">
+        <li><b>Click the Royal Coin</b> to mint gold by hand.</li>
+        <li><b>Build</b> Peasants, Farms, Markets, Mines, Towers and Portals. Each makes gold every second, forever. Each one costs 15% more than the last.</li>
+        <li><b>Upgrades</b> appear as your kingdom grows. Most double a building's output.</li>
+        <li>At 1,000 gold, sign a <b>Royal Policy</b>: one strategic choice per era.</li>
+        <li><b>Royal Mail</b> pops up now and then. Open it for a gold bonus or a ×5 frenzy.</li>
+        <li><b>Trophies</b> each add +2% to everything.</li>
+        <li>At 1M gold earned in an era, <b>install the next Kingdom OS</b>: restart with permanent patches (+10% each). Each era goes faster.</li>
+        <li>Closed the tab? Your kingdom keeps earning at ${Math.round(offlineRate(state) * 100)}% speed for up to 8 hours.</li>
+      </ol>
+      <p class="kos-muted">Saves automatically every ${AUTOSAVE_SECONDS}s in this browser.</p>`,
+    );
+  }
+
+  function showReset(): void {
+    openModal(
+      'Reset kingdom?',
+      `<p>This deletes <b>everything</b>: gold, buildings, trophies, patches and eras. It cannot be undone.</p>
+       <div class="kos-dialog-actions">
+         <button type="button" class="kos-btn kos-btn-danger" data-action="reset-confirm">Delete my kingdom</button>
+         <button type="button" class="kos-btn kos-btn-ghost" data-action="close-modal">Cancel</button>
+       </div>`,
+    );
+  }
+
+  function showWelcomeBack(report: { earned: number; seconds: number }): void {
+    openModal(
+      'Welcome back, Your Majesty',
+      `<p class="kos-dialog-lede">While you were away for <b>${formatDuration(report.seconds)}</b>, your kingdom earned</p>
+       <p class="kos-big-number">+${formatNumber(report.earned)} gold</p>
+       <p class="kos-muted">Offline earnings run at ${Math.round(offlineRate(state) * 100)}% speed, up to 8 hours.</p>
+       <div class="kos-dialog-actions"><button type="button" class="kos-btn kos-btn-primary" data-action="close-modal">Collect</button></div>`,
+    );
+  }
+
+  // ------------------------------------------------------------------ tabs & panels
+
+  function setTab(tab: Tab): void {
+    ui.tab = tab;
+    saveUi();
+    for (const t of Object.keys(panels) as Tab[]) {
+      panels[t].hidden = t !== tab;
+      const btn = root.querySelector<HTMLElement>(`[data-tab="${t}"]`);
+      btn?.setAttribute('aria-selected', String(t === tab));
+      btn?.classList.toggle('is-active', t === tab);
+    }
+    sinceHud = 1;
+  }
+
+  function renderBuildPanel(): void {
+    const visible = BUILDINGS.filter((b) => buildingVisible(state, b.id));
+    const hiddenNext = BUILDINGS.find((b) => !buildingVisible(state, b.id));
+    const key = visible.map((b) => b.id).join(',') + `|${hiddenNext?.id ?? ''}|${state.policy}|${state.upgrades.length}`;
+    if (key !== keys.build) {
+      keys.build = key;
+      panels.build.innerHTML =
+        visible
+          .map((b) => {
+            const isNew = !seenBuildings.has(b.id);
+            seenBuildings.add(b.id);
+            return `
+          <button type="button" class="kos-row kos-building ${isNew ? 'is-new' : ''}" data-building="${b.id}">
+            <span class="kos-row-icon">${ICONS[b.id]}</span>
+            <span class="kos-row-main">
+              <strong>${b.name}</strong>
+              <small>${b.flavor}</small>
+              <em data-each></em>
+            </span>
+            <span class="kos-row-side">
+              <span class="kos-owned" data-owned></span>
+              <span class="kos-cost" data-cost></span>
+            </span>
+          </button>`;
+          })
+          .join('') +
+        (hiddenNext
+          ? `<div class="kos-row kos-locked" aria-label="Locked building"><span class="kos-row-icon">?</span><span class="kos-row-main"><strong>???</strong><small>Earn ${formatNumber(hiddenNext.baseCost * 0.5)} gold this era to reveal.</small></span></div>`
+          : '');
+    }
+    for (const b of visible) {
+      const row = panels.build.querySelector<HTMLButtonElement>(`[data-building="${b.id}"]`);
+      if (!row) continue;
+      const cost = nextBuildingCost(state, b.id);
+      const affordable = state.gold >= cost;
+      row.classList.toggle('is-affordable', affordable);
+      row.setAttribute('aria-disabled', String(!affordable));
+      const each = buildingUnitGps(state, b.id) * globalMultiplier(state);
+      setText(row.querySelector('[data-owned]'), String(state.buildings[b.id]));
+      setText(row.querySelector('[data-cost]'), `${formatNumber(cost)} g`);
+      setText(row.querySelector('[data-each]'), `+${formatNumber(each)}/sec each`);
+      row.setAttribute('aria-label', `Buy ${b.name} for ${formatNumber(cost)} gold. Owned ${state.buildings[b.id]}. Makes ${formatNumber(each)} gold per second each.`);
+    }
+  }
+
+  function renderUpgradesPanel(): void {
+    const list = availableUpgrades(state);
+    const key = list.map((u) => u.id).join(',');
+    if (key !== keys.upgrades) {
+      keys.upgrades = key;
+      const fresh = list.filter((u) => !seenUpgrades.has(u.id));
+      if (fresh.length && booted && state.eraTime > 1) {
+        toast('New upgrade available', fresh.map((u) => u.name).join(', '), 'info');
+      }
+      panels.upgrades.innerHTML = list.length
+        ? list
+            .map((u) => {
+              const isNew = !seenUpgrades.has(u.id);
+              seenUpgrades.add(u.id);
+              return `
+            <button type="button" class="kos-row kos-upgrade ${isNew ? 'is-new' : ''}" data-upgrade="${u.id}" aria-label="Buy ${u.name} for ${formatNumber(u.cost)} gold: ${u.effect}">
+              <span class="kos-row-icon">${UPGRADE_ICON}</span>
+              <span class="kos-row-main"><strong>${u.name}</strong><small>${u.flavor}</small><em>${u.effect}</em></span>
+              <span class="kos-row-side"><span class="kos-cost">${formatNumber(u.cost)} g</span></span>
+            </button>`;
+            })
+            .join('')
+        : `<p class="kos-empty">No upgrades yet. Keep building — new ones appear as your kingdom grows.</p>`;
+      const owned = UPGRADES.filter((u) => state.upgrades.includes(u.id));
+      if (owned.length) {
+        panels.upgrades.insertAdjacentHTML(
+          'beforeend',
+          `<p class="kos-subhead">Installed (${owned.length})</p><div class="kos-installed">${owned
+            .map((u) => `<span title="${u.effect}">${u.name}</span>`)
+            .join('')}</div>`,
+        );
       }
     }
-
-    const eventCadence = state.selectedMode === 'active' ? 10 : 13;
-    if (state.elapsed - state.lastEventAt > eventCadence) {
-      state.lastEventAt = state.elapsed;
-      triggerEvent();
+    let affordable = 0;
+    for (const u of list) {
+      const row = panels.upgrades.querySelector<HTMLElement>(`[data-upgrade="${u.id}"]`);
+      const ok = state.gold >= u.cost;
+      if (ok) affordable++;
+      row?.classList.toggle('is-affordable', ok);
+      row?.setAttribute('aria-disabled', String(!ok));
     }
-
-    if (state.elapsed - state.lastBattleAt > 16) {
-      state.lastBattleAt = state.elapsed;
-      resolveBattle();
-    }
-
-    if (Math.random() < scaled * 0.8) spawnUnit('royal', 1 + Math.floor(Math.random() * 2), 0.02);
-    if (Math.random() < scaled * 0.62) spawnUnit('shade', 3 + Math.floor(Math.random() * 2), 0.98);
-
-    updateUnits(scaled);
-    updateEffects(scaled);
-    checkPlanCompletion();
-    if (state.screen !== 'playing') return;
-
-    if (state.threat >= 100 || state.resources.morale <= 0) endGame('defeat');
+    badgeUpgrades.hidden = affordable === 0;
+    badgeUpgrades.textContent = String(affordable);
   }
 
-  function updateUnits(dt: number): void {
-    for (const unit of units) {
-      unit.progress += (unit.side === 'royal' ? 1 : -1) * unit.speed * dt;
-      const jitter = Math.sin((state.elapsed + unit.id) * 3) * 0.0009;
-      unit.progress += jitter;
-    }
+  function renderTrophiesPanel(): void {
+    const key = state.achievements.join(',');
+    badgeTrophies.textContent = `${state.achievements.length}/${ACHIEVEMENTS.length}`;
+    if (key === keys.trophies) return;
+    keys.trophies = key;
+    panels.trophies.innerHTML = `
+      <p class="kos-subhead">${state.achievements.length} of ${ACHIEVEMENTS.length} unlocked · +${state.achievements.length * 2}% to all production</p>
+      <div class="kos-trophies">${ACHIEVEMENTS.map((a) => {
+        const done = state.achievements.includes(a.id);
+        return `<div class="kos-trophy ${done ? 'is-done' : ''}"><span>${done ? '🏆' : '🔒'}</span><b>${done ? a.name : '???'}</b><small>${a.hint}</small></div>`;
+      }).join('')}</div>`;
+  }
 
-    for (let i = units.length - 1; i >= 0; i--) {
-      const unit = units[i];
-      if (unit.progress < -0.05 || unit.progress > 1.05 || unit.hp <= 0) units.splice(i, 1);
-    }
-
-    for (const a of units) {
-      for (const b of units) {
-        if (a === b || a.side === b.side || a.lane !== b.lane) continue;
-        if (Math.abs(a.progress - b.progress) < 0.045) {
-          a.hp -= b.power * dt * 0.35;
-          b.hp -= a.power * dt * 0.35;
-          if (Math.random() < dt * 3) {
-            const p = lanePoint(a.lane, (a.progress + b.progress) / 2);
-            burst(p.x, p.y, Math.random() > 0.5 ? 'gold' : 'pink', 2);
+  function renderOsPanel(): void {
+    const ready = canPrestige(state);
+    const pct = Math.min(100, (state.eraEarned / ERA_GOAL) * 100);
+    const key = `${state.era}|${state.policy}|${policyUnlocked(state)}|${ready}|${state.patches}|${prestigeGain(state)}`;
+    badgeOs.hidden = !(ready || (policyUnlocked(state) && !state.policy));
+    badgeOs.textContent = '!';
+    if (key !== keys.os) {
+      keys.os = key;
+      const policy = POLICIES.find((p) => p.id === state.policy);
+      panels.os.innerHTML = `
+        <div class="kos-os-card">
+          <p class="kos-subhead">Currently running</p>
+          <h3>${eraName(state.era)}</h3>
+          <p>Patches installed: <b>${state.patches}</b> (+${state.patches * 10}% to everything)</p>
+        </div>
+        <div class="kos-os-card">
+          <p class="kos-subhead">Royal Policy (one per era)</p>
+          ${
+            policy
+              ? `<h3>${policy.name}</h3><p>${policy.effect}</p>`
+              : policyUnlocked(state)
+                ? `<p>You can sign a policy now.</p><button type="button" class="kos-btn kos-btn-primary" data-action="policy">Choose a policy</button>`
+                : `<p>Unlocks after earning 1,000 gold this era.</p>`
           }
+        </div>
+        <div class="kos-os-card kos-os-next ${ready ? 'is-ready' : ''}">
+          <p class="kos-subhead">Next version</p>
+          <h3>${eraName(state.era + 1)}</h3>
+          <p>Earn 1M gold this era to install it. You restart, but keep trophies and gain <b>patches</b> (+10% each, forever).</p>
+          <div class="kos-meter"><i data-os-fill></i></div>
+          <p class="kos-muted" data-os-progress></p>
+          <button type="button" class="kos-btn kos-btn-primary" data-action="install" ${ready ? '' : 'disabled'}>${ready ? `Install for +${prestigeGain(state)} patches` : 'Not ready yet'}</button>
+        </div>`;
+    }
+    const fill = panels.os.querySelector<HTMLElement>('[data-os-fill]');
+    if (fill) fill.style.width = `${pct}%`;
+    setText(panels.os.querySelector('[data-os-progress]'), `${formatNumber(state.eraEarned)} / ${formatNumber(ERA_GOAL)} gold earned this era`);
+  }
+
+  function renderRealm(): void {
+    const parts: string[] = [];
+    let key = '';
+    for (const b of BUILDINGS) {
+      const n = state.buildings[b.id];
+      const shown = Math.min(n, b.id === 'peasant' ? 10 : 6);
+      key += `${b.id}${shown}${n > shown ? '+' : ''};`;
+      for (let i = 0; i < shown; i++) parts.push(`<span class="kos-realm-item" data-k="${b.id}-${i}">${ICONS[b.id]}</span>`);
+      if (n > shown) parts.push(`<span class="kos-realm-more">+${n - shown}</span>`);
+    }
+    if (key === realmKey) return;
+    const previous = new Set(Array.from(realm.querySelectorAll<HTMLElement>('[data-k]')).map((el) => el.dataset.k));
+    realmKey = key;
+    realm.innerHTML = parts.length ? parts.join('') : '<span class="kos-realm-empty">Your realm is empty. Hire a Peasant!</span>';
+    if (previous.size || parts.length) {
+      for (const el of Array.from(realm.querySelectorAll<HTMLElement>('[data-k]'))) {
+        if (!previous.has(el.dataset.k)) el.classList.add('is-new');
+      }
+    }
+  }
+
+  function setText(el: Element | null, text: string): void {
+    if (el && el.textContent !== text) el.textContent = text;
+  }
+
+  // ------------------------------------------------------------------ assistant
+
+  function renderAssistant(): void {
+    let step: TutorialStep | null = null;
+    if (ui.tutorial >= 0 && ui.tutorial < TUTORIAL.length) {
+      const current = TUTORIAL[ui.tutorial];
+      if (current.done?.(state)) {
+        ui.tutorial += 1;
+        saveUi();
+        return renderAssistant();
+      }
+      step = current;
+    }
+    root.querySelectorAll('.kos-spotlight').forEach((el) => el.classList.remove('kos-spotlight'));
+    if (!step || !booted || !modal.hidden) {
+      assistant.hidden = true;
+      return;
+    }
+    assistant.hidden = false;
+    if (assistantText.innerHTML !== step.text) assistantText.innerHTML = step.text;
+    assistantNext.hidden = !step.button;
+    assistantNext.textContent = step.button ?? '';
+    if (step.target) {
+      const target = root.querySelector(step.target);
+      target?.classList.add('kos-spotlight');
+      if (step.target.startsWith('[data-building') && ui.tab !== 'build') setTab('build');
+    }
+  }
+
+  // ------------------------------------------------------------------ HUD
+
+  function renderHud(): void {
+    const gps = goldPerSecond(state);
+    setText(goldEl, formatNumber(state.gold));
+    setText(gpsEl, formatNumber(gps));
+    boostEl.hidden = !boostActive(state);
+    setText(eraChip, `${eraName(state.era)}${state.patches ? ` · ${state.patches} patches` : ''}`);
+    setText(taskEra, eraName(state.era).replace(/ \(.*\)$/, ''));
+    setText(clickValueEl, `+${formatNumber(clickValue(state))}`);
+    setText(root.querySelector('[data-stat="click"]'), `+${formatNumber(clickValue(state))} gold`);
+    setText(root.querySelector('[data-stat="buildings"]'), String(BUILDINGS.reduce((n, b) => n + state.buildings[b.id], 0)));
+    setText(root.querySelector('[data-stat="mult"]'), `×${globalMultiplier(state).toFixed(2)}`);
+    setText(root.querySelector('[data-stat="time"]'), formatDuration(state.eraTime));
+    setText(root.querySelector('[data-stat="lifetime"]'), formatNumber(state.lifetimeEarned));
+    const goal = currentGoal(state);
+    setText(goalText, goal.text);
+    goalFill.style.width = `${Math.round(goal.progress * 100)}%`;
+    goalBar.classList.toggle('is-install', goal.id === 'install');
+    renderBuildPanel();
+    renderUpgradesPanel();
+    renderTrophiesPanel();
+    renderOsPanel();
+    renderRealm();
+    renderAssistant();
+    const now = new Date();
+    setText(clockEl, `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+    renderMute();
+
+    // One-time prompts for the big moments.
+    if (booted && modal.hidden) {
+      if (policyUnlocked(state) && !state.policy && !ui.policyPrompted) showPolicyModal();
+      else if (canPrestige(state) && !ui.installPrompted) {
+        ui.installPrompted = true;
+        saveUi();
+        toast('Next Kingdom OS ready!', 'Open the Next OS tab to install it and gain patches.', 'trophy');
+        play('trophy');
+      }
+    }
+  }
+
+  function renderMute(): void {
+    setText(muteButton, sound.muted ? '🔇' : '🔊');
+    muteButton.setAttribute('aria-pressed', String(sound.muted));
+    muteButton.setAttribute('aria-label', 'Mute sound');
+    muteButton.title = sound.muted ? 'Sound is off' : 'Sound is on';
+  }
+
+  // ------------------------------------------------------------------ loop
+
+  function advance(seconds: number): void {
+    // Fixed steps keep frenzy boundaries and achievements honest.
+    let remaining = seconds;
+    while (remaining > 0) {
+      const step = Math.min(1, remaining);
+      state = tick(state, step);
+      remaining -= step;
+      if (booted && baseGoldPerSecond(state) > 0) {
+        mailTimer -= step;
+        if (mailTimer <= 0) {
+          mailTimer = mailInterval(state) * (0.75 + Math.random() * 0.5);
+          spawnMail();
         }
       }
     }
-  }
-
-  function updateEffects(dt: number): void {
-    if (state.finalProtocolStarted) state.finalProtocolAge = Math.min(state.finalProtocolAge + dt, 30);
-    for (const node of nodes) node.pulse = Math.max(0, node.pulse - dt * 1.4);
-    if (ceremony) {
-      ceremony.age += dt;
-      if (ceremony.age > ceremony.duration) ceremony = null;
-    }
-    for (let i = floaters.length - 1; i >= 0; i--) {
-      floaters[i].age += dt;
-      if (floaters[i].age > 1.7) floaters.splice(i, 1);
-    }
-    for (let i = sparks.length - 1; i >= 0; i--) {
-      const spark = sparks[i];
-      spark.x += spark.vx * dt;
-      spark.y += spark.vy * dt;
-      spark.vy += 0.03 * dt;
-      spark.life -= dt;
-      if (spark.life <= 0) sparks.splice(i, 1);
+    const r = checkAchievements(state);
+    state = r.state;
+    for (const a of r.unlocked) {
+      toast(`🏆 Trophy: ${a.name}`, `${a.hint} (+2% production)`, 'trophy');
+      play('trophy');
     }
   }
 
-  function endGame(result: 'victory' | 'defeat'): void {
-    state.screen = 'ended';
-    state.ending = result;
-    log(result === 'victory' ? 'Victory: the glass kingdom shipped a beautiful proof.' : 'Defeat: Shade Threat filled the desktop.');
+  function frame(now: number): void {
+    const dt = Math.min(0.25, Math.max(0, (now - last) / 1000));
+    last = now;
+    if (booted) {
+      advance(dt * timeScale);
+      sinceSave += dt;
+      if (sinceSave >= AUTOSAVE_SECONDS) save();
+    }
+    sinceHud += dt;
+    if (sinceHud >= 0.1) {
+      sinceHud = 0;
+      renderHud();
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  // ------------------------------------------------------------------ input
+
+  function boot(): void {
+    if (booted) return;
+    booted = true;
+    sound.unlock();
+    play('boot');
+    shell.dataset.screen = 'desktop';
+    desktop.removeAttribute('aria-hidden');
+    setTab(ui.tab);
     renderHud();
+    if (offlineReport) showWelcomeBack(offlineReport);
+    else coin.focus({ preventScroll: true });
   }
 
-  function lanePoint(lane: number, progress: number): { x: number; y: number } {
-    const [from, to] = EDGES[lane % EDGES.length];
-    const a = nodes[from];
-    const b = nodes[to];
-    return {
-      x: a.x + (b.x - a.x) * progress,
-      y: a.y + (b.y - a.y) * progress,
+  function onClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    sound.unlock();
+
+    if (!startMenu.hidden && !target.closest('[data-startmenu]') && !target.closest('[data-action="start"]')) toggleStart(false);
+
+    if (target.closest('[data-coin]')) return doClick(event);
+
+    const building = target.closest<HTMLElement>('[data-building]');
+    if (building) return doBuyBuilding(building.dataset.building as BuildingId, building);
+
+    const upgrade = target.closest<HTMLElement>('[data-upgrade]');
+    if (upgrade) return doBuyUpgrade(upgrade.dataset.upgrade as string, upgrade);
+
+    const policy = target.closest<HTMLElement>('[data-policy]');
+    if (policy) return doPolicy(policy.dataset.policy as PolicyId);
+
+    const tab = target.closest<HTMLElement>('[data-tab]');
+    if (tab) {
+      play('open');
+      return setTab(tab.dataset.tab as Tab);
+    }
+
+    if (target === modal) return closeModal();
+
+    const action = target.closest<HTMLElement>('[data-action]')?.dataset.action;
+    switch (action) {
+      case 'boot':
+        return boot();
+      case 'start':
+        return toggleStart(startMenu.hidden);
+      case 'mute':
+      case 'mute-menu':
+        sound.setMuted(!sound.muted);
+        ui.muted = sound.muted;
+        saveUi();
+        sound.unlock();
+        play('open');
+        toggleStart(false);
+        renderMute();
+        if (!sound.muted) toast('Sound on', 'Clicks, coins and fanfares are back.', 'info');
+        return;
+      case 'help':
+        toggleStart(false);
+        return showHelp();
+      case 'save':
+        toggleStart(false);
+        save(true);
+        toast('Kingdom saved', 'Autosave also runs every 10 seconds.', 'good');
+        return;
+      case 'reset':
+        toggleStart(false);
+        return showReset();
+      case 'reset-confirm':
+        storageRemove(SAVE_KEY);
+        storageRemove(UI_KEY);
+        state = createState();
+        Object.assign(ui, { tutorial: 0, policyPrompted: false, installPrompted: false, tab: 'build' });
+        saveUi();
+        for (const k of Object.keys(keys) as Tab[]) keys[k] = '';
+        seenBuildings.clear();
+        seenUpgrades.clear();
+        realmKey = '';
+        mailTimer = 25;
+        closeModal();
+        save();
+        setTab('build');
+        toast('Fresh install', 'A brand-new kingdom. Click the Royal Coin!', 'info');
+        return;
+      case 'close-modal':
+        return closeModal();
+      case 'policy':
+        return showPolicyModal();
+      case 'install':
+        return showInstallModal();
+      case 'install-confirm':
+        return doInstall();
+      case 'assistant-next':
+        ui.tutorial += 1;
+        saveUi();
+        play('open');
+        sinceHud = 1;
+        return;
+      case 'assistant-skip':
+        ui.tutorial = -1;
+        saveUi();
+        sinceHud = 1;
+        return;
+    }
+  }
+
+  function toggleStart(open: boolean): void {
+    startMenu.hidden = !open;
+    startButton.setAttribute('aria-expanded', String(open));
+    startButton.classList.toggle('is-active', open);
+    if (open) {
+      play('open');
+      startMenu.querySelector<HTMLElement>('button, a')?.focus();
+    }
+  }
+
+  function onKey(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      if (!modal.hidden) closeModal();
+      else if (!startMenu.hidden) toggleStart(false);
+      return;
+    }
+    if (!booted && (event.key === 'Enter' || event.key === ' ') && document.activeElement === document.body) {
+      event.preventDefault();
+      boot();
+    }
+  }
+
+  function onHide(): void {
+    if (booted) save();
+  }
+
+  // Keep the coin from double-firing on touch (pointer + click) while still
+  // supporting keyboard activation through the native click event.
+  shell.addEventListener('click', onClick);
+  window.addEventListener('keydown', onKey);
+  window.addEventListener('pagehide', onHide);
+  document.addEventListener('visibilitychange', onHide);
+
+  // Debug hook: dev server, or a build made with VITE_KINGDOM_DEBUG=1. Never in the shipped build.
+  if (import.meta.env.DEV || import.meta.env.VITE_KINGDOM_DEBUG === '1') {
+    (window as unknown as { __kingdom?: unknown }).__kingdom = {
+      advance: (seconds: number) => {
+        advance(seconds);
+        sinceHud = 1;
+      },
+      setTimeScale: (n: number) => {
+        timeScale = Math.max(0, n);
+      },
+      state: () => JSON.parse(JSON.stringify(state)) as KingdomState,
+      save: () => save(),
+      mail: () => spawnMail(),
     };
   }
 
-  function resize(): void {
-    const rect = shell.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.floor(rect.width * dpr);
-    canvas.height = Math.floor(rect.height * dpr);
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-
-  function draw(): void {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    ctx.clearRect(0, 0, w, h);
-
-    drawBackground(w, h);
-    drawWorld(w, h);
-    if (debug) drawDebug(w, h);
-  }
-
-  function drawBackground(w: number, h: number): void {
-    const gradient = ctx.createLinearGradient(0, 0, w, h);
-    gradient.addColorStop(0, '#10c8ff');
-    gradient.addColorStop(0.42, '#88f2ff');
-    gradient.addColorStop(1, '#65ffbd');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, w, h);
-
-    if (background.complete && background.naturalWidth > 0) {
-      const scale = Math.max(w / background.naturalWidth, h / background.naturalHeight);
-      const iw = background.naturalWidth * scale;
-      const ih = background.naturalHeight * scale;
-      ctx.globalAlpha = 0.88;
-      ctx.drawImage(background, (w - iw) * 0.55, (h - ih) * 0.48, iw, ih);
-      ctx.globalAlpha = 1;
-    }
-
-    ctx.save();
-    ctx.globalAlpha = 0.28;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    for (let x = -80; x < w + 160; x += 96) {
-      ctx.beginPath();
-      ctx.moveTo(x + Math.sin(state.elapsed * 0.3) * 12, 0);
-      ctx.lineTo(x - 220, h);
-      ctx.stroke();
-    }
-    for (let y = 40; y < h; y += 110) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y + Math.cos(state.elapsed * 0.2) * 18);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    const veil = ctx.createLinearGradient(0, 0, 0, h);
-    veil.addColorStop(0, 'rgba(255,255,255,0.18)');
-    veil.addColorStop(0.5, 'rgba(255,255,255,0.02)');
-    veil.addColorStop(1, 'rgba(10,60,120,0.22)');
-    ctx.fillStyle = veil;
-    ctx.fillRect(0, 0, w, h);
-  }
-
-  function drawWorld(w: number, h: number): void {
-    const mapRect = getMapRect(w, h);
-    ctx.save();
-    ctx.translate(mapRect.x, mapRect.y);
-    ctx.scale(mapRect.w, mapRect.h);
-
-    drawRoutes();
-    drawProgramSpotlight();
-    for (const unit of units) drawUnit(unit);
-    for (const node of nodes) drawNode(node);
-    drawCompletedCrowns();
-    if (ceremony) drawCeremony(ceremony);
-    for (const spark of sparks) drawSpark(spark);
-    for (const floater of floaters) drawFloater(floater);
-
-    ctx.restore();
-  }
-
-  function getMapRect(w: number, h: number): { x: number; y: number; w: number; h: number } {
-    const compact = w < 900;
-    return compact
-      ? { x: w * 0.04, y: h * 0.20, w: w * 0.92, h: h * 0.54 }
-      : { x: w * 0.21, y: h * 0.10, w: w * 0.72, h: h * 0.73 };
-  }
-
-  function drawRoutes(): void {
-    ctx.lineCap = 'round';
-    for (let i = 0; i < EDGES.length; i++) {
-      drawRoutePath(i);
-      ctx.strokeStyle = 'rgba(255,255,255,0.72)';
-      ctx.lineWidth = 0.014;
-      ctx.stroke();
-      ctx.strokeStyle = i % 2 === 0 ? 'rgba(18,224,255,0.50)' : 'rgba(255,228,62,0.36)';
-      ctx.lineWidth = 0.006;
-      ctx.stroke();
-    }
-  }
-
-  function drawRoutePath(index: number): void {
-    const [from, to] = EDGES[index];
-    const a = nodes[from];
-    const b = nodes[to];
-    const mx = (a.x + b.x) / 2;
-    const my = (a.y + b.y) / 2 - 0.05;
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.quadraticCurveTo(mx, my, b.x, b.y);
-  }
-
-  function toneColor(tone: Spark['tone']): string {
-    if (tone === 'aqua') return '#3ff7ff';
-    if (tone === 'gold') return '#ffe85c';
-    return '#ff5df1';
-  }
-
-  function drawProgramSpotlight(): void {
-    if (state.screen !== 'playing' && state.screen !== 'paused') return;
-    const plan = currentPlan();
-    if (state.completedPlans.includes(plan.id)) return;
-    const target = nodes.find((node) => node.id === plan.targetNodeId);
-    if (!target) return;
-
-    const color = toneColor(plan.tone);
-    const finalActive = isFinalProtocolActive();
-    const pulse = (Math.sin(state.elapsed * 3.4) + 1) / 2;
-    const surge = finalActive ? 0.5 + Math.sin(state.elapsed * 5.2) * 0.5 : 0;
-    const intro = finalActive ? clamp(state.finalProtocolAge / 2.4, 0, 1) : 0;
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.globalAlpha = 0.46 + pulse * 0.18 + intro * 0.16;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 0.045 + pulse * 0.060 + intro * 0.070;
-    for (const index of plan.routeEdges) {
-      drawRoutePath(index);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 0.014 + pulse * 0.004 + intro * 0.006;
-      ctx.stroke();
-      if (finalActive) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.78)';
-        ctx.globalAlpha = 0.20 + surge * 0.28;
-        ctx.lineWidth = 0.025 + surge * 0.012;
-        ctx.stroke();
-        ctx.globalAlpha = 0.46 + pulse * 0.18 + intro * 0.16;
-      }
-    }
-
-    ctx.translate(target.x, target.y);
-    if (finalActive) {
-      ctx.globalAlpha = 0.34 + surge * 0.22;
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 0.010;
-      ctx.beginPath();
-      ctx.arc(0, 0, 0.138 + surge * 0.055, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 0.012;
-      ctx.beginPath();
-      ctx.arc(0, 0, 0.196 + intro * 0.06 + surge * 0.04, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    ctx.globalAlpha = 0.58 + intro * 0.12;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(0, 0, 0.058 + pulse * 0.014 + intro * 0.010, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = 'rgba(255,255,255,0.94)';
-    ctx.lineWidth = 0.006;
-    ctx.beginPath();
-    ctx.arc(0, 0, 0.086 + pulse * 0.018, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(255,255,255,0.90)';
-    roundedRect(-0.008, -0.102, 0.016, 0.040, 0.006);
-    ctx.fill();
-    ctx.fillStyle = color;
-    ctx.fillRect(-0.008, -0.102, 0.034, 0.016);
-    ctx.strokeStyle = 'rgba(255,255,255,0.90)';
-    ctx.lineWidth = 0.003;
-    ctx.strokeRect(-0.008, -0.102, 0.034, 0.016);
-    ctx.restore();
-  }
-
-  function drawCompletedCrowns(): void {
-    for (const plan of plans()) {
-      if (!state.completedPlans.includes(plan.id)) continue;
-      const node = nodes.find((item) => item.id === plan.targetNodeId);
-      if (!node) continue;
-      drawCrownBadge(node.x + 0.054, node.y - 0.052, plan.tone);
-    }
-  }
-
-  function drawCrownBadge(x: number, y: number, tone: Spark['tone']): void {
-    const color = toneColor(tone);
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 0.045;
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.beginPath();
-    ctx.arc(0, 0, 0.030, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffd84f';
-    ctx.beginPath();
-    ctx.moveTo(-0.017, 0.010);
-    ctx.lineTo(-0.017, -0.010);
-    ctx.lineTo(-0.007, -0.002);
-    ctx.lineTo(0, -0.018);
-    ctx.lineTo(0.007, -0.002);
-    ctx.lineTo(0.017, -0.010);
-    ctx.lineTo(0.017, 0.010);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(7,49,77,0.42)';
-    ctx.lineWidth = 0.003;
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawCeremony(activeCeremony: Ceremony): void {
-    const node = nodes.find((item) => item.id === activeCeremony.nodeId);
-    if (!node) return;
-    const t = clamp(activeCeremony.age / activeCeremony.duration, 0, 1);
-    const color = toneColor(activeCeremony.tone);
-    const alpha = t < 0.72 ? 1 : 1 - (t - 0.72) / 0.28;
-
-    ctx.save();
-    ctx.translate(node.x, node.y);
-    ctx.globalAlpha = alpha;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 0.14;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 0.012;
-    ctx.beginPath();
-    ctx.arc(0, 0, 0.13 + t * 0.13, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, 0.19 + t * 0.12, 0, Math.PI * 2);
-    ctx.stroke();
-
-    drawCrownBadge(0, -0.148, activeCeremony.tone);
-    ctx.restore();
-  }
-
-  function drawNode(node: Node): void {
-    const color = node.owner === 'royal' ? '#3edcff' : node.owner === 'shade' ? '#ff4bd8' : '#ffe66d';
-    const radius = node.kind === 'castle' ? 0.054 : node.kind === 'portal' ? 0.048 : 0.039;
-    ctx.save();
-    ctx.translate(node.x, node.y);
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 0.055 + node.pulse * 0.08;
-
-    ctx.fillStyle = 'rgba(255,255,255,0.42)';
-    roundedRect(-radius * 1.28, -radius * 0.9, radius * 2.56, radius * 1.8, radius * 0.44);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.82)';
-    ctx.lineWidth = 0.006;
-    ctx.stroke();
-
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.95;
-    ctx.beginPath();
-    ctx.arc(0, 0, radius * (0.62 + node.pulse * 0.18), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    ctx.fillStyle = 'rgba(8,42,96,0.82)';
-    ctx.font = '700 0.020px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(node.label, 0, radius * 1.45);
-    ctx.restore();
-  }
-
-  function drawUnit(unit: Unit): void {
-    const point = lanePoint(unit.lane, unit.progress);
-    const sideOffset = unit.side === 'royal' ? -0.012 : 0.012;
-    const x = point.x;
-    const y = point.y + sideOffset + Math.sin((state.elapsed + unit.id) * 5) * 0.003;
-    const color = unit.side === 'royal' ? '#f7fcff' : '#8d22ff';
-    const trim = unit.side === 'royal' ? '#177bff' : '#ff4bd8';
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.shadowColor = trim;
-    ctx.shadowBlur = 0.025;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(0, 0, 0.014, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = trim;
-    ctx.fillRect(-0.010, -0.026, 0.020, 0.008);
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-    ctx.lineWidth = 0.003;
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawSpark(spark: Spark): void {
-    const color = spark.tone === 'aqua' ? '#3ff7ff' : spark.tone === 'gold' ? '#ffe85c' : '#ff5df1';
-    ctx.save();
-    ctx.globalAlpha = clamp(spark.life, 0, 1);
-    ctx.fillStyle = color;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 0.04;
-    ctx.beginPath();
-    ctx.arc(spark.x, spark.y, 0.006, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawFloater(floater: FloatingText): void {
-    const color = floater.tone === 'good' ? '#007c8f' : floater.tone === 'bad' ? '#9d0473' : '#334155';
-    ctx.save();
-    ctx.globalAlpha = 1 - floater.age / 1.7;
-    ctx.translate(floater.x, floater.y - floater.age * 0.035);
-    ctx.fillStyle = 'rgba(255,255,255,0.82)';
-    roundedRect(-0.05, -0.020, 0.10, 0.032, 0.012);
-    ctx.fill();
-    ctx.fillStyle = color;
-    ctx.font = '800 0.017px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(floater.text, 0, 0.002);
-    ctx.restore();
-  }
-
-  function drawDebug(w: number, h: number): void {
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,20,30,0.65)';
-    ctx.fillRect(12, h - 92, 290, 76);
-    ctx.fillStyle = '#d8fbff';
-    ctx.font = '12px ui-monospace, monospace';
-    ctx.fillText(`elapsed=${state.elapsed.toFixed(1)} screen=${state.screen} speed=${state.speed}`, 24, h - 64);
-    ctx.fillText(`units=${units.length} sparks=${sparks.length} mode=${state.selectedMode}`, 24, h - 42);
-    ctx.fillText(`glory=${state.glory.toFixed(1)} threat=${state.threat.toFixed(1)}`, 24, h - 20);
-    ctx.restore();
-  }
-
-  function roundedRect(x: number, y: number, w: number, h: number, r: number): void {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-  }
-
-  function renderHud(): void {
-    shell.dataset.screen = state.screen;
-    if (isFinalProtocolActive()) shell.dataset.finalProtocol = 'true';
-    else delete shell.dataset.finalProtocol;
-    const order = councilOrder();
-    speedButton.textContent = `${state.speed}x`;
-    pauseButton.textContent = state.screen === 'paused' ? 'Resume' : 'Pause';
-
-    resourceStrip.innerHTML = `
-      ${renderMeter('glory', 'Glory', state.glory, '#10bce3')}
-      ${renderMeter('threat', 'Threat', state.threat, '#f42fbf')}
-      ${renderMeter('focus', 'Focus', state.focus, '#ffe14d')}
-      ${renderChip('crowns', isFinalProtocolActive() ? `Final ${state.crowns}/3` : `${state.crowns}/3`)}
-      ${renderChip('gold', fmt(state.resources.gold))}
-      ${renderChip('grain', fmt(state.resources.grain))}
-      ${renderChip('crystal', fmt(state.resources.crystal))}
-      ${renderChip('morale', fmt(state.resources.morale))}
-    `;
-
-    commandPanel.innerHTML = `
-      <header>
-        <span>Royal Desktop</span>
-        <strong>Day ${state.day}</strong>
-      </header>
-      ${renderPlanPanel(order)}
-      <div class="k2k-edict-grid">
-        ${edicts().map(renderEdict).join('')}
-      </div>
-      <div class="k2k-mini-status">
-        <span>Workers <b>${state.workers}</b></span>
-        <span>Army <b>${state.army}</b></span>
-        <span>Wards <b>${state.wards}</b></span>
-        <span>Insight <b>${state.insight}</b></span>
-        <span>Mode <b>${state.selectedMode === 'afk' ? 'AFK' : 'Active'}</b></span>
-        <span>Commission <b>${commissionLabel()}</b></span>
-      </div>
-    `;
-
-    advisorPanel.innerHTML = `
-      <header>
-        <span>Advisor Feed</span>
-        <strong>${state.ending ? titleCase(state.ending) : isFinalProtocolActive() ? 'Final Crown' : state.screen === 'playing' ? 'Live' : 'Ready'}</strong>
-      </header>
-      ${renderCouncilOrder(order)}
-      <ol>
-        <li class="k2k-feed-priority">${isFinalProtocolActive() ? 'Final Crown' : currentPlan().title}: ${currentPlan().objective}</li>
-        ${state.log.map((entry) => `<li>${entry}</li>`).join('')}
-      </ol>
-    `;
-
-    overlay.innerHTML = renderOverlay();
-  }
-
-  function renderMeter(id: string, label: string, value: number, color: string): string {
-    return `
-      <article class="k2k-meter" data-meter="${id}" style="--meter:${clamp(value, 0, 100)}; --meter-color:${color}">
-        <span>${label}</span>
-        <strong>${fmt(value)}</strong>
-        <i></i>
-      </article>
-    `;
-  }
-
-  function renderChip(label: string, value: string): string {
-    return `
-      <article class="k2k-chip" data-kind="${label}">
-        <span>${titleCase(label)}</span>
-        <strong>${value}</strong>
-      </article>
-    `;
-  }
-
-  function renderCouncilOrder(order: CouncilOrder): string {
-    return `
-      <article class="k2k-council-order is-${order.severity}" aria-label="Council order">
-        <span>Council order</span>
-        <strong>${order.title}</strong>
-        <p>${order.body}</p>
-      </article>
-    `;
-  }
-
-  function renderOpeningDecree(): string {
-    return `
-      <article class="k2k-opening-decree" aria-label="First decree">
-        <span>First decree</span>
-        <strong>Press Harvest Boom</strong>
-        <p>Start farms, workers, and the first crown path.</p>
-      </article>
-    `;
-  }
-
-  function renderPlanPanel(order: CouncilOrder): string {
-    const plan = currentPlan();
-    const progress = Math.round(plan.progress() * 100);
-    const finalActive = isFinalProtocolActive();
-    const commission = activeCommission();
-    const openingDecree = isOpeningDecreeActive();
-    const hint = finalActive
-      ? 'Last crown active. Spend the restored Focus before Shade pressure converts the surge.'
-      : commission
-        ? `${commission.shortTitle} commission active. ${commission.benefit}`
-        : plan.hint;
-    return `
-      <section class="k2k-plan-panel" aria-label="Current royal program">
-        <div class="k2k-plan-current ${finalActive ? 'is-final' : ''}">
-          <span>${finalActive ? 'Final crown protocol' : 'Current program'}</span>
-          <strong>${plan.title}</strong>
-          <p>${plan.objective}</p>
-          ${openingDecree ? renderOpeningDecree() : renderCouncilOrder(order)}
-          <em>${hint}</em>
-          <i style="--plan-progress:${progress}"></i>
-        </div>
-        <div class="k2k-plan-grid" aria-label="Royal programs">
-          ${plans()
-            .map((item) => {
-              const done = state.completedPlans.includes(item.id);
-              const active = item.id === state.activePlan;
-              return `
-                <button data-plan="${item.id}" class="${active ? 'is-active' : ''} ${done ? 'is-done' : ''}" type="button" ${done ? 'disabled' : ''}>
-                  <b>${done ? 'OK' : `${Math.round(item.progress() * 100)}%`}</b>
-                  <span>${item.shortTitle}</span>
-                </button>
-              `;
-            })
-            .join('')}
-        </div>
-      </section>
-    `;
-  }
-
-  function renderEdict(edict: Edict): string {
-    const cd = cooldowns.get(edict.id) ?? 0;
-    const affordable = hasEnough(state, edict.cost);
-    const disabled = state.screen !== 'playing' || cd > 0 || !affordable;
-    const reason = cd > 0 ? `${Math.ceil(cd)}s` : affordable ? resourceText(edict.cost) : `Need ${resourceText(edict.cost)}`;
-    const openingDecree = isOpeningDecreeActive() && edict.id === 'harvest';
-    return `
-      <button class="k2k-edict ${openingDecree ? 'is-opening-decree' : ''}" data-edict="${edict.id}" type="button" ${disabled ? 'disabled' : ''}>
-        <span class="k2k-hotkey">${edict.hotkey}</span>
-        <strong>${edict.title}</strong>
-        <small>${edict.body}</small>
-        <em>${reason}</em>
-      </button>
-    `;
-  }
-
-  function renderOverlay(): string {
-    if (state.screen === 'menu') {
-      return `
-        <div class="k2k-card k2k-title-card">
-          <p class="k2k-kicker">Minimum Beautiful Playable</p>
-          <h1>Kingdom OS 2000</h1>
-          <p class="k2k-lede">A glassy idle RTS command desk: pick a royal program, spend Focus on edicts, and earn 3 crowns before Shade Threat fills the desktop.</p>
-          <div class="k2k-actions">
-            <button data-action="mode" type="button">Start</button>
-            <button data-action="instant" type="button">Quick AFK Run</button>
-          </div>
-        </div>
-      `;
-    }
-
-    if (state.screen === 'mode') {
-      return `
-        <div class="k2k-card k2k-mode-card">
-          <p class="k2k-kicker">Choose first playable loop</p>
-          <h2>How should the kingdom behave?</h2>
-          <div class="k2k-mode-grid">
-            <button data-mode="afk" type="button">
-              <strong>AFK Sovereign</strong>
-              <span>Slower pressure. Check the current program, spend Focus, and let the kingdom breathe between edicts.</span>
-            </button>
-            <button data-mode="active" type="button">
-              <strong>Active Steward</strong>
-              <span>Faster incidents. Good for a short test, but Focus makes every click a choice.</span>
-            </button>
-          </div>
-        </div>
-      `;
-    }
-
-    if (state.screen === 'paused') {
-      return `
-        <div class="k2k-card k2k-pause-card">
-          <p class="k2k-kicker">System paused</p>
-          <h2>Kingdom suspended</h2>
-          <p>Nothing moves while the royal desktop is paused.</p>
-          <div class="k2k-actions">
-            <button data-action="resume" type="button">Resume</button>
-            <button data-action="restart" type="button">Restart</button>
-            <button data-action="menu" type="button">Menu</button>
-          </div>
-        </div>
-      `;
-    }
-
-    if (state.screen === 'commission') {
-      return `
-        <div class="k2k-card k2k-commission-card">
-          <p class="k2k-kicker">Royal commission</p>
-          <h2>Choose the next bargain.</h2>
-          <p>One charter bends the middle game before the final crown protocol begins.</p>
-          <div class="k2k-commission-grid">
-            ${commissions()
-              .map(
-                (commission) => `
-                  <button data-commission="${commission.id}" type="button">
-                    <strong>${commission.title}</strong>
-                    <span>${commission.benefit}</span>
-                    <em>${commission.tradeoff}</em>
-                  </button>
-                `,
-              )
-              .join('')}
-          </div>
-        </div>
-      `;
-    }
-
-    if (state.screen === 'ended') {
-      const victory = state.ending === 'victory';
-      return `
-        <div class="k2k-card k2k-end-card ${victory ? 'is-victory' : 'is-defeat'}">
-          <p class="k2k-kicker">${victory ? 'Victory proof' : 'Recovery proof'}</p>
-          <h2>${victory ? 'The glass kingdom shipped.' : 'Shade filled the desktop.'}</h2>
-          <p>${victory ? 'All three royal programs reached proof. You balanced economy, patrol pressure, and the crystal rite.' : 'The loop has failure pressure. Pick one program at a time, keep Focus for wards, and do not spend every cooldown blindly.'}</p>
-          <div class="k2k-scoreline">
-            <span>Crowns <b>${state.crowns}/3</b></span>
-            <span>Glory <b>${fmt(state.glory)}</b></span>
-            <span>Threat <b>${fmt(state.threat)}</b></span>
-            <span>Day <b>${state.day}</b></span>
-          </div>
-          <div class="k2k-actions">
-            <button data-action="restart" type="button">Rematch</button>
-            <button data-action="mode" type="button">Mode Select</button>
-          </div>
-        </div>
-      `;
-    }
-
-    return '';
-  }
-
-  function handleClick(event: MouseEvent): void {
-    const target = event.target as HTMLElement | null;
-    if (!target) return;
-    const action = target.closest<HTMLElement>('[data-action]')?.dataset.action;
-    const edict = target.closest<HTMLElement>('[data-edict]')?.dataset.edict as EdictId | undefined;
-    const mode = target.closest<HTMLElement>('[data-mode]')?.dataset.mode as 'afk' | 'active' | undefined;
-    const plan = target.closest<HTMLElement>('[data-plan]')?.dataset.plan as PlanId | undefined;
-    const commission = target.closest<HTMLElement>('[data-commission]')?.dataset.commission as CommissionId | undefined;
-
-    if (state.screen === 'commission' && !commission && action !== 'restart' && action !== 'menu') return;
-
-    if (edict) {
-      castEdict(edict);
-      return;
-    }
-
-    if (commission) {
-      chooseCommission(commission);
-      return;
-    }
-
-    if (mode) {
-      resetGame(mode);
-      return;
-    }
-
-    if (plan && !state.completedPlans.includes(plan)) {
-      state.activePlan = plan;
-      const selected = currentPlan();
-      log(`Program selected: ${selected.title}. ${selected.hint}`);
-      checkPlanCompletion();
-      renderHud();
-      return;
-    }
-
-    if (action === 'mode') {
-      state.screen = 'mode';
-      renderHud();
-      return;
-    }
-    if (action === 'instant') {
-      resetGame('afk');
-      return;
-    }
-    if (action === 'pause') {
-      if (state.screen === 'playing') {
-        state.pausedBeforeOverlay = 'playing';
-        state.screen = 'paused';
-      } else if (state.screen === 'paused') {
-        state.screen = state.pausedBeforeOverlay;
-      }
-      renderHud();
-      return;
-    }
-    if (action === 'resume') {
-      state.screen = 'playing';
-      renderHud();
-      return;
-    }
-    if (action === 'restart') {
-      resetGame(state.selectedMode);
-      return;
-    }
-    if (action === 'speed') {
-      state.speed = state.speed === 1 ? 2 : state.speed === 2 ? 4 : 1;
-      renderHud();
-      return;
-    }
-    if (action === 'menu') {
-      state.screen = 'menu';
-      state.ending = null;
-      renderHud();
-    }
-  }
-
-  function handleKey(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
-      if (state.screen === 'playing') state.screen = 'paused';
-      else if (state.screen === 'paused') state.screen = 'playing';
-      renderHud();
-      return;
-    }
-    if (event.key.toLowerCase() === 'r') {
-      resetGame(state.selectedMode);
-      return;
-    }
-    if (event.key.toLowerCase() === '`') {
-      debug = !debug;
-      return;
-    }
-    const byKey = edicts().find((edict) => edict.hotkey.toLowerCase() === event.key.toLowerCase());
-    if (byKey) castEdict(byKey.id);
-  }
-
-  function loop(now: number): void {
-    const dt = Math.min(0.05, (now - lastFrame) / 1000);
-    lastFrame = now;
-    tick(dt);
-    draw();
-    if (state.screen === 'playing') renderHud();
-    raf = requestAnimationFrame(loop);
-  }
-
-  window.addEventListener('resize', resize);
-  shell.addEventListener('click', handleClick);
-  window.addEventListener('keydown', handleKey);
-  background.addEventListener('load', draw);
-
-  const playParam = new URLSearchParams(window.location.search).get('play');
-  resize();
-  if (playParam === 'active' || playParam === 'afk') resetGame(playParam);
-  else renderHud();
-  raf = requestAnimationFrame(loop);
+  setTab(ui.tab);
+  renderHud();
+  if (new URLSearchParams(window.location.search).has('play')) boot();
+  else $<HTMLButtonElement>('[data-action="boot"]').focus({ preventScroll: true });
+  raf = requestAnimationFrame(frame);
 
   return () => {
     cancelAnimationFrame(raf);
-    window.removeEventListener('resize', resize);
-    shell.removeEventListener('click', handleClick);
-    window.removeEventListener('keydown', handleKey);
+    if (booted) save();
+    shell.removeEventListener('click', onClick);
+    window.removeEventListener('keydown', onKey);
+    window.removeEventListener('pagehide', onHide);
+    document.removeEventListener('visibilitychange', onHide);
   };
 }
