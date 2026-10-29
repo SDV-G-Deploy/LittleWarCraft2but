@@ -472,6 +472,20 @@ button {
 .kos-realm-more { align-self: center; padding: 0 4px; font-size: 12px; font-weight: 700; color: var(--kos-ink-soft); }
 .kos-realm-empty { align-self: center; font-size: 13px; color: var(--kos-ink-soft); }
 
+.kos-stats {
+  width: 100%;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+}
+
+.kos-stats div { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dotted rgba(11, 61, 145, 0.18); }
+.kos-stats div:last-child { border-bottom: 0; }
+.kos-stats dt { color: var(--kos-ink-soft); }
+.kos-stats dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+
 @keyframes kos-pop {
   from { transform: scale(0) translateY(10px); opacity: 0; }
   to { transform: none; opacity: 1; }
@@ -1061,6 +1075,7 @@ button {
   .kos-coin-value { font-size: 11px; }
   .kos-realm { grid-area: realm; min-height: 30px; max-height: 64px; overflow: hidden; padding: 4px; justify-content: flex-start; }
   .kos-realm-item svg { width: 18px; height: 18px; }
+  .kos-stats { display: none; }
 
   .kos-tabs button { font-size: 13px; min-height: 40px; }
   .kos-row { min-height: 58px; padding: 6px 8px; }

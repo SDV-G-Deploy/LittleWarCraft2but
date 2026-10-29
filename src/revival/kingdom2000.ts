@@ -233,6 +233,13 @@ export function runKingdom2000(root: HTMLElement): () => void {
               <span class="kos-coin-value" data-click-value>+1</span>
             </button>
             <div class="kos-realm" data-realm aria-label="Your realm"></div>
+            <dl class="kos-stats" aria-label="Kingdom stats">
+              <div><dt>Per click</dt><dd data-stat="click"></dd></div>
+              <div><dt>Buildings</dt><dd data-stat="buildings"></dd></div>
+              <div><dt>Bonus multiplier</dt><dd data-stat="mult"></dd></div>
+              <div><dt>Time this era</dt><dd data-stat="time"></dd></div>
+              <div><dt>Gold earned (all eras)</dt><dd data-stat="lifetime"></dd></div>
+            </dl>
           </div>
         </section>
 
@@ -888,6 +895,11 @@ export function runKingdom2000(root: HTMLElement): () => void {
     setText(eraChip, `${eraName(state.era)}${state.patches ? ` · ${state.patches} patches` : ''}`);
     setText(taskEra, eraName(state.era).replace(/ \(.*\)$/, ''));
     setText(clickValueEl, `+${formatNumber(clickValue(state))}`);
+    setText(root.querySelector('[data-stat="click"]'), `+${formatNumber(clickValue(state))} gold`);
+    setText(root.querySelector('[data-stat="buildings"]'), String(BUILDINGS.reduce((n, b) => n + state.buildings[b.id], 0)));
+    setText(root.querySelector('[data-stat="mult"]'), `×${globalMultiplier(state).toFixed(2)}`);
+    setText(root.querySelector('[data-stat="time"]'), formatDuration(state.eraTime));
+    setText(root.querySelector('[data-stat="lifetime"]'), formatNumber(state.lifetimeEarned));
     const goal = currentGoal(state);
     setText(goalText, goal.text);
     goalFill.style.width = `${Math.round(goal.progress * 100)}%`;
