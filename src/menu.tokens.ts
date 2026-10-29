@@ -95,7 +95,7 @@ export const MENU_TOKENS: MenuTokens = {
     mapHeaderTopPad: 16,
     mapHeaderPinnedH: 120,
     mapContentBottomPad: 18,
-    raceCardH: 280,
+    raceCardH: 316,
     raceGap: 40,
     raceCardMinW: 240,
     raceCardMaxW: 360,
