@@ -465,7 +465,9 @@ export function currentGoal(s: KingdomState): Goal {
     { id: 'peasant', text: 'Hire your first Peasant — it mints gold for you', progress: ratio(s.gold, nextBuildingCost(s, 'peasant')), done: s.buildings.peasant > 0 },
     { id: 'upgrade', text: 'Buy your first upgrade', progress: ratio(s.gold, availableUpgrades(s)[0]?.cost ?? 50), done: s.upgrades.length > 0 },
     { id: 'farm', text: 'Build a Sunmill Farm', progress: ratio(s.gold, nextBuildingCost(s, 'farm')), done: s.buildings.farm > 0 },
-    { id: 'policy', text: `Earn ${POLICY_UNLOCK.toLocaleString('en-US')} gold to sign a Royal Policy`, progress: ratio(s.eraEarned, POLICY_UNLOCK), done: s.policy !== null },
+    policyUnlocked(s)
+      ? { id: 'policy', text: 'Sign a Royal Policy (Next OS tab)', progress: 1, done: s.policy !== null }
+      : { id: 'policy', text: `Earn ${POLICY_UNLOCK.toLocaleString('en-US')} gold to unlock Royal Policies`, progress: ratio(s.eraEarned, POLICY_UNLOCK), done: s.policy !== null },
     { id: 'market', text: 'Open a Bubble Market', progress: ratio(s.gold, nextBuildingCost(s, 'market')), done: s.buildings.market > 0 },
     { id: 'gps100', text: 'Reach 100 gold/sec', progress: ratio(gps, 100), done: gps >= 100 },
     { id: 'mine', text: 'Dig a Crystal Mine', progress: ratio(s.gold, nextBuildingCost(s, 'mine')), done: s.buildings.mine > 0 },
