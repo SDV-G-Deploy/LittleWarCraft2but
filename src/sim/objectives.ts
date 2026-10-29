@@ -12,6 +12,7 @@ import { isUnitKind, isWorkerKind } from '../types';
 export type ObjectiveId =
   | 'gather'
   | 'train_worker'
+  | 'gather_wood'
   | 'build_farm'
   | 'build_barracks'
   | 'train_army'
@@ -20,6 +21,7 @@ export type ObjectiveId =
 export const OBJECTIVE_ORDER: readonly ObjectiveId[] = [
   'gather',
   'train_worker',
+  'gather_wood',
   'build_farm',
   'build_barracks',
   'train_army',
@@ -50,18 +52,20 @@ interface OwnerCounts {
   workers: number;
   military: number;
   gathering: boolean;
+  choppingWood: boolean;
   farms: number;
   barracks: number;
 }
 
 function countOwner(state: GameState, owner: 0 | 1): OwnerCounts {
-  const c: OwnerCounts = { workers: 0, military: 0, gathering: false, farms: 0, barracks: 0 };
+  const c: OwnerCounts = { workers: 0, military: 0, gathering: false, choppingWood: false, farms: 0, barracks: 0 };
   for (const e of state.entities) {
     if (e.owner !== owner) continue;
     if (isUnitKind(e.kind)) {
       if (isWorkerKind(e.kind)) {
         c.workers++;
         if (e.cmd?.type === 'gather' || (e.carryGold ?? 0) > 0 || (e.carryWood ?? 0) > 0) c.gathering = true;
+        if ((e.cmd?.type === 'gather' && e.cmd.resourceType === 'wood') || (e.carryWood ?? 0) > 0) c.choppingWood = true;
       } else {
         c.military++;
       }
@@ -88,6 +92,7 @@ export function updateObjectives(
   const c = countOwner(state, owner);
   if (c.gathering) tracker.done.add('gather');
   if (c.workers >= 2) tracker.done.add('train_worker');
+  if (c.choppingWood) tracker.done.add('gather_wood');
   if (c.farms >= 1) tracker.done.add('build_farm');
   if (c.barracks >= 1) tracker.done.add('build_barracks');
   if (c.military >= ARMY_GOAL) tracker.done.add('train_army');
@@ -102,6 +107,15 @@ export function updateObjectives(
     if (id === 'train_army' && !done) view.progress = { value: Math.min(c.military, ARMY_GOAL), goal: ARMY_GOAL };
     return view;
   });
+}
+
+/** Ids of the owner's workers with no command (e.g. after a mine runs dry). */
+export function idleWorkerIds(state: GameState, owner: 0 | 1): number[] {
+  const ids: number[] = [];
+  for (const e of state.entities) {
+    if (e.owner === owner && isWorkerKind(e.kind) && !e.cmd) ids.push(e.id);
+  }
+  return ids;
 }
 
 /** True once every setup step (everything before "destroy_enemy") is done. */

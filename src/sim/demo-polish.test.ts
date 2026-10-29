@@ -8,7 +8,9 @@ import { createWorld } from './world';
 import { spawnEntity, killEntity } from './entities';
 import { processCommandPass, autoAttackPass, separateUnits } from './commands';
 import { computePopCaps, issueGatherCommand } from './economy';
-import { createAI, tickAI } from './ai';
+import { createAI, tickAI, EASY_MAX_ARMY } from './ai';
+import { issueAttackCommand } from './combat';
+import { tickLumberUpgrades } from './upgrades';
 import {
   createMatchStats,
   observeMatchTick,
@@ -21,6 +23,7 @@ import {
   updateObjectives,
   setupComplete,
   compassDirection,
+  idleWorkerIds,
   ARMY_GOAL,
 } from './objectives';
 import type { GameState } from '../types';
@@ -100,7 +103,7 @@ function testObjectivesProgressInOrder(): void {
   const tracker = createObjectiveTracker();
 
   let view = updateObjectives(tracker, state, 0);
-  assert.equal(view.length, 6);
+  assert.equal(view.length, 7);
   assert.equal(view[0].id, 'gather');
   assert.equal(view[0].current, true);
   assert.equal(view.filter(v => v.current).length, 1, 'exactly one current step');
@@ -116,29 +119,47 @@ function testObjectivesProgressInOrder(): void {
   assert.equal(view[0].done, true, 'gather step done once a worker is gathering');
   assert.equal(view[1].current, true);
 
-  spawnEntity(state, 'worker', 0, { x: map.playerStart.x + 5, y: map.playerStart.y + 2 });
+  const second = spawnEntity(state, 'worker', 0, { x: map.playerStart.x + 5, y: map.playerStart.y + 2 });
+  view = updateObjectives(tracker, state, 0);
+  assert.equal(view[1].done, true);
+  assert.equal(view[2].id, 'gather_wood');
+  assert.equal(view[2].current, true, 'wood is the next step (barracks needs wood)');
+  assert.deepEqual(idleWorkerIds(state, 0), [second.id]);
+
+  // Send the second worker to the nearest tree.
+  let tree: { x: number; y: number } | null = null;
+  for (let ty = 0; ty < state.tiles.length && !tree; ty++) {
+    for (let tx = 0; tx < state.tiles[ty].length; tx++) {
+      if (state.tiles[ty][tx].kind === 'tree') { tree = { x: tx, y: ty }; break; }
+    }
+  }
+  assert.ok(tree, 'map has trees');
+  issueGatherCommand(state, second, tree!.y * 64 + tree!.x, state.tick);
+  assert.equal(second.cmd?.type, 'gather');
+  assert.deepEqual(idleWorkerIds(state, 0), []);
+
   spawnEntity(state, 'farm', 0, { x: 20, y: 40 });
   spawnEntity(state, 'barracks', 0, { x: 24, y: 40 });
   view = updateObjectives(tracker, state, 0);
-  assert.deepEqual(view.slice(0, 4).map(v => v.done), [true, true, true, true]);
-  assert.equal(view[4].current, true);
-  assert.deepEqual(view[4].progress, { value: 0, goal: ARMY_GOAL });
+  assert.deepEqual(view.slice(0, 5).map(v => v.done), [true, true, true, true, true]);
+  assert.equal(view[5].current, true);
+  assert.deepEqual(view[5].progress, { value: 0, goal: ARMY_GOAL });
   assert.equal(setupComplete(tracker), false);
 
   for (let i = 0; i < ARMY_GOAL; i++) spawnEntity(state, 'footman', 0, { x: 30 + i, y: 30 });
   view = updateObjectives(tracker, state, 0);
-  assert.equal(view[4].done, true);
-  assert.equal(view[5].current, true);
+  assert.equal(view[5].done, true);
+  assert.equal(view[6].current, true);
   assert.equal(setupComplete(tracker), true);
 
   // Completed steps stay completed even if the building is lost later.
   const farm = state.entities.find(e => e.kind === 'farm' && e.owner === 0)!;
   killEntity(state, farm.id);
   view = updateObjectives(tracker, state, 0);
-  assert.equal(view[2].done, true);
+  assert.equal(view[3].done, true);
 
   view = updateObjectives(tracker, state, 0, 'win');
-  assert.equal(view[5].done, true);
+  assert.equal(view[6].done, true);
   assert.equal(view.some(v => v.current), false);
 }
 
@@ -148,8 +169,8 @@ function testObjectivesIgnoreEnemyEntities(): void {
   spawnEntity(state, 'barracks', 1, { x: 24, y: 40 });
   const tracker = createObjectiveTracker();
   const view = updateObjectives(tracker, state, 0);
-  assert.equal(view[2].done, false);
   assert.equal(view[3].done, false);
+  assert.equal(view[4].done, false);
 }
 
 function testCompassDirection(): void {
@@ -203,6 +224,65 @@ function testObserversDoNotAffectDeterminism(): void {
   assert.equal(run(true), run(false));
 }
 
+/** A unit chipping at a building turns on the enemy unit that is hitting it. */
+function testBuildingAttackerRetaliatesAgainstUnit(): void {
+  const state = makeState();
+  state.tick = 100;
+  const farm = spawnEntity(state, 'farm', 1, { x: 30, y: 30 });
+  const footman = spawnEntity(state, 'footman', 0, { x: 29, y: 30 });
+  const grunt = spawnEntity(state, 'grunt', 1, { x: 28, y: 30 });
+  assert.equal(issueAttackCommand(footman, farm.id, state.tick, state), true);
+  assert.equal(issueAttackCommand(grunt, footman.id, state.tick, state), true);
+  for (let i = 0; i < 40; i++) {
+    state.tick++;
+    processCommandPass(state);
+  }
+  assert.equal(footman.cmd?.type, 'attack');
+  if (footman.cmd?.type !== 'attack') throw new Error('expected attack');
+  assert.equal(footman.cmd.targetId, grunt.id, 'footman should switch from the farm to the grunt hitting it');
+}
+
+/** Easy is the first-match default: small army, no towers, no research. */
+function testEasyAIBeginnerHandicaps(): void {
+  const ai = createAI('easy');
+  assert.equal(ai.maxArmy, EASY_MAX_ARMY);
+  assert.equal(ai.maxTowers, 0);
+  assert.equal(ai.maxUpgradeTier, 0);
+  assert.equal(createAI('medium').maxArmy, Number.POSITIVE_INFINITY);
+  assert.ok(createAI('hard').maxTowers > 0);
+
+  const map = buildMapById(1);
+  const state = createWorld(map, ['human', 'orc']);
+  for (const [i, pos] of map.goldMines.entries()) {
+    const mine = spawnEntity(state, 'goldmine', NEUTRAL, pos);
+    mine.goldReserve = map.goldMineReserves?.[i] ?? 10000;
+  }
+  spawnEntity(state, 'townhall', 1, map.aiStart);
+  spawnEntity(state, 'peon', 1, { x: map.aiStart.x + 1, y: map.aiStart.y + 3 });
+  state.gold[1] = 5000;
+  state.wood[1] = 5000;
+  const easy = createAI('easy');
+  let peakArmy = 0;
+  for (let t = 0; t < SIM_HZ * 60 * 8; t++) {
+    state.tick++;
+    tickLumberUpgrades(state);
+    processCommandPass(state);
+    autoAttackPass(state);
+    computePopCaps(state);
+    separateUnits(state);
+    tickAI(state, easy, 1);
+    const army = state.entities.filter(e => e.owner === 1 && ['grunt', 'troll', 'ogreFighter'].includes(e.kind)).length;
+    peakArmy = Math.max(peakArmy, army);
+  }
+  assert.ok(peakArmy > 0, 'easy AI should still build an army');
+  assert.ok(peakArmy <= EASY_MAX_ARMY, `easy army ${peakArmy} must respect cap ${EASY_MAX_ARMY}`);
+  assert.equal(state.entities.some(e => e.owner === 1 && e.kind === 'tower'), false, 'easy AI builds no towers');
+  const up = state.upgrades[1];
+  assert.deepEqual([up.meleeAttackLevel, up.armorLevel, up.buildingHpLevel, up.doctrine], [0, 0, 0, null], 'easy AI researches nothing');
+}
+
+testBuildingAttackerRetaliatesAgainstUnit();
+testEasyAIBeginnerHandicaps();
 testStatsCountTrainedAndLost();
 testIncomeMeasuresOnlyPositiveDeltas();
 testDurationFormatting();
